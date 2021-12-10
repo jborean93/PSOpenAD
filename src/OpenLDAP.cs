@@ -212,7 +212,7 @@ namespace PSOpenAD
                     saslMech = "GSSAPI";
                     break;
                 case Commands.AuthenticationMethod.Negotiate:
-                    saslMech = "GSSAPI"; // FIXME
+                    saslMech = "GSS-SPNEGO";
                     break;
                 default:
                     throw new ArgumentException(nameof(authMethod), authMethod.ToString(), null);
@@ -380,7 +380,7 @@ namespace PSOpenAD
 
     internal class SafeLdapMessage : SafeHandle
     {
-        internal SafeLdapMessage()  : base(IntPtr.Zero, true) { }
+        internal SafeLdapMessage() : base(IntPtr.Zero, true) { }
 
         public override bool IsInvalid => handle == IntPtr.Zero;
 
@@ -392,7 +392,7 @@ namespace PSOpenAD
 
     internal class SafeLdapMemory : SafeHandle
     {
-        internal SafeLdapMemory()  : base(IntPtr.Zero, true) { }
+        internal SafeLdapMemory() : base(IntPtr.Zero, true) { }
 
         public override bool IsInvalid => handle == IntPtr.Zero;
 
@@ -405,7 +405,7 @@ namespace PSOpenAD
 
     internal class SafeLdapMemoryArray : SafeHandle
     {
-        internal SafeLdapMemoryArray()  : base(IntPtr.Zero, true) { }
+        internal SafeLdapMemoryArray() : base(IntPtr.Zero, true) { }
 
         public override bool IsInvalid => handle == IntPtr.Zero;
 
@@ -418,7 +418,7 @@ namespace PSOpenAD
 
     internal class SafeLdapControls : SafeHandle
     {
-        internal SafeLdapControls()  : base(IntPtr.Zero, true) { }
+        internal SafeLdapControls() : base(IntPtr.Zero, true) { }
 
         public override bool IsInvalid => handle == IntPtr.Zero;
 
@@ -433,7 +433,7 @@ namespace PSOpenAD
     {
         public int Length { get; } = 0;
 
-        internal SafeMemoryBuffer()  : base(IntPtr.Zero, true) { }
+        internal SafeMemoryBuffer() : base(IntPtr.Zero, true) { }
 
         internal SafeMemoryBuffer(int size) : base(Marshal.AllocHGlobal(size), true) => Length = size;
 
@@ -564,7 +564,7 @@ namespace PSOpenAD
         LDAP_OPT_X_TLS_PROTOCOL_TLS1_1 = (3 << 8) + 2,
         LDAP_OPT_X_TLS_PROTOCOL_TLS1_2 = (3 << 8) + 3,
         LDAP_OPT_X_SASL_CBINDING_NONE = 0,
-        LDAP_OPT_X_SASL_CBINDING_TLS_UNIQUE	= 1,
+        LDAP_OPT_X_SASL_CBINDING_TLS_UNIQUE = 1,
         LDAP_OPT_X_SASL_CBINDING_TLS_ENDPOINT = 2,
         LDAP_OPT_X_SASL_MECH = 0x6100,
         LDAP_OPT_X_SASL_REALM = 0x6101,

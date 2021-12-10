@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Management.Automation;
 using System.Threading;
 using System.Threading.Tasks;
@@ -48,10 +50,25 @@ namespace PSOpenAD.Commands
             {
                 SaslPrompter prompter = new SaslPrompter()
                 {
-                    UserName = username,
+                    UserName = "",
                 };
-                Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", AuthenticationMethod, prompter);
-                bindTask.GetAwaiter().GetResult();
+
+                string? ccname = null;
+                Dictionary<string, string> tempEnv = new Dictionary<string, string>();
+                if (!String.IsNullOrEmpty(username) && !String.IsNullOrEmpty(password))
+                {
+                    tempEnv["KRB5CCNAME"] = "FILE:" + ccname;
+                    Kerberos.Kinit(username, password, tempEnv["KRB5CCNAME"]);
+                }
+
+                using (TemporaryEnvironment env = new TemporaryEnvironment(tempEnv))
+                {
+                    Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", AuthenticationMethod, prompter);
+                    bindTask.GetAwaiter().GetResult();
+                }
+
+                if (!String.IsNullOrEmpty(ccname))
+                    File.Delete(ccname);
             }
 
             WriteObject(ldap);
