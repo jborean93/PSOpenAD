@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Management.Automation;
 using System.Threading;
 using System.Threading.Tasks;
@@ -48,27 +45,31 @@ namespace PSOpenAD.Commands
             }
             else
             {
-                SaslPrompter prompter = new SaslPrompter()
+                // OpenLDAP does not provide a way to provide explicit credentials for Kerberos/GSSAPI authentication.
+                // It also does not provide a method to specify an explicit username in a collection of ccaches (it
+                // will always use the default). To overcome this issue the krb5 API is used directly to build an
+                // in-memory ccache that contains our Kerberos TGT. This in-memory ccache is then set as the default
+                // ccache that OpenLDAP will use in the background thread it runs in. The krb5 API is essentially
+                // replicating what kinit does but in process and with an in-memory ccache rather than a file.
+                string? ccacheName = null;
+                if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
                 {
-                    UserName = "",
-                };
-
-                string? ccname = null;
-                Dictionary<string, string> tempEnv = new Dictionary<string, string>();
-                if (!String.IsNullOrEmpty(username) && !String.IsNullOrEmpty(password))
-                {
-                    tempEnv["KRB5CCNAME"] = "FILE:" + ccname;
-                    Kerberos.Kinit(username, password, tempEnv["KRB5CCNAME"]);
+                    using SafeKrb5Context ctx = Kerberos.InitContext();
+                    using SafeKrb5Principal princ = Kerberos.ParseNameFlags(ctx, username, PrincipalParseFlags.NONE);
+                    using SafeKrb5GetInitCredsOpt credsOpt = Kerberos.GetInitCredsOpt(ctx);
+                    Kerberos.GetInitCredsOptSetCanonicalize(ctx, credsOpt, true);
+                    using SafeKrb5Creds creds = Kerberos.GetInitCredsPassword(ctx, princ, credsOpt, password);
+                    using SafeKrb5Ccache ccache = Kerberos.CCNewUnique(ctx, "MEMORY");
+                    Kerberos.CCInitialize(ctx, ccache, princ);
+                    Kerberos.CCStoreCred(ctx, ccache, creds);
+                    ccacheName = $"{Kerberos.CCGetType(ctx, ccache)}:{Kerberos.CCGetName(ctx, ccache)}";
                 }
 
-                using (TemporaryEnvironment env = new TemporaryEnvironment(tempEnv))
-                {
-                    Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", AuthenticationMethod, prompter);
-                    bindTask.GetAwaiter().GetResult();
-                }
-
-                if (!String.IsNullOrEmpty(ccname))
-                    File.Delete(ccname);
+                // The task runs in a separate thread and Krb5CCacheName affects the running thead only. Use the
+                // prompter to set the default CCache to the in memory one when it is called.
+                SaslPrompter prompter = new SaslPrompter(ccacheName);
+                Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", AuthenticationMethod, prompter);
+                bindTask.GetAwaiter().GetResult();
             }
 
             WriteObject(ldap);
@@ -90,8 +91,17 @@ namespace PSOpenAD.Commands
 
     internal class SaslPrompter : SaslInteract
     {
-        public string UserName { get; set; } = "";
+        public string? CCache { get; }
 
-        public override string GetUser() => UserName;
+        public SaslPrompter(string? threadCCache) => CCache = threadCCache;
+
+        public override string GetUser()
+        {
+            // This will be called by the same thread that gets the GSSAPI credential from the default ccache. By
+            // calling this here we can use our explicit credential in a thread safe fashion.
+            if (!string.IsNullOrEmpty(CCache))
+                Gssapi.Krb5CCacheName(CCache);
+            return ""; // The value here doesn't do anything
+        }
     }
 }

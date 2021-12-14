@@ -197,7 +197,7 @@ namespace PSOpenAD
         }
 
         public static Task SaslInteractiveBindAsync(SafeLdapHandle ldap, string dn, Commands.AuthenticationMethod authMethod,
-            SaslInteract prompt, int timeoutMS = 5000)
+            SaslInteract prompt, int timeoutMS = 5000, CancellationToken? cancelToken = null)
         {
             string saslMech;
             switch (authMethod)
@@ -220,27 +220,57 @@ namespace PSOpenAD
 
             return Task.Run(() =>
             {
-                SafeLdapMessage result = new SafeLdapMessage();
-                int res = ldap_sasl_interactive_bind(ldap, dn, saslMech, IntPtr.Zero, IntPtr.Zero,
-                    SASLInteractionFlags.LDAP_SASL_QUIET, prompt.SaslInteractProc, IntPtr.Zero, result.DangerousGetHandle(),
-                    out var rmech, out var msgid);
-
-                if (res != (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
-                    throw new LDAPException(res, "ldap_sasl_interactive_bind");
-
-                result.Dispose();
-
-                Helpers.timeval timeout = new Helpers.timeval()
+                int res = 0;
+                do
                 {
-                    tv_sec = (int)Math.Floor((double)timeoutMS / 1000),
-                    tv_usec = timeoutMS % 1000,
-                };
-                res = ldap_result(ldap, msgid, LDAPMessageAll.LDAP_MSG_ONE, ref timeout, out result);
-                if (res == -1)
-                {
-                    res = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
-                    throw new LDAPException(res, "ldap_result");
+                    SafeLdapMessage result = new SafeLdapMessage();
+                    res = ldap_sasl_interactive_bind(ldap, dn, saslMech, IntPtr.Zero, IntPtr.Zero,
+                        SASLInteractionFlags.LDAP_SASL_QUIET, prompt.SaslInteractProc, IntPtr.Zero,
+                        result.DangerousGetHandle(), out var rmech, out var msgid);
+                    result.Dispose();
+
+                    if (res != (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
+                        break;
+
+                    do
+                    {
+                        Helpers.timeval timeout = new Helpers.timeval()
+                        {
+                            tv_sec = (int)Math.Floor((double)timeoutMS / 1000),
+                            tv_usec = timeoutMS % 1000,
+                        };
+                        res = ldap_result(ldap, msgid, LDAPMessageAll.LDAP_MSG_ALL, ref timeout, out result);
+                        if (res == 0)
+                        {
+                            timeoutMS -= 200;
+                        }
+                        else if (res == -1)
+                        {
+                            res = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
+                            throw new LDAPException(res, "ldap_result");
+                        }
+                        else
+                        {
+                            break;
+                        }
+
+                        if (cancelToken?.IsCancellationRequested == true)
+                            throw new TaskCanceledException();
+                    }
+                    while (timeoutMS > 0);
+
+                    if (res == 0)
+                        throw new TimeoutException();
+
+                    ldap_parse_result(ldap, result.DangerousGetHandle(), out res, out var _1,
+                        out var errMsg, out var _2, out var _3, 0);
+                    if (res != 0 && res != (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
+                    {
+                        string msg = Marshal.PtrToStringUTF8(errMsg.DangerousGetHandle()) ?? "";
+                        throw new LDAPException(res, "ldap_sasl_interactive_bind", errorMessage: msg);
+                    }
                 }
+                while (res == (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS);
             });
         }
 
