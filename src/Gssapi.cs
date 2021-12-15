@@ -115,11 +115,27 @@ namespace PSOpenAD
             0x2B, 0x06, 0x01, 0x05, 0x05, 0x02
         }; // 1.3.6.1.5.5.2
 
+        // Credential OIDs
+        public static byte[] GSS_KRB5_CRED_NO_CI_FLAGS_X = new byte[] {
+            0x2A, 0x85, 0x70, 0x2B, 0x0D, 0x1D
+        }; // 1.2.752.43.13.29
+
         [DllImport(GSSAPI_LIB)]
         public static extern int gss_add_oid_set_member(
             out int min_stat,
             ref Helpers.gss_OID_desc member,
             SafeHandle target_set);
+
+        [DllImport(GSSAPI_LIB)]
+        public static extern int gss_acquire_cred(
+            out int min_stat,
+            SafeHandle desired_name,
+            UInt32 ttl,
+            SafeHandle mechs,
+            GssapiCredUsage cred_usage,
+            out SafeGssapiCred output_creds,
+            out SafeGssapiOidSet actual_mechs,
+            out UInt32 actual_ttl);
 
         [DllImport(GSSAPI_LIB)]
         public static extern int gss_acquire_cred_with_password(
@@ -131,7 +147,7 @@ namespace PSOpenAD
             GssapiCredUsage cred_usage,
             out SafeGssapiCred output_creds,
             out SafeGssapiOidSet actual_mechs,
-            out UInt32 actual_ttls);
+            out UInt32 actual_ttl);
 
         [DllImport(GSSAPI_LIB)]
         public static extern int gss_create_empty_oid_set(
@@ -174,6 +190,45 @@ namespace PSOpenAD
         public static extern int gss_release_oid_set(
             out int min_stat,
             IntPtr target_set);
+
+        [DllImport(GSSAPI_LIB)]
+        public static extern int gss_set_cred_option(
+            out int min_status,
+            SafeGssapiCred cred,
+            ref Helpers.gss_OID_desc desired_object,
+            ref Helpers.gss_buffer_desc value);
+
+        public static GssapiCredential AcquireCred(SafeHandle? name, UInt32 ttl, List<GssapiOid> desiredMechs,
+            GssapiCredUsage usage)
+        {
+            int majorStatus = gss_create_empty_oid_set(out var minorStatus, out var desiredMechSet);
+            if (majorStatus != 0)
+                throw new GSSAPIException(majorStatus, minorStatus, "gss_create_empty_oid_set");
+
+            using (desiredMechSet)
+            {
+                using SafeMemoryBuffer mechPtr = new SafeMemoryBuffer(IntPtr.Size);
+                Marshal.WriteIntPtr(mechPtr.DangerousGetHandle(), 0, desiredMechSet.DangerousGetHandle());
+
+                foreach (GssapiOid mech in desiredMechs)
+                {
+                    Helpers.gss_OID_desc oidDesc = (Helpers.gss_OID_desc)mech;
+                    majorStatus = gss_add_oid_set_member(out minorStatus, ref oidDesc, mechPtr);
+                    if (majorStatus != 0)
+                        throw new GSSAPIException(majorStatus, minorStatus, "gss_add_oid_set_member");
+                }
+
+                if (name == null)
+                    name = new SafeGssapiName();
+
+                majorStatus = gss_acquire_cred(out minorStatus, name, ttl, desiredMechSet, usage,
+                    out var outputCreds, out var actualMechs, out var actualTtls);
+                if (majorStatus != 0)
+                    throw new GSSAPIException(majorStatus, minorStatus, "gss_acquire_cred");
+
+                return new GssapiCredential(outputCreds, actualTtls, actualMechs);
+            }
+        }
 
         public static GssapiCredential AcquireCredWithPassword(SafeHandle name, string password, UInt32 ttl,
             List<GssapiOid> desiredMechs, GssapiCredUsage usage)
@@ -277,6 +332,15 @@ namespace PSOpenAD
                 throw new GSSAPIException(majorStatus, minor_status, "gss_krb5_ccache_name");
 
             return Marshal.PtrToStringUTF8(outName);
+        }
+
+        public static void SetCredOption(SafeGssapiCred cred, GssapiOid obj)
+        {
+            Helpers.gss_OID_desc objectBuffer = (Helpers.gss_OID_desc)obj;
+            Helpers.gss_buffer_desc valueBuffer = new Helpers.gss_buffer_desc();
+            int majorStatus = gss_set_cred_option(out var minorStatus, cred, ref objectBuffer, ref valueBuffer);
+            if (majorStatus != 0)
+                throw new GSSAPIException(majorStatus, minorStatus, "gss_set_cred_option");
         }
     }
 

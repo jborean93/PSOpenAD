@@ -284,6 +284,9 @@ namespace PSOpenAD
                     }
                 }
                 while (res == (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS);
+
+                if (res != 0)
+                    throw new LDAPException(ldap, res, "ldap_sasl_interactive_bind");
             });
         }
 
@@ -523,6 +526,13 @@ namespace PSOpenAD
             Marshal.FreeHGlobal(handle);
             return true;
         }
+    }
+
+    internal enum LDAPChannelBinding
+    {
+        LDAP_OPT_X_SASL_CBINDING_NONE = 0,
+        LDAP_OPT_X_SASL_CBINDING_TLS_UNIQUE = 1,
+        LDAP_OPT_X_SASL_CBINDING_TLS_ENDPOINT = 2,
     }
 
     internal enum LDAPResultType
