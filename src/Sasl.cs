@@ -63,6 +63,8 @@ namespace PSOpenAD
                 ptr = IntPtr.Add(ptr, Marshal.SizeOf(typeof(Helpers.sasl_interact)));
             }
 
+            PromptDone();
+
             return 0;
         }
 
@@ -73,6 +75,8 @@ namespace PSOpenAD
         public virtual string GetPass() => throw new NotImplementedException();
 
         public virtual string GetRealm() => throw new NotImplementedException();
+
+        public virtual void PromptDone() { }
     }
 
     public enum SaslCallbackId

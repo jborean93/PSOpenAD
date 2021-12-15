@@ -1,23 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace PSOpenAD
 {
-    // The majority of the code that is commented out was an attempt to get the GSSAPI cred using
-    // acquire_cred_from_password. This attempt failed as it was hard to get a working solution across the GSSAPI
-    // providers. It's kept here just in case it has a use in the future and I don't want to rewrite it all again.
-
     internal static partial class Helpers
     {
-        /*
         [StructLayout(LayoutKind.Sequential)]
         public struct gss_OID_set_desc
         {
             public IntPtr count;
             public IntPtr elements;
         }
-        */
 
         [StructLayout(LayoutKind.Sequential)]
         public struct gss_OID_desc
@@ -43,14 +38,13 @@ namespace PSOpenAD
         }
     }
 
-    /*
-    public class GssapiCredential : IDisposable
+    internal class GssapiCredential : IDisposable
     {
-        public SafeHandle Creds { get; }
+        public SafeGssapiCred Creds { get; }
         public UInt32 TimeToLive { get; }
         public GssapiOid[] Mechanisms { get; }
 
-        public GssapiCredential(SafeHandle creds, UInt32 ttl, SafeHandle mechanisms)
+        public GssapiCredential(SafeGssapiCred creds, UInt32 ttl, SafeHandle mechanisms)
         {
             Creds = creds;
             TimeToLive = ttl;
@@ -81,7 +75,6 @@ namespace PSOpenAD
         }
         ~GssapiCredential() => Dispose();
     }
-    */
 
     public class GssapiOid : IDisposable
     {
@@ -108,7 +101,6 @@ namespace PSOpenAD
     {
         private const string GSSAPI_LIB = "libgssapi_krb5.so.2";
 
-        /*
         // Name Types
         public static byte[] GSS_C_NT_USER_NAME = new byte[] {
             0x2A, 0x86, 0x48, 0x86, 0xF7, 0x12, 0x01, 0x02, 0x01, 0x01
@@ -145,7 +137,6 @@ namespace PSOpenAD
         public static extern int gss_create_empty_oid_set(
             out int min_stat,
             out SafeGssapiOidSet target_set);
-        */
 
         [DllImport(GSSAPI_LIB)]
         public static extern int gss_display_status(
@@ -156,14 +147,12 @@ namespace PSOpenAD
             ref int message_context,
             ref Helpers.gss_buffer_desc status_string);
 
-        /*
         [DllImport(GSSAPI_LIB)]
         public static extern int gss_import_name(
             out int min_stat,
             ref Helpers.gss_buffer_desc input_buffer,
             ref Helpers.gss_OID_desc name_type,
             out SafeGssapiName output_name);
-        */
 
         [DllImport(GSSAPI_LIB)]
         public static extern int gss_krb5_ccache_name(
@@ -171,7 +160,6 @@ namespace PSOpenAD
             string? name,
             out IntPtr out_name);
 
-        /*
         [DllImport(GSSAPI_LIB)]
         public static extern int gss_release_cred(
             out int min_stat,
@@ -222,7 +210,6 @@ namespace PSOpenAD
                 return new GssapiCredential(outputCreds, actualTtls, actualMechs);
             }
         }
-        */
 
         public static string DisplayStatus(int errorCode, bool isMajorCode, GssapiOid? mech)
         {
@@ -265,7 +252,6 @@ namespace PSOpenAD
             return msg.ToString();
         }
 
-        /*
         public static SafeGssapiName ImportName(string name, GssapiOid nameType)
         {
             using SafeMemoryBuffer nameBuffer = new SafeMemoryBuffer(name);
@@ -283,7 +269,6 @@ namespace PSOpenAD
 
             return outputName;
         }
-        */
 
         public static string? Krb5CCacheName(string? name)
         {
@@ -327,7 +312,6 @@ namespace PSOpenAD
         }
     }
 
-    /*
     internal enum GssapiCredUsage
     {
         GSS_C_BOTH = 0,
@@ -373,5 +357,4 @@ namespace PSOpenAD
             return Gssapi.gss_release_oid_set(out var _, setPtr.DangerousGetHandle()) == 0;
         }
     }
-    */
 }

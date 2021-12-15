@@ -34,6 +34,7 @@ namespace PSOpenAD
     internal static class OpenLDAP
     {
         private const string LIB_LDAP = "libldap.so";
+        //private const string LIB_LDAP = "/opt/openldap-2.6.0/lib/libldap.so";
 
         public delegate int LDAP_SASL_INTERACT_PROC(
             IntPtr ld,
@@ -72,6 +73,12 @@ namespace PSOpenAD
             SafeHandle ld,
             LDAPOption option,
             out int outvalue);
+
+        [DllImport(LIB_LDAP)]
+        public static extern int ldap_get_option(
+            SafeHandle ld,
+            LDAPOption option,
+            out SafeLdapMemory outvalue);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_initialize(
@@ -179,6 +186,12 @@ namespace PSOpenAD
             string passwd);
 
         [DllImport(LIB_LDAP)]
+        public static extern int ldap_start_tls_s(
+            SafeLdapHandle ld,
+            IntPtr serverctrls,
+            IntPtr clientctrls);
+
+        [DllImport(LIB_LDAP)]
         public static extern int ldap_unbind(
             IntPtr ld);
 
@@ -191,7 +204,7 @@ namespace PSOpenAD
         {
             int err = ldap_initialize(out var ldap, uri);
             if (err != 0)
-                throw new LDAPException(err, "ldap_initialize");
+                throw new LDAPException(null, err, "ldap_initialize");
 
             return ldap;
         }
@@ -247,7 +260,7 @@ namespace PSOpenAD
                         else if (res == -1)
                         {
                             res = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
-                            throw new LDAPException(res, "ldap_result");
+                            throw new LDAPException(ldap, res, "ldap_result");
                         }
                         else
                         {
@@ -267,7 +280,7 @@ namespace PSOpenAD
                     if (res != 0 && res != (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
                     {
                         string msg = Marshal.PtrToStringUTF8(errMsg.DangerousGetHandle()) ?? "";
-                        throw new LDAPException(res, "ldap_sasl_interactive_bind", errorMessage: msg);
+                        throw new LDAPException(ldap, res, "ldap_sasl_interactive_bind", errorMessage: msg);
                     }
                 }
                 while (res == (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS);
@@ -295,7 +308,7 @@ namespace PSOpenAD
             }
 
             if (res != 0)
-                throw new LDAPException(res, "ldap_sasl_bind");
+                throw new LDAPException(ldap, res, "ldap_sasl_bind");
 
             return Task.Run(() =>
             {
@@ -319,7 +332,7 @@ namespace PSOpenAD
                     else if (res == -1)
                     {
                         res = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
-                        throw new LDAPException(res, "ldap_result");
+                        throw new LDAPException(ldap, res, "ldap_result");
                     }
                     else
                     {
@@ -339,31 +352,53 @@ namespace PSOpenAD
                 if (errorCode != 0)
                 {
                     string msg = Marshal.PtrToStringUTF8(errMsg.DangerousGetHandle()) ?? "";
-                    throw new LDAPException(errorCode, "ldap_sasl_bind", errorMessage: msg);
+                    throw new LDAPException(ldap, errorCode, "ldap_sasl_bind", errorMessage: msg);
                 }
             });
         }
 
-        public static int CountMessages(SafeHandle ldap, SafeHandle result)
+        public static void StartTlsS(SafeLdapHandle ldap)
+        {
+            int res = ldap_start_tls_s(ldap, IntPtr.Zero, IntPtr.Zero);
+            if (res != 0)
+                throw new LDAPException(ldap, res, "ldap_start_tls_ts");
+        }
+
+        public static int CountMessages(SafeLdapHandle ldap, SafeHandle result)
         {
             return ldap_count_messages(ldap, result.DangerousGetHandle());
         }
 
-        public static int GetOptionInt(SafeHandle ldap, LDAPOption option)
+        public static int GetOptionInt(SafeLdapHandle ldap, LDAPOption option)
         {
-            int value;
-            int res = ldap_get_option(ldap, option, out value);
+            int res = ldap_get_option(ldap, option, out int value);
             if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
-                throw new LDAPException(res, $"ldap_get_option({option})");
+                throw new LDAPException(ldap, res, $"ldap_get_option({option})");
 
             return value;
         }
 
-        public static void SetOption(SafeHandle ldap, LDAPOption option, int value)
+        public static string GetOptionString(SafeLdapHandle ldap, LDAPOption option)
+        {
+            int res = ldap_get_option(ldap, option, out SafeLdapMemory value);
+            if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
+                throw new LDAPException(ldap, res, $"ldap_get_option({option})");
+
+            return Marshal.PtrToStringUTF8(value.DangerousGetHandle()) ?? "";
+        }
+
+        public static void SetOption(SafeLdapHandle ldap, LDAPOption option, int value)
         {
             int res = ldap_set_option(ldap, option, ref value);
             if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
-                throw new LDAPException(res, $"ldap_set_option({option})");
+                throw new LDAPException(ldap, res, $"ldap_set_option({option})");
+        }
+
+        public static void SetOption(SafeLdapHandle ldap, LDAPOption option, IntPtr value)
+        {
+            int res = ldap_set_option(ldap, option, value);
+            if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
+                throw new LDAPException(ldap, res, $"ldap_set_option({option})");
         }
     }
 
@@ -373,22 +408,25 @@ namespace PSOpenAD
 
         public string? ErrorMessage { get; }
 
-        public LDAPException(int error)
-            : base(GetExceptionMessage(error, null, null)) => ErrorCode = error;
+        internal LDAPException(SafeLdapHandle? ldap, int error)
+            : base(GetExceptionMessage(ldap, error, null, null)) => ErrorCode = error;
 
-        public LDAPException(int error, string method, string? errorMessage = null)
-            : base(GetExceptionMessage(error, method, errorMessage))
+        internal LDAPException(SafeLdapHandle? ldap, int error, string method, string? errorMessage = null)
+            : base(GetExceptionMessage(ldap, error, method, errorMessage))
         {
             ErrorCode = error;
             ErrorMessage = errorMessage;
         }
 
-        private static string GetExceptionMessage(int error, string? method, string? errorMessage)
+        private static string GetExceptionMessage(SafeLdapHandle? ldap, int error, string? method,
+             string? errorMessage)
         {
             method = String.IsNullOrWhiteSpace(method) ? "LDAP Call" : method;
             string errString = OpenLDAP.Err2String(error);
+            if (String.IsNullOrWhiteSpace(errorMessage) && ldap?.IsInvalid == false && ldap?.IsClosed == false)
+                errorMessage = OpenLDAP.GetOptionString(ldap, LDAPOption.LDAP_OPT_DIAGNOSTIC_MESSAGE);
 
-            string msg = String.Format("{0} failed ({1}) - {2}", method, error, errString);
+            string msg = $"{method} failed ({error} - {errString})";
             if (!String.IsNullOrWhiteSpace(errorMessage))
                 msg += $" - {errorMessage}";
 
@@ -615,6 +653,15 @@ namespace PSOpenAD
         LDAP_OPT_X_KEEPALIVE_PROBES = 0x6301,
         LDAP_OPT_X_KEEPALIVE_INTERVAL = 0x6302,
         LDAP_OPT_PRIVATE_EXTENSION_BASE = 0x7000,
+    }
+
+    public enum LDAPTlsSettings
+    {
+        LDAP_OPT_X_TLS_NEVER = 0,
+        LDAP_OPT_X_TLS_HARD = 1,
+        LDAP_OPT_X_TLS_DEMAND = 2,
+        LDAP_OPT_X_TLS_ALLOW = 3,
+        LDAP_OPT_X_TLS_TRY = 4,
     }
 
     public enum SASLInteractionFlags
