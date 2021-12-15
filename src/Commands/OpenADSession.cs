@@ -113,6 +113,10 @@ namespace PSOpenAD.Commands
                     bindTask.GetAwaiter().GetResult();
                 }
             }
+            else if (Authentication == AuthenticationMethod.Anonymous)
+            {
+                throw new ArgumentException(nameof(AuthenticationMethod));
+            }
             else
             {
                 if (transportIsTLS || (NoSigning && NoEncryption))
@@ -167,7 +171,8 @@ namespace PSOpenAD.Commands
                     }
 
                     GSSAPIPrompter prompter = new GSSAPIPrompter(ldap, cred.Creds);
-                    Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", Authentication, prompter,
+                    string saslMech = Authentication == AuthenticationMethod.Kerberos ? "GSSAPI" : "GSS-SPNEGO";
+                    Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", saslMech, prompter,
                         cancelToken: CurrentCancelToken.Token);
                     bindTask.GetAwaiter().GetResult();
                 }
@@ -182,20 +187,12 @@ namespace PSOpenAD.Commands
         }
     }
 
-    public enum AuthenticationMethod
-    {
-        Anonymous,
-        Simple,
-        Negotiate,
-        Kerberos,
-    }
-
     internal class GSSAPIPrompter : SaslInteract
     {
         public SafeLdapHandle Ldap { get; }
-        public SafeGssapiCred? Cred { get; }
+        public SafeGssapiCred Cred { get; }
 
-        public GSSAPIPrompter(SafeLdapHandle ldap, SafeGssapiCred? cred)
+        public GSSAPIPrompter(SafeLdapHandle ldap, SafeGssapiCred cred)
         {
             Ldap = ldap;
             Cred = cred;
@@ -206,9 +203,8 @@ namespace PSOpenAD.Commands
 
         public override void PromptDone()
         {
-            // Set the explicit GSSAPI credential if one is present.
-            if (Cred?.IsClosed == false && Cred?.IsInvalid == false)
-                OpenLDAP.SetOption(Ldap, LDAPOption.LDAP_OPT_X_SASL_GSS_CREDS, Cred.DangerousGetHandle());
+            // Set the explicit GSSAPI credential for SASL to use.
+            OpenLDAP.SetOption(Ldap, LDAPOption.LDAP_OPT_X_SASL_GSS_CREDS, Cred.DangerousGetHandle());
         }
     }
 }

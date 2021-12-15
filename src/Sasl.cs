@@ -22,6 +22,70 @@ namespace PSOpenAD
             public int len;
             public IntPtr data;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct client_sasl_mechanism
+        {
+            public int version;
+            public IntPtr plugname;
+            public IntPtr plug;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct sasl_client_plug
+        {
+            public string mech_name;
+            public int max_ssf;
+            public SaslPluginSecurityFlags security_flags;
+            public SaslPluginFeatures features;
+        }
+    }
+
+    internal enum SaslCallbackStage
+    {
+        SASL_INFO_LIST_START = 0,
+        SASL_INFO_LIST_MECH = 1,
+        SASL_INFO_LIST_END = 2,
+    }
+
+    internal static class Sasl
+    {
+        private const string SASL_LIB = "libsasl2.so";
+        //private const string SASL_LIB = "/opt/cyrus-sasl-2.1.27/lib/libsasl2.so";
+
+        public delegate void sasl_client_info_callback_t(
+            ref Helpers.client_sasl_mechanism m,
+            SaslCallbackStage stage,
+            IntPtr rock);
+
+        [DllImport(SASL_LIB)]
+        public static extern int sasl_client_init(
+            IntPtr callbacks);
+
+        [DllImport(SASL_LIB)]
+        public static extern int sasl_client_plugin_info(
+            string mech_list,
+            [MarshalAs(UnmanagedType.FunctionPtr)] sasl_client_info_callback_t info_cb,
+            IntPtr info_cb_rock);
+
+        public static void ClientInit()
+        {
+            sasl_client_init(IntPtr.Zero);
+        }
+
+        public static void ClientPluginInfo(string mech)
+        {
+            int res = sasl_client_plugin_info(mech, delegate
+                (ref Helpers.client_sasl_mechanism mech, SaslCallbackStage stage, IntPtr rock)
+                {
+                    if (stage != SaslCallbackStage.SASL_INFO_LIST_MECH)
+                        return;
+
+                    string? mechName = Marshal.PtrToStringUTF8(mech.plugname);
+                    Helpers.sasl_client_plug plugin = Marshal.PtrToStructure<Helpers.sasl_client_plug>(mech.plug);
+                    string a = "";
+                }, IntPtr.Zero);
+        }
     }
 
     public abstract class SaslInteract
@@ -99,5 +163,32 @@ namespace PSOpenAD
         SASL_CB_SERVER_USERDB_CHECKPASS = 0x8005,
         SASL_CB_SERVER_USERDB_SETPASS = 0x8006,
         SASL_CB_CANON_USER = 0x8007,
+    }
+
+    [Flags]
+    internal enum SaslPluginSecurityFlags
+    {
+        SASL_SEC_NOPLAINTEXT = 0x0001,
+        SASL_SEC_NOACTIVE = 0x0002,
+        SASL_SEC_NODICTIONARY = 0x0004,
+        SASL_SEC_FORWARD_SECRECY = 0x0008,
+        SASL_SEC_NOANONYMOUS = 0x0010,
+        SASL_SEC_PASS_CREDENTIALS = 0x0020,
+        SASL_SEC_MUTUAL_AUTH = 0x0040,
+    }
+
+    [Flags]
+    internal enum SaslPluginFeatures
+    {
+        SASL_FEAT_NEEDSERVERFQDN = 0x0001,
+        SASL_FEAT_WANT_CLIENT_FIRST = 0x0002,
+        SASL_FEAT_WANT_SERVER_LAST = 0x0004,
+        SASL_FEAT_INTERNAL_CLIENT_FIRST = 0x0008,
+        SASL_FEAT_SERVER_FIRST = 0x0010,
+        SASL_FEAT_ALLOWS_PROXY = 0x0020,
+        SASL_FEAT_DONTUSE_USERPASSWD = 0x0080,
+        SASL_FEAT_GSS_FRAMING = 0x0100,
+        SASL_FEAT_CHANNEL_BINDING = 0x0800,
+        SASL_FEAT_SUPPORTS_HTTP = 0x1000,
     }
 }

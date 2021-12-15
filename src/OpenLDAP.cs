@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -33,8 +34,8 @@ namespace PSOpenAD
 
     internal static class OpenLDAP
     {
-        private const string LIB_LDAP = "libldap.so";
-        //private const string LIB_LDAP = "/opt/openldap-2.6.0/lib/libldap.so";
+        //private const string LIB_LDAP = "libldap.so";
+        private const string LIB_LDAP = "/opt/openldap-2.6.0/lib/libldap.so";
 
         public delegate int LDAP_SASL_INTERACT_PROC(
             IntPtr ld,
@@ -209,35 +210,16 @@ namespace PSOpenAD
             return ldap;
         }
 
-        public static Task SaslInteractiveBindAsync(SafeLdapHandle ldap, string dn, Commands.AuthenticationMethod authMethod,
-            SaslInteract prompt, int timeoutMS = 5000, CancellationToken? cancelToken = null)
+        public static Task SaslInteractiveBindAsync(SafeLdapHandle ldap, string dn, string mech, SaslInteract prompt,
+            int timeoutMS = 5000, CancellationToken? cancelToken = null)
         {
-            string saslMech;
-            switch (authMethod)
-            {
-                case Commands.AuthenticationMethod.Anonymous:
-                    saslMech = "ANONYMOUS";
-                    break;
-                case Commands.AuthenticationMethod.Simple:
-                    saslMech = "SIMPLE";
-                    break;
-                case Commands.AuthenticationMethod.Kerberos:
-                    saslMech = "GSSAPI";
-                    break;
-                case Commands.AuthenticationMethod.Negotiate:
-                    saslMech = "GSS-SPNEGO";
-                    break;
-                default:
-                    throw new ArgumentException(nameof(authMethod), authMethod.ToString(), null);
-            }
-
             return Task.Run(() =>
             {
                 int res = 0;
                 do
                 {
                     SafeLdapMessage result = new SafeLdapMessage();
-                    res = ldap_sasl_interactive_bind(ldap, dn, saslMech, IntPtr.Zero, IntPtr.Zero,
+                    res = ldap_sasl_interactive_bind(ldap, dn, mech, IntPtr.Zero, IntPtr.Zero,
                         SASLInteractionFlags.LDAP_SASL_QUIET, prompt.SaslInteractProc, IntPtr.Zero,
                         result.DangerousGetHandle(), out var rmech, out var msgid);
                     result.Dispose();
@@ -375,7 +357,7 @@ namespace PSOpenAD
         public static int GetOptionInt(SafeLdapHandle ldap, LDAPOption option)
         {
             int res = ldap_get_option(ldap, option, out int value);
-            if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
+            if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_get_option({option})");
 
             return value;
@@ -384,23 +366,44 @@ namespace PSOpenAD
         public static string GetOptionString(SafeLdapHandle ldap, LDAPOption option)
         {
             int res = ldap_get_option(ldap, option, out SafeLdapMemory value);
-            if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
+            if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_get_option({option})");
 
             return Marshal.PtrToStringUTF8(value.DangerousGetHandle()) ?? "";
         }
 
+        public static List<string> GetOptionSaslMechList(SafeLdapHandle ldap)
+        {
+            LDAPOption option = LDAPOption.LDAP_OPT_X_SASL_MECHLIST;
+            int res = ldap_get_option(ldap, option, out IntPtr value);
+            if (res != 0)
+                throw new LDAPException(ldap, res, $"ldap_get_option({option})");
+
+            List<string> mechs = new List<string>(); ;
+            while (true)
+            {
+                string? mech = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(value));
+                if (String.IsNullOrEmpty(mech))
+                    break;
+
+                mechs.Add(mech);
+                value = IntPtr.Add(value, IntPtr.Size);
+            }
+
+            return mechs;
+        }
+
         public static void SetOption(SafeLdapHandle ldap, LDAPOption option, int value)
         {
             int res = ldap_set_option(ldap, option, ref value);
-            if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
+            if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_set_option({option})");
         }
 
         public static void SetOption(SafeLdapHandle ldap, LDAPOption option, IntPtr value)
         {
             int res = ldap_set_option(ldap, option, value);
-            if (res != (int)LDAPOption.LDAP_OPT_SUCCESS)
+            if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_set_option({option})");
         }
     }
@@ -564,8 +567,6 @@ namespace PSOpenAD
 
     internal enum LDAPOption
     {
-        LDAP_OPT_SUCCESS = 0,
-        LDAP_OPT_ERROR = -1,
         LDAP_OPT_API_INFO = 0x0000,
         LDAP_OPT_DESC = 0x0001,
         LDAP_OPT_DEREF = 0x0002,
@@ -628,22 +629,6 @@ namespace PSOpenAD
         LDAP_OPT_X_TLS_KEY = 0x6018,
         LDAP_OPT_X_TLS_PEERKEY_HASH = 0x6019,
         LDAP_OPT_X_TLS_REQUIRE_SAN = 0x601a,
-        LDAP_OPT_X_TLS_NEVER = 0,
-        LDAP_OPT_X_TLS_HARD = 1,
-        LDAP_OPT_X_TLS_DEMAND = 2,
-        LDAP_OPT_X_TLS_ALLOW = 3,
-        LDAP_OPT_X_TLS_TRY = 4,
-        LDAP_OPT_X_TLS_CRL_NONE = 0,
-        LDAP_OPT_X_TLS_CRL_PEER = 1,
-        LDAP_OPT_X_TLS_CRL_ALL = 2,
-        LDAP_OPT_X_TLS_PROTOCOL_SSL2 = 2 << 8,
-        LDAP_OPT_X_TLS_PROTOCOL_SSL3 = 3 << 8,
-        LDAP_OPT_X_TLS_PROTOCOL_TLS1_0 = (3 << 8) + 1,
-        LDAP_OPT_X_TLS_PROTOCOL_TLS1_1 = (3 << 8) + 2,
-        LDAP_OPT_X_TLS_PROTOCOL_TLS1_2 = (3 << 8) + 3,
-        LDAP_OPT_X_SASL_CBINDING_NONE = 0,
-        LDAP_OPT_X_SASL_CBINDING_TLS_UNIQUE = 1,
-        LDAP_OPT_X_SASL_CBINDING_TLS_ENDPOINT = 2,
         LDAP_OPT_X_SASL_MECH = 0x6100,
         LDAP_OPT_X_SASL_REALM = 0x6101,
         LDAP_OPT_X_SASL_AUTHCID = 0x6102,
