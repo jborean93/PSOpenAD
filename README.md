@@ -5,7 +5,6 @@
 [![PowerShell Gallery](https://img.shields.io/powershellgallery/dt/PSOpenAD.svg)](https://www.powershellgallery.com/packages/PSOpenAD)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborean93/PSOpenAD/blob/main/LICENSE)
 
-Interact with the Win32 APIs used to create processes.
 See [about_PSOpenAD](docs/en-US/about_PSOpenAD.md) for more details.
 
 ## Documentation
@@ -16,9 +15,7 @@ Documentation for this module and details on the cmdlets included can be found [
 
 These cmdlets have the following requirements
 
-* PowerShell v5.1 or newer
-* .NET Framework 4.7.2+ or .NET Core+
-* Windows Server 2008 R2/Windows 7 or newer
+* PowerShell v7.0 or newer
 
 ## Installing
 

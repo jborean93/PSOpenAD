@@ -1,3 +1,4 @@
+using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
 using System.Management.Automation;
@@ -10,6 +11,7 @@ namespace PSOpenAD.Commands
         VerbsCommon.New, "OpenADSession",
         DefaultParameterSetName = "ComputerName"
     )]
+    [OutputType(typeof(OpenADSession))]
     public class NewOpenADSession : PSCmdlet
     {
         [Parameter(
@@ -66,6 +68,17 @@ namespace PSOpenAD.Commands
 
         protected override void ProcessRecord()
         {
+            AuthenticationProvider? selectedAuth = ClientAuthentication.Providers.Find(
+                (AuthenticationProvider p) => p.Method == Authentication);
+            if (selectedAuth?.Available != true)
+            {
+                ArgumentException ex = new ArgumentException(
+                    $"Client cannot offer -Authentication {Authentication} as it is not available");
+                WriteError(new ErrorRecord(ex, "InvalidAuthenticationSpecified", ErrorCategory.InvalidArgument,
+                    null));
+                return;
+            }
+
             if (this.ParameterSetName == "ComputerName")
             {
                 string scheme = UseSSL ? "ldaps" : "ldap";
@@ -73,6 +86,7 @@ namespace PSOpenAD.Commands
                 Uri = new Uri($"{scheme}://{ComputerName}:{port}");
             }
 
+            WriteVerbose($"Initializing LDAP with {Uri}");
             var ldap = OpenLDAP.Initialize(Uri.ToString());
             OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_PROTOCOL_VERSION, 3);
 
@@ -81,59 +95,91 @@ namespace PSOpenAD.Commands
             {
                 transportIsTLS = true;
 
+                if (NoEncryption || NoSigning)
+                {
+                    ArgumentException ex = new ArgumentException(
+                        "Cannot disable encryption or signatures for TLS based connection");
+                    WriteError(new ErrorRecord(ex, "DisableTLSSecurity", ErrorCategory.InvalidArgument, null));
+                    return;
+                }
+
                 // OpenLDAP disables channel binding by default but MS most likely requires it when using GSSAPI auth.
                 // Change the default to enabled with an opt-in switch to disable it if needed. This requires a
                 // patched version of cyrus-sasl for it to work with GSSAPI auth.
                 // https://github.com/cyrusimap/cyrus-sasl/commit/975edbb69070eba6b035f08776de771a129cfb57
+                if (!NoChannelBinding && !selectedAuth.SupportsCB)
+                    WriteWarning("Could not detect if auth supports channel binding, authentication could fail");
+
                 int cbindingValue = NoChannelBinding
                     ? (int)LDAPChannelBinding.LDAP_OPT_X_SASL_CBINDING_NONE
                     : (int)LDAPChannelBinding.LDAP_OPT_X_SASL_CBINDING_TLS_ENDPOINT;
+                WriteVerbose($"Setting SASL_CBINDING to {cbindingValue}");
                 OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_X_SASL_CBINDING, cbindingValue);
 
                 if (SkipCertificateCheck)
                 {
                     // Once setting the option we need to ensure a new context is used rather than the global one.
+                    WriteVerbose("Skipping certificate verification checks for connection");
                     OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_X_TLS_REQUIRE_CERT,
                         (int)LDAPTlsSettings.LDAP_OPT_X_TLS_NEVER);
                     OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_X_TLS_NEWCTX, 0);
                 }
 
-                if (StartTLS)
+                if (StartTLS && Uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    ArgumentException ex = new ArgumentException("Cannot use StartTLS over an LDAPS connection");
+                    WriteError(new ErrorRecord(ex, "StartTLSWithLDAPS", ErrorCategory.InvalidArgument, null));
+                    return;
+                }
+                else if (StartTLS)
+                {
+                    WriteVerbose("Running StartTLS on the LDAP connection");
                     OpenLDAP.StartTlsS(ldap);
+                }
             }
 
             string username = Credential?.UserName ?? "";
             string password = Credential?.GetNetworkCredential().Password ?? "";
+            bool isSigned = false;
+            bool isEncrypted = false;
 
-            if (Authentication == AuthenticationMethod.Simple)
+            if (Authentication == AuthenticationMethod.Anonymous)
             {
+                WriteVerbose("Connecting to LDAP host with ANONYMOUS auth");
+                throw new ArgumentException(nameof(AuthenticationMethod));
+            }
+            else if (Authentication == AuthenticationMethod.Simple)
+            {
+                WriteVerbose("Connecting to LDAP host with SIMPLE auth");
                 using (CurrentCancelToken = new CancellationTokenSource())
                 {
                     Task bindTask = OpenLDAP.SimpleBindAsync(ldap, username, password, cancelToken: CurrentCancelToken.Token);
                     bindTask.GetAwaiter().GetResult();
                 }
             }
-            else if (Authentication == AuthenticationMethod.Anonymous)
-            {
-                throw new ArgumentException(nameof(AuthenticationMethod));
-            }
             else
             {
+                WriteVerbose($"Connecting to LDAP host with SASL {Authentication} auth");
+
                 if (transportIsTLS || (NoSigning && NoEncryption))
                 {
                     // MS does not allow integrity/confidentiality inside a TLS session. Set this flag to tell SASL not
-                    // to configure the connection for this. Note this requires a patched version of cyrus-sasl until
-                    // they produce a new release.
-                    // https://github.com/cyrusimap/cyrus-sasl/commit/9de4d7e885c96c68a155d2885c980e1d889129c7#diff-e2efffe07cd6fcacb6d023fdc9c2b3b9d07894bec80bd7ac8ada9e385765f75d
-                    // TODO: Determine how widespread this problem is and potentially set the GSSAPI flags manually.
+                    // to configure the connection for this.
+                    WriteVerbose("Disabling SASL encryption/signing with SSF min/max to 0");
                     OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_X_SASL_SSF_MIN, 0);
                     OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_X_SASL_SSF_MAX, 0);
                 }
                 else if (NoEncryption)
                 {
                     // SSF of 1 means integrity (signing), anything above that is encryption.
+                    WriteVerbose("Disabling SASL encryption with SSF min/max to 1");
                     OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_X_SASL_SSF_MIN, 1);
                     OpenLDAP.SetOption(ldap, LDAPOption.LDAP_OPT_X_SASL_SSF_MAX, 1);
+
+                    // Seems like the GSS-SPNEGO SASL mech can only encrypt or do nothing. It cannot do signatures
+                    // only like GSSAPI/Kerberos.
+                    if (Authentication == AuthenticationMethod.Negotiate)
+                        WriteWarning("-NoEncryption on Negotiate does not work without -NoSigning");
                 }
 
                 // Using an explicit credential in LDAP/SASL for GSSAPI is difficult. The code gets the credential
@@ -142,48 +188,96 @@ namespace PSOpenAD.Commands
                 // than the default ccache. The ldap_set_option cannot be called before the bind starts as it requires
                 // an initialised SASL context which is only done once the bind starts. By using the prompter the
                 // option can be set as the SASL context will have been created.
-                byte[] mechBytes = Authentication == AuthenticationMethod.Negotiate
-                    ? Gssapi.SPNEGO
-                    : Gssapi.KERBEROS;
-                using GssapiOid mech = new GssapiOid(mechBytes);
+                byte[] mech = Authentication == AuthenticationMethod.Negotiate
+                    ? GSSAPI.SPNEGO
+                    : GSSAPI.KERBEROS;
 
                 GssapiCredential cred;
                 if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
                 {
-                    using GssapiOid ntUser = new GssapiOid(Gssapi.GSS_C_NT_USER_NAME);
-                    using SafeGssapiName name = Gssapi.ImportName(username, ntUser);
-
-                    cred = Gssapi.AcquireCredWithPassword(name, password, 0, new List<GssapiOid> { mech },
+                    WriteVerbose("Getting GSSAPI credential with explicit credentials");
+                    using SafeGssapiName name = GSSAPI.ImportName(username, GSSAPI.GSS_C_NT_USER_NAME);
+                    cred = GSSAPI.AcquireCredWithPassword(name, password, 0, new List<byte[]> { mech },
                         GssapiCredUsage.GSS_C_INITIATE);
+                }
+                else if (!string.IsNullOrEmpty(username))
+                {
+                    WriteVerbose("Getting cached GSSAPI credential for explicit user");
+                    using SafeGssapiName name = GSSAPI.ImportName(username, GSSAPI.GSS_C_NT_USER_NAME);
+                    cred = GSSAPI.AcquireCred(name, 0, new List<byte[]> { mech }, GssapiCredUsage.GSS_C_INITIATE);
                 }
                 else
                 {
-                    cred = Gssapi.AcquireCred(null, 0, new List<GssapiOid> { mech }, GssapiCredUsage.GSS_C_INITIATE);
+                    WriteVerbose("Getting cached GSSAPI credential");
+                    cred = GSSAPI.AcquireCred(null, 0, new List<byte[]> { mech }, GssapiCredUsage.GSS_C_INITIATE);
                 }
 
                 using (cred)
                 using (CurrentCancelToken = new CancellationTokenSource())
                 {
+                    // Newer versions of cyrus-sasl will do this for us but we can still manually do this for
+                    // compatibility with older versions. This tells the GSSAPI context to really turn off integration
+                    // and confidentiality on the connection as that's not allowed by Microsoft when over TLS.
+                    // https://github.com/cyrusimap/cyrus-sasl/commit/9de4d7e885c96c68a155d2885c980e1d889129c7#diff-e2efffe07cd6fcacb6d023fdc9c2b3b9d07894bec80bd7ac8ada9e385765f75d
                     if (transportIsTLS)
                     {
-                        using GssapiOid noCIFlags = new GssapiOid(Gssapi.GSS_KRB5_CRED_NO_CI_FLAGS_X);
-                        Gssapi.SetCredOption(cred.Creds, noCIFlags);
+                        WriteVerbose("Disabling GSSAPI integrity/encryption for TLS connection");
+                        GSSAPI.SetCredOption(cred.Creds, GSSAPI.GSS_KRB5_CRED_NO_CI_FLAGS_X);
                     }
 
                     GSSAPIPrompter prompter = new GSSAPIPrompter(ldap, cred.Creds);
-                    string saslMech = Authentication == AuthenticationMethod.Kerberos ? "GSSAPI" : "GSS-SPNEGO";
-                    Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", saslMech, prompter,
+                    Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", selectedAuth.NativeId, prompter,
                         cancelToken: CurrentCancelToken.Token);
                     bindTask.GetAwaiter().GetResult();
+
+                    int ssf;
+                    try
+                    {
+                        ssf = OpenLDAP.GetOptionInt(ldap, LDAPOption.LDAP_OPT_X_SASL_SSF);
+                    }
+                    catch (LDAPException)
+                    {
+                        // If the SSF was 0 then the context isn't saved in OpenLDAP and this fails. Mask over this
+                        // weirdness.
+                        ssf = 0;
+                    }
+                    WriteVerbose($"SASL SSF set to {ssf}");
+                    isSigned = ssf > 0;
+                    isEncrypted = ssf > 1;
                 }
             }
 
-            WriteObject(ldap);
+            WriteObject(new OpenADSession(ldap, Uri, Authentication, transportIsTLS || isSigned,
+                transportIsTLS || isEncrypted));
         }
 
         protected override void StopProcessing()
         {
             CurrentCancelToken?.Cancel();
+        }
+    }
+
+    [Cmdlet(
+        VerbsCommon.Remove, "OpenADSession"
+    )]
+    public class RemoveOpenADSession : PSCmdlet
+    {
+        [Parameter(
+            Mandatory = true,
+            Position = 0,
+            ValueFromPipeline = true,
+            ValueFromPipelineByPropertyName = true
+        )]
+        public OpenADSession[] Session { get; set; } = Array.Empty<OpenADSession>();
+
+        protected override void ProcessRecord()
+        {
+            foreach (OpenADSession s in Session)
+            {
+                WriteVerbose($"Closing connection to {s.Uri}");
+                s.Handle.Dispose();
+                s.IsClosed = true;
+            }
         }
     }
 

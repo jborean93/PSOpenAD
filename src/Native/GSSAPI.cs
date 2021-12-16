@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace PSOpenAD
+namespace PSOpenAD.Native
 {
     internal static partial class Helpers
     {
@@ -19,15 +19,6 @@ namespace PSOpenAD
         {
             public UInt32 length;
             public IntPtr elements;
-
-            public static explicit operator gss_OID_desc(GssapiOid oid)
-            {
-                return new gss_OID_desc()
-                {
-                    length = (UInt32)oid.Oid.Length,
-                    elements = oid.RawOID.DangerousGetHandle(),
-                };
-            }
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -42,7 +33,7 @@ namespace PSOpenAD
     {
         public SafeGssapiCred Creds { get; }
         public UInt32 TimeToLive { get; }
-        public GssapiOid[] Mechanisms { get; }
+        public List<byte[]> Mechanisms { get; }
 
         public GssapiCredential(SafeGssapiCred creds, UInt32 ttl, SafeHandle mechanisms)
         {
@@ -52,15 +43,15 @@ namespace PSOpenAD
             using (mechanisms)
             {
                 Helpers.gss_OID_set_desc set = Marshal.PtrToStructure<Helpers.gss_OID_set_desc>(mechanisms.DangerousGetHandle());
-                Mechanisms = new GssapiOid[(int)set.count];
+                Mechanisms = new List<byte[]>((int)set.count);
                 IntPtr ptr = set.elements;
-                for (int i = 0; i < Mechanisms.Length; i++)
+                for (int i = 0; i < Mechanisms.Count; i++)
                 {
                     Helpers.gss_OID_desc member = Marshal.PtrToStructure<Helpers.gss_OID_desc>(ptr);
                     byte[] oid = new byte[member.length];
                     Marshal.Copy(member.elements, oid, 0, oid.Length);
+                    Mechanisms[i] = oid;
 
-                    Mechanisms[i] = new GssapiOid(oid);
                     ptr = IntPtr.Add(ptr, IntPtr.Size);
                 }
             }
@@ -68,38 +59,15 @@ namespace PSOpenAD
 
         public void Dispose()
         {
-            foreach (GssapiOid mech in Mechanisms)
-                mech.Dispose();
             Creds.Dispose();
             GC.SuppressFinalize(this);
         }
         ~GssapiCredential() => Dispose();
     }
 
-    public class GssapiOid : IDisposable
+    internal static class GSSAPI
     {
-        public byte[] Oid { get; }
-
-        internal SafeMemoryBuffer RawOID { get; }
-
-        public GssapiOid(byte[] oid)
-        {
-            Oid = oid;
-            RawOID = new SafeMemoryBuffer(oid.Length);
-            Marshal.Copy(oid, 0, RawOID.DangerousGetHandle(), oid.Length);
-        }
-
-        public void Dispose()
-        {
-            RawOID.Dispose();
-            GC.SuppressFinalize(this);
-        }
-        ~GssapiOid() => Dispose();
-    }
-
-    internal static class Gssapi
-    {
-        private const string GSSAPI_LIB = "libgssapi_krb5.so.2";
+        public const string LIB_GSSAPI = "PSOpenAD.libgssapi";
 
         // Name Types
         public static byte[] GSS_C_NT_USER_NAME = new byte[] {
@@ -120,13 +88,13 @@ namespace PSOpenAD
             0x2A, 0x85, 0x70, 0x2B, 0x0D, 0x1D
         }; // 1.2.752.43.13.29
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_add_oid_set_member(
             out int min_stat,
-            ref Helpers.gss_OID_desc member,
-            SafeHandle target_set);
+            SafeHandle member,
+            ref IntPtr target_set);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_acquire_cred(
             out int min_stat,
             SafeHandle desired_name,
@@ -137,11 +105,11 @@ namespace PSOpenAD
             out SafeGssapiOidSet actual_mechs,
             out UInt32 actual_ttl);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_acquire_cred_with_password(
             out int min_stat,
             SafeHandle desired_name,
-            ref Helpers.gss_buffer_desc password,
+            SafeHandle password,
             UInt32 ttl,
             SafeHandle desired_mechs,
             GssapiCredUsage cred_usage,
@@ -149,12 +117,12 @@ namespace PSOpenAD
             out SafeGssapiOidSet actual_mechs,
             out UInt32 actual_ttl);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_create_empty_oid_set(
             out int min_stat,
             out SafeGssapiOidSet target_set);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_display_status(
             out int min_status,
             int status_value,
@@ -163,126 +131,72 @@ namespace PSOpenAD
             ref int message_context,
             ref Helpers.gss_buffer_desc status_string);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_import_name(
             out int min_stat,
-            ref Helpers.gss_buffer_desc input_buffer,
-            ref Helpers.gss_OID_desc name_type,
+            SafeHandle input_buffer,
+            SafeHandle name_type,
             out SafeGssapiName output_name);
 
-        [DllImport(GSSAPI_LIB)]
-        public static extern int gss_krb5_ccache_name(
-            out int min_stat,
-            string? name,
-            out IntPtr out_name);
-
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_release_cred(
             out int min_stat,
             IntPtr creds);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_release_name(
             out int min_stat,
             IntPtr name);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_release_oid_set(
             out int min_stat,
             IntPtr target_set);
 
-        [DllImport(GSSAPI_LIB)]
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_set_cred_option(
             out int min_status,
             SafeGssapiCred cred,
-            ref Helpers.gss_OID_desc desired_object,
+            SafeHandle desired_object,
             ref Helpers.gss_buffer_desc value);
 
-        public static GssapiCredential AcquireCred(SafeHandle? name, UInt32 ttl, List<GssapiOid> desiredMechs,
+        public static GssapiCredential AcquireCred(SafeGssapiName? name, UInt32 ttl, List<byte[]> desiredMechs,
             GssapiCredUsage usage)
         {
-            int majorStatus = gss_create_empty_oid_set(out var minorStatus, out var desiredMechSet);
+            using SafeGssapiOidSet desiredMechSet = OIDSetBuffer(desiredMechs);
+
+            if (name == null)
+                name = new SafeGssapiName();
+
+            int majorStatus = gss_acquire_cred(out var minorStatus, name, ttl, desiredMechSet, usage,
+                out var outputCreds, out var actualMechs, out var actualTtls);
             if (majorStatus != 0)
-                throw new GSSAPIException(majorStatus, minorStatus, "gss_create_empty_oid_set");
+                throw new GSSAPIException(majorStatus, minorStatus, "gss_acquire_cred");
 
-            using (desiredMechSet)
-            {
-                using SafeMemoryBuffer mechPtr = new SafeMemoryBuffer(IntPtr.Size);
-                Marshal.WriteIntPtr(mechPtr.DangerousGetHandle(), 0, desiredMechSet.DangerousGetHandle());
-
-                foreach (GssapiOid mech in desiredMechs)
-                {
-                    Helpers.gss_OID_desc oidDesc = (Helpers.gss_OID_desc)mech;
-                    majorStatus = gss_add_oid_set_member(out minorStatus, ref oidDesc, mechPtr);
-                    if (majorStatus != 0)
-                        throw new GSSAPIException(majorStatus, minorStatus, "gss_add_oid_set_member");
-                }
-
-                if (name == null)
-                    name = new SafeGssapiName();
-
-                majorStatus = gss_acquire_cred(out minorStatus, name, ttl, desiredMechSet, usage,
-                    out var outputCreds, out var actualMechs, out var actualTtls);
-                if (majorStatus != 0)
-                    throw new GSSAPIException(majorStatus, minorStatus, "gss_acquire_cred");
-
-                return new GssapiCredential(outputCreds, actualTtls, actualMechs);
-            }
+            return new GssapiCredential(outputCreds, actualTtls, actualMechs);
         }
 
         public static GssapiCredential AcquireCredWithPassword(SafeHandle name, string password, UInt32 ttl,
-            List<GssapiOid> desiredMechs, GssapiCredUsage usage)
+            List<byte[]> desiredMechs, GssapiCredUsage usage)
         {
-            using SafeMemoryBuffer passwordPtr = new SafeMemoryBuffer(password);
-            Helpers.gss_buffer_desc passwordBuffer = new Helpers.gss_buffer_desc()
-            {
-                length = (IntPtr)passwordPtr.Length,
-                value = passwordPtr.DangerousGetHandle(),
-            };
+            using SafeMemoryBuffer passwordBuffer = StringBuffer(password);
+            using SafeGssapiOidSet desiredMechSet = OIDSetBuffer(desiredMechs);
 
-            int majorStatus = gss_create_empty_oid_set(out var minorStatus, out var desiredMechSet);
+            int majorStatus = gss_acquire_cred_with_password(out var minorStatus, name, passwordBuffer, ttl,
+                desiredMechSet, usage, out var outputCreds, out var actualMechs, out var actualTtls);
             if (majorStatus != 0)
-                throw new GSSAPIException(majorStatus, minorStatus, "gss_create_empty_oid_set");
+                throw new GSSAPIException(majorStatus, minorStatus, "gss_acquire_cred_with_password");
 
-            using (desiredMechSet)
-            {
-                using SafeMemoryBuffer mechPtr = new SafeMemoryBuffer(IntPtr.Size);
-                Marshal.WriteIntPtr(mechPtr.DangerousGetHandle(), 0, desiredMechSet.DangerousGetHandle());
-
-                foreach (GssapiOid mech in desiredMechs)
-                {
-                    Helpers.gss_OID_desc oidDesc = (Helpers.gss_OID_desc)mech;
-                    majorStatus = gss_add_oid_set_member(out minorStatus, ref oidDesc, mechPtr);
-                    if (majorStatus != 0)
-                        throw new GSSAPIException(majorStatus, minorStatus, "gss_add_oid_set_member");
-                }
-
-                majorStatus = gss_acquire_cred_with_password(out minorStatus, name, ref passwordBuffer, ttl,
-                    desiredMechSet, usage, out var outputCreds, out var actualMechs, out var actualTtls);
-                if (majorStatus != 0)
-                    throw new GSSAPIException(majorStatus, minorStatus, "gss_acquire_cred_with_password");
-
-                return new GssapiCredential(outputCreds, actualTtls, actualMechs);
-            }
+            return new GssapiCredential(outputCreds, actualTtls, actualMechs);
         }
 
-        public static string DisplayStatus(int errorCode, bool isMajorCode, GssapiOid? mech)
+        public static string DisplayStatus(int errorCode, bool isMajorCode, byte[]? mech)
         {
             Helpers.gss_buffer_desc msgBuffer = new Helpers.gss_buffer_desc();
             int statusType = isMajorCode ? 1 : 2; // GSS_C_GSS_CODE : GSS_C_MECH_CODE
             int messageContext = 0;
 
-            SafeHandle mechOid;
-            if (mech == null)
-            {
-                mechOid = new SafeMemoryBuffer(Marshal.SizeOf(typeof(Helpers.gss_OID_desc)));
-                Marshal.StructureToPtr(new Helpers.gss_OID_desc(), mechOid.DangerousGetHandle(), false);
-            }
-            else
-            {
-                mechOid = mech.RawOID;
-            }
-
+            using SafeMemoryBuffer mechOid = OIDBuffer(mech);
             StringBuilder msg = new StringBuilder();
             while (true)
             {
@@ -307,40 +221,106 @@ namespace PSOpenAD
             return msg.ToString();
         }
 
-        public static SafeGssapiName ImportName(string name, GssapiOid nameType)
+        public static SafeGssapiName ImportName(string name, byte[] nameType)
         {
-            using SafeMemoryBuffer nameBuffer = new SafeMemoryBuffer(name);
-            Helpers.gss_buffer_desc inputBuffer = new Helpers.gss_buffer_desc()
-            {
-                length = new IntPtr(nameBuffer.Length),
-                value = nameBuffer.DangerousGetHandle(),
-            };
-            Helpers.gss_OID_desc nameOid = (Helpers.gss_OID_desc)nameType;
-
-            int majorStatus = gss_import_name(out var minorStatus, ref inputBuffer, ref nameOid,
-                out var outputName);
+            using SafeMemoryBuffer inputBuffer = StringBuffer(name);
+            using SafeMemoryBuffer nameOID = OIDBuffer(nameType);
+            int majorStatus = gss_import_name(out var minorStatus, inputBuffer, nameOID, out var outputName);
             if (majorStatus != 0)
                 throw new GSSAPIException(majorStatus, minorStatus, "gss_import_name");
 
             return outputName;
         }
 
-        public static string? Krb5CCacheName(string? name)
+        public static void SetCredOption(SafeGssapiCred cred, byte[] obj)
         {
-            int majorStatus = gss_krb5_ccache_name(out var minor_status, name, out var outName);
-            if (majorStatus != 0)
-                throw new GSSAPIException(majorStatus, minor_status, "gss_krb5_ccache_name");
-
-            return Marshal.PtrToStringUTF8(outName);
-        }
-
-        public static void SetCredOption(SafeGssapiCred cred, GssapiOid obj)
-        {
-            Helpers.gss_OID_desc objectBuffer = (Helpers.gss_OID_desc)obj;
+            using SafeMemoryBuffer objOID = OIDBuffer(obj);
             Helpers.gss_buffer_desc valueBuffer = new Helpers.gss_buffer_desc();
-            int majorStatus = gss_set_cred_option(out var minorStatus, cred, ref objectBuffer, ref valueBuffer);
+            int majorStatus = gss_set_cred_option(out var minorStatus, cred, objOID, ref valueBuffer);
             if (majorStatus != 0)
                 throw new GSSAPIException(majorStatus, minorStatus, "gss_set_cred_option");
+        }
+
+        private static SafeGssapiOidSet OIDSetBuffer(List<byte[]> oids)
+        {
+            int majorStatus = gss_create_empty_oid_set(out var minorStatus, out var desiredMechSet);
+            if (majorStatus != 0)
+                throw new GSSAPIException(majorStatus, minorStatus, "gss_create_empty_oid_set");
+
+            try
+            {
+                IntPtr mechSetPtr = desiredMechSet.DangerousGetHandle();
+                foreach (byte[] oid in oids)
+                {
+                    using SafeMemoryBuffer oidDesc = OIDBuffer(oid);
+                    majorStatus = gss_add_oid_set_member(out minorStatus, oidDesc, ref mechSetPtr);
+                    if (majorStatus != 0)
+                        throw new GSSAPIException(majorStatus, minorStatus, "gss_add_oid_set_member");
+                }
+            }
+            catch
+            {
+                desiredMechSet.Dispose();
+                throw;
+            }
+
+            return desiredMechSet;
+        }
+
+        private static SafeMemoryBuffer OIDBuffer(byte[]? oid)
+        {
+            int structSize = Marshal.SizeOf<Helpers.gss_OID_desc>();
+            int oidLength = oid?.Length ?? 0;
+
+            SafeMemoryBuffer nameTypeBuffer = new SafeMemoryBuffer(structSize + oidLength);
+            try
+            {
+                Helpers.gss_OID_desc oidDesc = new Helpers.gss_OID_desc()
+                {
+                    length = (uint)oidLength,
+                    elements = IntPtr.Zero,
+                };
+
+                if (oid != null)
+                {
+                    oidDesc.elements = IntPtr.Add(nameTypeBuffer.DangerousGetHandle(), structSize);
+                    Marshal.Copy(oid, 0, oidDesc.elements, oid.Length);
+                }
+
+                Marshal.StructureToPtr(oidDesc, nameTypeBuffer.DangerousGetHandle(), false);
+            }
+            catch
+            {
+                nameTypeBuffer.Dispose();
+                throw;
+            }
+
+            return nameTypeBuffer;
+        }
+
+        private static SafeMemoryBuffer StringBuffer(string value)
+        {
+            int structSize = Marshal.SizeOf<Helpers.gss_buffer_desc>();
+            byte[] data = Encoding.UTF8.GetBytes(value);
+
+            SafeMemoryBuffer buffer = new SafeMemoryBuffer(structSize + data.Length);
+            try
+            {
+                Helpers.gss_buffer_desc bufferDesc = new Helpers.gss_buffer_desc()
+                {
+                    length = new IntPtr(data.Length),
+                    value = IntPtr.Add(buffer.DangerousGetHandle(), structSize),
+                };
+                Marshal.Copy(data, 0, bufferDesc.value, data.Length);
+                Marshal.StructureToPtr(bufferDesc, buffer.DangerousGetHandle(), false);
+            }
+            catch
+            {
+                buffer.DangerousGetHandle();
+                throw;
+            }
+
+            return buffer;
         }
     }
 
@@ -352,7 +332,7 @@ namespace PSOpenAD
 
         public string? ErrorMessage { get; }
 
-        public GSSAPIException(int majorStatus, int minorStatus, string method, string? errorMessage = null)
+        internal GSSAPIException(int majorStatus, int minorStatus, string method, string? errorMessage = null)
             : base(GetExceptionMessage(majorStatus, minorStatus, method, errorMessage))
         {
             MajorStatus = majorStatus;
@@ -364,8 +344,8 @@ namespace PSOpenAD
             string? errorMessage)
         {
             method = String.IsNullOrWhiteSpace(method) ? "GSSAPI Call" : method;
-            string majString = Gssapi.DisplayStatus(majorStatus, true, null);
-            string minString = Gssapi.DisplayStatus(minorStatus, false, null);
+            string majString = GSSAPI.DisplayStatus(majorStatus, true, null);
+            string minString = GSSAPI.DisplayStatus(minorStatus, false, null);
 
             string msg = String.Format("{0} failed (Major Status {1} - {2}) (Minor Status {3} - {4})",
                 method, majorStatus, majString, minorStatus, minString);
@@ -391,7 +371,7 @@ namespace PSOpenAD
 
         protected override bool ReleaseHandle()
         {
-            return Gssapi.gss_release_cred(out var _, handle) == 0;
+            return GSSAPI.gss_release_cred(out var _, handle) == 0;
         }
     }
 
@@ -403,7 +383,7 @@ namespace PSOpenAD
 
         protected override bool ReleaseHandle()
         {
-            return Gssapi.gss_release_name(out var _, handle) == 0;
+            return GSSAPI.gss_release_name(out var _, handle) == 0;
         }
     }
 
@@ -418,7 +398,7 @@ namespace PSOpenAD
             using SafeMemoryBuffer setPtr = new SafeMemoryBuffer(IntPtr.Size);
             Marshal.WriteIntPtr(setPtr.DangerousGetHandle(), 0, handle);
 
-            return Gssapi.gss_release_oid_set(out var _, setPtr.DangerousGetHandle()) == 0;
+            return GSSAPI.gss_release_oid_set(out var _, setPtr.DangerousGetHandle()) == 0;
         }
     }
 }

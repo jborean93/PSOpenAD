@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace PSOpenAD
+namespace PSOpenAD.Native
 {
     internal static partial class Helpers
     {
@@ -34,35 +34,63 @@ namespace PSOpenAD
         [StructLayout(LayoutKind.Sequential)]
         public struct sasl_client_plug
         {
-            public string mech_name;
+            public IntPtr mech_name;
             public int max_ssf;
             public SaslPluginSecurityFlags security_flags;
             public SaslPluginFeatures features;
         }
     }
 
-    internal enum SaslCallbackStage
+    internal class SaslClientMechanism
     {
-        SASL_INFO_LIST_START = 0,
-        SASL_INFO_LIST_MECH = 1,
-        SASL_INFO_LIST_END = 2,
+        public int Version { get; set; }
+        public string Name { get; set; }
+        public SaslClientPlugin Plugin { get; set; }
+
+        public SaslClientMechanism(Helpers.client_sasl_mechanism mech)
+        {
+            Version = mech.version;
+            Name = Marshal.PtrToStringUTF8(mech.plugname) ?? "";
+
+            Helpers.sasl_client_plug clientPlug = Marshal.PtrToStructure<Helpers.sasl_client_plug>(mech.plug);
+            Plugin = new SaslClientPlugin(clientPlug);
+        }
     }
 
-    internal static class Sasl
+    internal class SaslClientPlugin
     {
-        private const string SASL_LIB = "libsasl2.so";
-        //private const string SASL_LIB = "/opt/cyrus-sasl-2.1.27/lib/libsasl2.so";
+        public string MechName { get; set; }
+        public int MaxSSF { get; set; }
+        public SaslPluginSecurityFlags SecurityFlags { get; set; } = SaslPluginSecurityFlags.NONE;
+        public SaslPluginFeatures Features { get; set; } = SaslPluginFeatures.NONE;
+
+        public SaslClientPlugin(Helpers.sasl_client_plug plug)
+        {
+            MechName = Marshal.PtrToStringUTF8(plug.mech_name) ?? "";
+            MaxSSF = plug.max_ssf;
+            SecurityFlags = plug.security_flags;
+            Features = plug.features;
+        }
+    }
+
+    internal static class CyrusSASL
+    {
+        public const string LIB_SASL = "PSOpenAD.libsasl";
 
         public delegate void sasl_client_info_callback_t(
             ref Helpers.client_sasl_mechanism m,
             SaslCallbackStage stage,
             IntPtr rock);
 
-        [DllImport(SASL_LIB)]
+        public delegate void ClientInfoCallback(
+            SaslCallbackStage stage,
+            SaslClientMechanism? mech);
+
+        [DllImport(LIB_SASL)]
         public static extern int sasl_client_init(
             IntPtr callbacks);
 
-        [DllImport(SASL_LIB)]
+        [DllImport(LIB_SASL)]
         public static extern int sasl_client_plugin_info(
             string mech_list,
             [MarshalAs(UnmanagedType.FunctionPtr)] sasl_client_info_callback_t info_cb,
@@ -73,22 +101,22 @@ namespace PSOpenAD
             sasl_client_init(IntPtr.Zero);
         }
 
-        public static void ClientPluginInfo(string mech)
+        public static void ClientPluginInfo(string mechs, ClientInfoCallback callback)
         {
-            int res = sasl_client_plugin_info(mech, delegate
-                (ref Helpers.client_sasl_mechanism mech, SaslCallbackStage stage, IntPtr rock)
+            int res = sasl_client_plugin_info(mechs,
+                (ref Helpers.client_sasl_mechanism mech, SaslCallbackStage stage, IntPtr _) =>
                 {
-                    if (stage != SaslCallbackStage.SASL_INFO_LIST_MECH)
-                        return;
+                    SaslClientMechanism? managedMech = null;
+                    if (stage == SaslCallbackStage.SASL_INFO_LIST_MECH)
+                        managedMech = new SaslClientMechanism(mech);
 
-                    string? mechName = Marshal.PtrToStringUTF8(mech.plugname);
-                    Helpers.sasl_client_plug plugin = Marshal.PtrToStructure<Helpers.sasl_client_plug>(mech.plug);
-                    string a = "";
-                }, IntPtr.Zero);
+                    callback(stage, managedMech);
+                },
+                IntPtr.Zero);
         }
     }
 
-    public abstract class SaslInteract
+    internal abstract class SaslInteract
     {
         internal int SaslInteractProc(IntPtr ldap, int flags, IntPtr defaults, IntPtr interact)
         {
@@ -143,7 +171,7 @@ namespace PSOpenAD
         public virtual void PromptDone() { }
     }
 
-    public enum SaslCallbackId
+    internal enum SaslCallbackId
     {
         SASL_CB_LIST_END = 0,
         SASL_CB_GETOPT = 1,
@@ -165,9 +193,17 @@ namespace PSOpenAD
         SASL_CB_CANON_USER = 0x8007,
     }
 
+    internal enum SaslCallbackStage
+    {
+        SASL_INFO_LIST_START = 0,
+        SASL_INFO_LIST_MECH = 1,
+        SASL_INFO_LIST_END = 2,
+    }
+
     [Flags]
     internal enum SaslPluginSecurityFlags
     {
+        NONE = 0,
         SASL_SEC_NOPLAINTEXT = 0x0001,
         SASL_SEC_NOACTIVE = 0x0002,
         SASL_SEC_NODICTIONARY = 0x0004,
@@ -180,6 +216,7 @@ namespace PSOpenAD
     [Flags]
     internal enum SaslPluginFeatures
     {
+        NONE = 0,
         SASL_FEAT_NEEDSERVERFQDN = 0x0001,
         SASL_FEAT_WANT_CLIENT_FIRST = 0x0002,
         SASL_FEAT_WANT_SERVER_LAST = 0x0004,

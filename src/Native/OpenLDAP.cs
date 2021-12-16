@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PSOpenAD
+namespace PSOpenAD.Native
 {
     internal static partial class Helpers
     {
@@ -34,8 +34,7 @@ namespace PSOpenAD
 
     internal static class OpenLDAP
     {
-        //private const string LIB_LDAP = "libldap.so";
-        private const string LIB_LDAP = "/opt/openldap-2.6.0/lib/libldap.so";
+        public const string LIB_LDAP = "PSOpenAD.libldap";
 
         public delegate int LDAP_SASL_INTERACT_PROC(
             IntPtr ld,
@@ -216,9 +215,10 @@ namespace PSOpenAD
             return Task.Run(() =>
             {
                 int res = 0;
-                do
+                SafeLdapMessage result = new SafeLdapMessage();
+
+                while (true)
                 {
-                    SafeLdapMessage result = new SafeLdapMessage();
                     res = ldap_sasl_interactive_bind(ldap, dn, mech, IntPtr.Zero, IntPtr.Zero,
                         SASLInteractionFlags.LDAP_SASL_QUIET, prompt.SaslInteractProc, IntPtr.Zero,
                         result.DangerousGetHandle(), out var rmech, out var msgid);
@@ -265,7 +265,6 @@ namespace PSOpenAD
                         throw new LDAPException(ldap, res, "ldap_sasl_interactive_bind", errorMessage: msg);
                     }
                 }
-                while (res == (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS);
 
                 if (res != 0)
                     throw new LDAPException(ldap, res, "ldap_sasl_interactive_bind");
@@ -542,13 +541,13 @@ namespace PSOpenAD
     {
         LDAP_RES_BIND = 0x61,
         LDAP_RES_SEARCH_ENTRY = 0x64,
-        LDAP_RES_SEARCH_REFERENCE = 0x73,
         LDAP_RES_SEARCH_RESULT = 0x65,
         LDAP_RES_MODIFY = 0x67,
         LDAP_RES_ADD = 0x69,
         LDAP_RES_DELETE = 0x6b,
         LDAP_RES_MODDN = 0x6d,
         LDAP_RES_COMPARE = 0x6f,
+        LDAP_RES_SEARCH_REFERENCE = 0x73,
         LDAP_RES_EXTENDED = 0x78,
         LDAP_RES_INTERMEDIATE = 0x79,
     }
