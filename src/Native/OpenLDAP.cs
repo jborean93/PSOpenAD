@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace PSOpenAD.Native
 {
@@ -43,42 +41,56 @@ namespace PSOpenAD.Native
             IntPtr interact);
 
         [DllImport(LIB_LDAP)]
-        public static extern int ldap_abandon_ext(
-            SafeHandle ld,
-            int msgid,
-            IntPtr sctrls,
-            IntPtr cctrls);
-
-        [DllImport(LIB_LDAP)]
-        public static extern int ldap_count_messages(
-            SafeHandle ld,
-            IntPtr result);
+        public static extern void ber_free(
+            IntPtr ber,
+            int freebuf);
 
         [DllImport(LIB_LDAP)]
         public static extern void ldap_controls_free(
             IntPtr ctrls);
 
         [DllImport(LIB_LDAP)]
+        public static extern int ldap_count_values_len(
+            SafeLdapValueArray vals);
+
+        [DllImport(LIB_LDAP)]
         public static extern IntPtr ldap_err2string(
             int error);
 
         [DllImport(LIB_LDAP)]
+        public static extern SafeLdapMemory ldap_first_attribute(
+            SafeLdapHandle ld,
+            IntPtr entry,
+            out SafeBerElement berptr);
+
+        [DllImport(LIB_LDAP)]
+        public static extern IntPtr ldap_first_entry(
+            SafeLdapHandle ld,
+            SafeLdapMessage result);
+
+        [DllImport(LIB_LDAP)]
         public static extern int ldap_get_option(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             LDAPOption option,
             out IntPtr outvalue);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_get_option(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             LDAPOption option,
             out int outvalue);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_get_option(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             LDAPOption option,
             out SafeLdapMemory outvalue);
+
+        [DllImport(LIB_LDAP)]
+        public static extern SafeLdapValueArray ldap_get_values_len(
+            SafeLdapHandle ld,
+            IntPtr entry,
+            string attr);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_initialize(
@@ -98,16 +110,19 @@ namespace PSOpenAD.Native
             IntPtr msg);
 
         [DllImport(LIB_LDAP)]
-        public static extern int ldap_msgtype(
-            SafeHandle msg);
+        public static extern SafeLdapMemory ldap_next_attribute(
+            SafeLdapHandle ld,
+            IntPtr entry,
+            SafeBerElement ber);
 
         [DllImport(LIB_LDAP)]
-        public static extern int ldap_msgid(
-            SafeHandle msg);
+        public static extern IntPtr ldap_next_entry(
+            SafeLdapHandle ldap,
+            IntPtr entry);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_parse_result(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             IntPtr result,
             out int errcodep,
             out SafeLdapMemory matcheddnp,
@@ -117,39 +132,26 @@ namespace PSOpenAD.Native
             int freeid);
 
         [DllImport(LIB_LDAP)]
-        public static extern int ldap_parse_sasl_bind_result(
-            SafeHandle ld,
-            IntPtr result,
-            ref Helpers.berval servercredp,
-            int freeit);
-
-        [DllImport(LIB_LDAP)]
         public static extern int ldap_result(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             int msgid,
-            LDAPMessageAll all,
-            ref Helpers.timeval timeout,
+            LDAPMessageCount all,
+            SafeHandle timeout,
             out SafeLdapMessage result);
 
         [DllImport(LIB_LDAP)]
-        public static extern int ldap_result2error(
-            SafeHandle ld,
-            IntPtr res,
-            int freeit);
-
-        [DllImport(LIB_LDAP)]
         public static extern int ldap_sasl_bind(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             string dn,
             string? mechanism,
-            IntPtr cred,
+            SafeHandle cred,
             IntPtr sctrls,
             IntPtr cctrls,
-            ref int msgidp);
+            out int msgidp);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_sasl_interactive_bind(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             string dn,
             string mechs,
             IntPtr sctrls,
@@ -157,33 +159,35 @@ namespace PSOpenAD.Native
             SASLInteractionFlags flags,
             [MarshalAs(UnmanagedType.FunctionPtr)] LDAP_SASL_INTERACT_PROC interact,
             IntPtr defaults,
-            IntPtr result,
-            out IntPtr rmechp,
+            SafeHandle result,
+            ref IntPtr rmechp,
+            out int msgidp);
+
+        [DllImport(LIB_LDAP)]
+        public static extern int ldap_search_ext(
+            SafeLdapHandle ld,
+            string searchbase,
+            LDAPSearchScope scope,
+            string? filter,
+            SafeHandle attrs,
+            int attrsonly,
+            IntPtr serverctrls,
+            IntPtr clientctrls,
+            SafeHandle timeout,
+            int sizelimit,
             out int msgidp);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_set_option(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             LDAPOption option,
             [In] ref int invalue);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_set_option(
-            SafeHandle ld,
+            SafeLdapHandle ld,
             LDAPOption option,
             IntPtr invalue);
-
-        [DllImport(LIB_LDAP)]
-        public static extern int ldap_simple_bind(
-            SafeHandle ld,
-            string who,
-            string passwd);
-
-        [DllImport(LIB_LDAP)]
-        public static extern int ldap_simple_bind_s(
-            SafeHandle ld,
-            string who,
-            string passwd);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_start_tls_s(
@@ -195,164 +199,76 @@ namespace PSOpenAD.Native
         public static extern int ldap_unbind(
             IntPtr ld);
 
+        [DllImport(LIB_LDAP)]
+        public static extern void ldap_value_free_len(
+            IntPtr vals);
+
+        /// <summary>Get a short description for the error code provided.</summary>
+        /// <param name="error">The error code to convert to a string.</param>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_err2string&amp;apropos=0&amp;sektion=3&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_err2string</see>
         public static string Err2String(int error)
         {
             return Marshal.PtrToStringUTF8(ldap_err2string(error)) ?? "";
         }
 
-        public static SafeLdapHandle Initialize(string uri)
+        /// <summary>Get the attribute names of an LDAP entry.</summary>
+        /// <param name="ldap">The LDAP handle the entry is associated with.</param>
+        /// <param name="entry">The entry pointer to get the attributes of.</param>
+        /// <returns>Yields the attribute names of the entry.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when getting the attribute names.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_first_attribute&amp;sektion=3&amp;apropos=0&amp;manpath=OpenLDAP+2.6-Release">ldap_first_attribute</see>
+        public static IEnumerable<string> GetAttributes(SafeLdapHandle ldap, IntPtr entry)
         {
-            int err = ldap_initialize(out var ldap, uri);
-            if (err != 0)
-                throw new LDAPException(null, err, "ldap_initialize");
-
-            return ldap;
-        }
-
-        public static Task SaslInteractiveBindAsync(SafeLdapHandle ldap, string dn, string mech, SaslInteract prompt,
-            int timeoutMS = 5000, CancellationToken? cancelToken = null)
-        {
-            return Task.Run(() =>
+            using SafeLdapMemory res = ldap_first_attribute(ldap, entry, out var element);
+            if (res.IsInvalid)
             {
-                int res = 0;
-                SafeLdapMessage result = new SafeLdapMessage();
+                int rc = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
+                throw new LDAPException(ldap, rc, "ldap_first_attribute");
+            }
+
+            using (element)
+            {
+                yield return Marshal.PtrToStringUTF8(res.DangerousGetHandle()) ?? "";
 
                 while (true)
                 {
-                    res = ldap_sasl_interactive_bind(ldap, dn, mech, IntPtr.Zero, IntPtr.Zero,
-                        SASLInteractionFlags.LDAP_SASL_QUIET, prompt.SaslInteractProc, IntPtr.Zero,
-                        result.DangerousGetHandle(), out var rmech, out var msgid);
-                    result.Dispose();
-
-                    if (res != (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
+                    using SafeLdapMemory attribute = ldap_next_attribute(ldap, entry, element);
+                    if (attribute.IsInvalid)
                         break;
 
-                    do
-                    {
-                        Helpers.timeval timeout = new Helpers.timeval()
-                        {
-                            tv_sec = (int)Math.Floor((double)timeoutMS / 1000),
-                            tv_usec = timeoutMS % 1000,
-                        };
-                        res = ldap_result(ldap, msgid, LDAPMessageAll.LDAP_MSG_ALL, ref timeout, out result);
-                        if (res == 0)
-                        {
-                            timeoutMS -= 200;
-                        }
-                        else if (res == -1)
-                        {
-                            res = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
-                            throw new LDAPException(ldap, res, "ldap_result");
-                        }
-                        else
-                        {
-                            break;
-                        }
-
-                        if (cancelToken?.IsCancellationRequested == true)
-                            throw new TaskCanceledException();
-                    }
-                    while (timeoutMS > 0);
-
-                    if (res == 0)
-                        throw new TimeoutException();
-
-                    ldap_parse_result(ldap, result.DangerousGetHandle(), out res, out var _1,
-                        out var errMsg, out var _2, out var _3, 0);
-                    if (res != 0 && res != (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
-                    {
-                        string msg = Marshal.PtrToStringUTF8(errMsg.DangerousGetHandle()) ?? "";
-                        throw new LDAPException(ldap, res, "ldap_sasl_interactive_bind", errorMessage: msg);
-                    }
+                    yield return Marshal.PtrToStringUTF8(attribute.DangerousGetHandle()) ?? "";
                 }
-
-                if (res != 0)
-                    throw new LDAPException(ldap, res, "ldap_sasl_interactive_bind");
-            });
+            }
         }
 
-        // FIXME: Set saner timeoutMS value and handle a timeout of -1 (use global default)
-        public static Task SimpleBindAsync(SafeLdapHandle ldap, string who, string password,
-            int timeoutMS = 5000, CancellationToken? cancelToken = null)
+        /// <summary>Get the entry pointers in an LDAP result buffer.</summary>
+        /// <param name="ldap">The LDAP handle the entry is associated with.</param>
+        /// <param name="result">The result set to get the first entry for.</param>
+        /// <returns>Yields the entry pointers of the result buffer.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when getting the entries.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_first_entry&amp;sektion=3&amp;apropos=0&amp;manpath=OpenLDAP+2.6-Release">ldap_first_entry</see>
+        public static IEnumerable<IntPtr> GetEntries(SafeLdapHandle ldap, SafeLdapMessage result)
         {
-            int msgid = 0;
-            int res;
-            using (SafeMemoryBuffer pass = new SafeMemoryBuffer(password))
+            IntPtr entry = ldap_first_entry(ldap, result);
+            if (entry == IntPtr.Zero)
             {
-                Helpers.berval cred = new Helpers.berval()
-                {
-                    bv_len = pass.Length,
-                    bv_val = pass.DangerousGetHandle(),
-                };
-
-                using SafeMemoryBuffer credPtr = new SafeMemoryBuffer(Marshal.SizeOf(cred));
-                Marshal.StructureToPtr(cred, credPtr.DangerousGetHandle(), false);
-                res = ldap_sasl_bind(ldap, who, null, credPtr.DangerousGetHandle(), IntPtr.Zero, IntPtr.Zero,
-                    ref msgid);
+                (int rc, string _, string errMsg) = ParseResult(ldap, result);
+                throw new LDAPException(ldap, rc, "ldap_first_entry", errorMessage: errMsg);
             }
 
-            if (res != 0)
-                throw new LDAPException(ldap, res, "ldap_sasl_bind");
-
-            return Task.Run(() =>
+            while (entry != IntPtr.Zero)
             {
-                SafeLdapMessage result;
-                int res = 0;
-
-                // This is ugly but ldap_abandon_ext doesn't seem to cancel the ldap_result, instead check every
-                // 200 milliseconds that the caller hasn't cancelled the request (pressed ctrl+c) and cancel if so.
-                do
-                {
-                    Helpers.timeval timeout = new Helpers.timeval()
-                    {
-                        tv_sec = (int)Math.Floor((double)timeoutMS / 1000),
-                        tv_usec = timeoutMS % 1000,
-                    };
-                    res = ldap_result(ldap, msgid, LDAPMessageAll.LDAP_MSG_ALL, ref timeout, out result);
-                    if (res == 0)
-                    {
-                        timeoutMS -= 200;
-                    }
-                    else if (res == -1)
-                    {
-                        res = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
-                        throw new LDAPException(ldap, res, "ldap_result");
-                    }
-                    else
-                    {
-                        break;
-                    }
-
-                    if (cancelToken?.IsCancellationRequested == true)
-                        throw new TaskCanceledException();
-                }
-                while (timeoutMS > 0);
-
-                if (res == 0)
-                    throw new TimeoutException();
-
-                ldap_parse_result(ldap, result.DangerousGetHandle(), out var errorCode, out var _1,
-                    out var errMsg, out var _2, out var _3, 0);
-                if (errorCode != 0)
-                {
-                    string msg = Marshal.PtrToStringUTF8(errMsg.DangerousGetHandle()) ?? "";
-                    throw new LDAPException(ldap, errorCode, "ldap_sasl_bind", errorMessage: msg);
-                }
-            });
+                yield return entry;
+                entry = ldap_next_entry(ldap, entry);
+            }
         }
 
-        public static void StartTlsS(SafeLdapHandle ldap)
-        {
-            int res = ldap_start_tls_s(ldap, IntPtr.Zero, IntPtr.Zero);
-            if (res != 0)
-                throw new LDAPException(ldap, res, "ldap_start_tls_ts");
-        }
-
-        public static int CountMessages(SafeLdapHandle ldap, SafeHandle result)
-        {
-            return ldap_count_messages(ldap, result.DangerousGetHandle());
-        }
-
+        /// <summary>Get an integer option value from an LDAP connection or globally.</summary>
+        /// <param name="ldap">The LDAP connection or null for a global option.</param>
+        /// <param name="option">The LDAP option to get.</param>
+        /// <returns>The option value as an integer.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when getting the option.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_set_option&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_get_option</see>
         public static int GetOptionInt(SafeLdapHandle ldap, LDAPOption option)
         {
             int res = ldap_get_option(ldap, option, out int value);
@@ -362,6 +278,12 @@ namespace PSOpenAD.Native
             return value;
         }
 
+        /// <summary>Get a string option value from an LDAP connection or globally.</summary>
+        /// <param name="ldap">The LDAP connection or null for a global option.</param>
+        /// <param name="option">The LDAP option to get.</param>
+        /// <returns>The option value as a string.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when getting the option.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_set_option&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_get_option</see>
         public static string GetOptionString(SafeLdapHandle ldap, LDAPOption option)
         {
             int res = ldap_get_option(ldap, option, out SafeLdapMemory value);
@@ -371,14 +293,20 @@ namespace PSOpenAD.Native
             return Marshal.PtrToStringUTF8(value.DangerousGetHandle()) ?? "";
         }
 
-        public static List<string> GetOptionSaslMechList(SafeLdapHandle ldap)
+        /// <summary>Get the list of available SASL mechs.</summary>
+        /// <param name="ldap">The LDAP connection or null for a global option.</param>
+        /// <returns>The list of available SASL mechanisms.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when getting the option.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_set_option&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_get_option</see>
+        public static List<string> GetOptionSaslMechList(SafeLdapHandle? ldap)
         {
             LDAPOption option = LDAPOption.LDAP_OPT_X_SASL_MECHLIST;
-            int res = ldap_get_option(ldap, option, out IntPtr value);
+            int res = ldap_get_option(ldap ?? new SafeLdapHandle(), option, out IntPtr value);
             if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_get_option({option})");
 
-            List<string> mechs = new List<string>(); ;
+            // The return value for this is special which is why it has it's own function.
+            List<string> mechs = new List<string>();
             while (true)
             {
                 string? mech = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(value));
@@ -392,18 +320,348 @@ namespace PSOpenAD.Native
             return mechs;
         }
 
-        public static void SetOption(SafeLdapHandle ldap, LDAPOption option, int value)
+        /// <summary>Get values for an entry attribute.</summary>
+        /// <param name="ldap">The LDAP handle the entry and attribute are associated with.</param>
+        /// <param name="entry">The entry pointer to get the attribute values of.</param>
+        /// <param name="attr">The name of the attribute to get the values for.</param>
+        /// <returns>Yields the raw byte[] values of the attribute.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when trying to parse the attributes values.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_get_values&amp;apropos=0&amp;sektion=3&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_get_values_len</see>
+        public static IEnumerable<byte[]> GetValues(SafeLdapHandle ldap, IntPtr entry, string attr)
         {
-            int res = ldap_set_option(ldap, option, ref value);
+            using SafeLdapValueArray raw = ldap_get_values_len(ldap, entry, attr);
+            if (raw.IsInvalid)
+            {
+                int rc = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
+                throw new LDAPException(ldap, rc, "ldap_get_values_len");
+            }
+
+            int count = ldap_count_values_len(raw);
+            IntPtr valPtr = raw.DangerousGetHandle();
+            byte[][] values = new byte[count][];
+            for (int i = 0; i < count; i++)
+            {
+                Helpers.berval v = Marshal.PtrToStructure<Helpers.berval>(Marshal.ReadIntPtr(valPtr));
+                valPtr = IntPtr.Add(valPtr, IntPtr.Size);
+
+                byte[] data = new byte[v.bv_len];
+                Marshal.Copy(v.bv_val, data, 0, data.Length);
+                values[i] = data;
+            }
+
+            return values;
+        }
+
+        /// <summary>Initializes an LDAP handle for the URI specified.</summary>
+        /// <remarks>
+        /// This will not start the connection to the endpoint but builds the internal structure that stores the LDAP connection and connection details.
+        /// </remarks>
+        /// <param name="uri">The LDAP URI to initialize the connection on.</param>
+        /// <returns>The handle to the LDAP connection all subsequent operations should be run on.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when trying to initialize the handle.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_initialize&amp;apropos=0&amp;sektion=3&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_initialize</see>
+        public static SafeLdapHandle Initialize(string uri)
+        {
+            int err = ldap_initialize(out var ldap, uri);
+            if (err != 0)
+                throw new LDAPException(null, err, "ldap_initialize");
+
+            return ldap;
+        }
+
+        /// <summary>Parse LDAP result information.</summary>
+        /// <param name="ldap">The LDAP handle the result is associated with.</param>
+        /// <param name="ldap">The result from <C>Result</C> to parse.</param>
+        /// <returns>
+        /// A tuple of 3 values:
+        ///   1 - The error code in the LDAP result.
+        ///   2 - How much of the name in the request was recongnized.
+        ///   3 - Error message from the LDAP result.
+        /// </returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when trying to parse the results.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_parse_result&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_parse_result</see>
+        public static (int, string, string) ParseResult(SafeLdapHandle ldap, SafeLdapMessage result)
+        {
+            int rc = ldap_parse_result(ldap, result.DangerousGetHandle(), out var errorCode, out var matchedDNBuffer,
+                out var errMsgBuffer, out var referralBuffer, out var serverControl, 0);
+            if (rc != 0)
+                throw new LDAPException(ldap, rc, "ldap_parse_result");
+
+            using (matchedDNBuffer)
+            using (errMsgBuffer)
+            using (referralBuffer)
+            using (serverControl)
+            {
+                string matchedDN = Marshal.PtrToStringUTF8(matchedDNBuffer.DangerousGetHandle()) ?? "";
+                string errMsg = Marshal.PtrToStringUTF8(errMsgBuffer.DangerousGetHandle()) ?? "";
+
+                return (errorCode, matchedDN, errMsg);
+            }
+        }
+
+        /// <summary>Wait for the result of an LDAP operation.</summary>
+        /// <param name="ldap">The connected LDAP handle.</param>
+        /// <param name="messageId">Get the result of the specific message operation. 0 will wait for any and -1 will wait for unsolicted responses.</param>
+        /// <param name="waitBehaviour">
+        /// Specifies how many messages to wait for.
+        /// Set <c>LDAP_MSG_ONE</C> to retrieve one message at a time.
+        /// Set <c>LDAP_MSG_ALL</C> to retrieve all messages for the operation.
+        /// Set <c>LDAP_MSG_RECEIVED</C> to retrieve all messages that have been received so far for the operation.
+        /// </param>
+        /// <param name="timeoutMS">
+        /// The timeout in milliseconds to wait for.
+        /// Set to 0 to use the connection timeout default.
+        /// Set to -1 to wait indefinitely.
+        /// </param>
+        /// <returns>The unmanaged memory containing the search results.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when getting the result.</exception>
+        /// <exception cref="TimeoutException">Timed out waiting for a result.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_result&amp;sektion=3&amp;apropos=0&amp;manpath=OpenLDAP+2.6-Release">ldap_result</see>
+        public static SafeLdapMessage Result(SafeLdapHandle ldap, int messageId, LDAPMessageCount waitBehaviour, int timeoutMS = 0)
+        {
+            using SafeMemoryBuffer timeout = TimeoutBuffer(timeoutMS);
+            int rc = ldap_result(ldap, messageId, waitBehaviour, timeout, out var result);
+            if (rc == 0)
+            {
+                throw new TimeoutException();
+            }
+            else if (rc == -1)
+            {
+                rc = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
+                throw new LDAPException(ldap, rc, "ldap_result");
+            }
+
+            result.ResultType = (LDAPResultType)rc;
+            return result;
+        }
+
+        /// <summary>Asynchronously starts a low-level SASL bind operation on the LDAP connection specified.</summary>
+        /// <remarks>
+        /// This is a lower level operation compared to <C>SaslInteractiveBind</C> that is used to exchange the
+        /// credential tokens directory rather than through OpenLDAP calling the SASL mechanism itself. It is also
+        /// used to provide SIMPLE authentication when <paramref name="mechanism"/> is null.
+        /// This is an asynchronous operation and <C>Result</C> should be called to wait for a response and validate
+        /// whether the bind was successful or not.
+        /// The value of <paramref name="dn"/> is dependent on the mechanism used. Typically this is the DN of the
+        /// username but could be another form.
+        /// The value of <paramref name="cred"/> is dependent on the mechanism used. For SIMPLE auth this is the
+        /// password encoded as bytes.
+        /// </remarks>
+        /// <param name="ldap">The LDAP handle to perform the bind on.</param>
+        /// <param name="dn">Who/username to bind with.</param>
+        /// <param name="mechanism">The SASL mechanism used or null for SIMPLE auth.</param>
+        /// <param name="cred">The raw credential to exchange.</param>
+        /// <returns>The message identifier for the bind request.</returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when starting the bind operation.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_sasl_bind&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_sasl_bind</see>
+        public static int SaslBind(SafeLdapHandle ldap, string dn, string? mechanism, byte[] cred)
+        {
+            int credStructLength = Marshal.SizeOf<Helpers.berval>();
+            using SafeMemoryBuffer credBuffer = new SafeMemoryBuffer(credStructLength + cred.Length);
+            Helpers.berval credStruct = new Helpers.berval()
+            {
+                bv_len = cred.Length,
+                bv_val = IntPtr.Add(credBuffer.DangerousGetHandle(), credStructLength),
+            };
+            Marshal.Copy(cred, 0, credStruct.bv_val, cred.Length);
+            Marshal.StructureToPtr(credStruct, credBuffer.DangerousGetHandle(), false);
+
+            int rc = ldap_sasl_bind(ldap, dn, mechanism, credBuffer, IntPtr.Zero, IntPtr.Zero,
+                out var msgid);
+
+            if (rc != 0)
+                throw new LDAPException(ldap, rc, "ldap_sasl_bind");
+
+            return msgid;
+        }
+
+        /// <summary>Asynchronously starts a SASL bind operation on the LDAP connection specified.</summary>
+        /// <remarks>
+        /// Depending on the SASL mechanism used there may be multiple roundtrips needed to complete the bind
+        /// operation. If the return value[0] is true then <C>Result</C> should be called with the message id
+        /// returned by value[1]. The result from <C>Result</C> should then be passed by in to this method as
+        /// <paramref name="result"/>. Repeat this until value[0] is false.
+        /// A lot of the underlying behaviour of this function is defined by the SASL mechanism called. The interaction
+        /// flags and prompt delegate behaviour varies from mechanism to mechanism. For GSSAPI and GSS-SPNEGO the
+        /// prompt is always called and the interaction flags define whether data is printed to the console or not. It
+        /// is recommended to use <C>LDAP_SASL_QUIET</C> to avoid the console output pollution for these mechanisms.
+        /// </remarks>
+        /// <param name="ldap">The LDAP handle to perform the bind on.</param>
+        /// <param name="dn">Not used with SASL and should be an empty string.</param>
+        /// <param name="mech">The SASL mechanism identifiers delimited by spaces.</param>
+        /// <param name="interactionFlags">
+        /// Interaction used to retrieve any necessary SASL authentication parameters.
+        /// Set <c>LDAP_SASL_AUTOMATIC</C> to use defaults if available.
+        /// Set <c>LDAP_SASL_INTERACTIVE</C> to always prompt.
+        /// Set <c>LDAP_SASL_QUIET</C> to never prompt.
+        /// </param>
+        /// <param name="prompt">The callback used by the SASL mechanism when prompting for further information.</param>
+        /// <param name="result">The input result data for SASL to process from a <C>Result</C> or null for the first invocation.</param>
+        /// <param name="rmech">A reference IntPtr that contains the current SASL mech being used. This must be the same value across multiple called.</param>
+        /// <returns>
+        /// A tuple of 2 values:
+        ///   1 - Whether more processing is required with <C>Result</C>.
+        ///   2 - The message identifier to use when processing the result.
+        /// </returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when starting the SASL bind operation.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_sasl_bind&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_sasl_interactive_bind</see>
+        public static (bool, int) SaslInteractiveBind(SafeLdapHandle ldap, string dn, string mech,
+            SASLInteractionFlags interactionFlags, SaslInteract prompt, SafeLdapMessage result, ref IntPtr rmech)
+        {
+            int rc = ldap_sasl_interactive_bind(ldap, dn, mech, IntPtr.Zero, IntPtr.Zero, interactionFlags,
+                prompt.SaslInteractProc, IntPtr.Zero, result, ref rmech, out var msgid);
+            // While the caller may have this in a using block it doesn't hurt to call it more than once.
+            result.Dispose();
+
+            bool moreProcessingRequired = false;
+            if (rc == (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
+                moreProcessingRequired = true;
+            else if (rc != 0)
+                throw new LDAPException(ldap, rc, "ldap_sasl_interactive_bind");
+
+            return (moreProcessingRequired, msgid);
+        }
+
+        /// <summary>Start an asynchrnous search option.</summary>
+        /// <remarks>
+        /// This function runs asynchronously and the returned message identifier is used by <C>Result</C> to wait for
+        /// a result from the server.
+        /// </remarks>
+        /// <param name="ldap">The LDAP connection to perform the search on.</param>
+        /// <param name="searchBase">The DN of the entry at which to start the search.</param>
+        /// <param name="scope">
+        /// The scope of the search as one of the following values.
+        /// Set <c>LDAP_SCOPE_BASE</C> to search against the entry specified by the search base.
+        /// Set <c>LDAP_SCOPE_ONELEVEL</C> to search entries that are immediate subordinates of the search base.
+        /// Set <c>LDAP_SCOPE_SUBTREE</C> to search entries that are subordinates and their subordinates of the search base.
+        /// Set <c>LDAP_SCOPE_SUBORDINATE</C> like <C>LDAP_SCOPE_SUBTREE</C> but it does not include the entry of search base itself.
+        /// </param>
+        /// <param name="filter">The LDAP search filter to apply or null to send <C>(objectClass=*)</C>.</param>
+        /// <param name="attributes">
+        /// A list of attributes to retrieve for each matching entry.
+        /// If null or <C>*</C> is specified then all user attributes are returned.
+        /// If <C>+</C> is specified then all operational attributes are returned.
+        /// If <C>1.1</C> is specified then no attributes then no attributes are returned.
+        /// </param>
+        /// <param name="attributesOnly">Request only the attribute names and not their values.</param>
+        /// <param name="timeoutMS">
+        /// The operational timeout used by the server when gathering the query data.
+        /// A value of 0 will use the server defined operation timeout value.
+        /// </param>
+        /// <param name="sizeLimit">The number of entries to return with 0 indicating no limits.</param>
+        /// <returns>The search message id to be used with <C>Result</C></returns>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when getting the result.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_search_ext&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_search_ext</see>
+        public static int SearchExt(SafeLdapHandle ldap, string searchBase, LDAPSearchScope scope, string? filter,
+            string[]? attributes, bool attributesOnly, int timeoutMS = 0, int sizeLimit = 0)
+        {
+            SafeMemoryBuffer attributesBuffer;
+            int attributesLength = IntPtr.Size; // Include null pointer at the end of the pointer array
+            List<byte[]> attributeBytes = new List<byte[]>();
+            if (attributes == null)
+            {
+                attributesBuffer = new SafeMemoryBuffer();
+            }
+            else
+            {
+                foreach (string attr in attributes)
+                {
+                    byte[] attrData = Encoding.UTF8.GetBytes(attr + '\0');
+                    attributesLength += attrData.Length;
+                    attributeBytes.Add(attrData);
+                }
+
+                attributesBuffer = new SafeMemoryBuffer((IntPtr.Size * attributeBytes.Count) + attributesLength);
+            }
+
+            using (attributesBuffer)
+            {
+                if (attributeBytes.Count > 0)
+                {
+                    IntPtr pointerPtr = attributesBuffer.DangerousGetHandle();
+                    IntPtr valuePtr = IntPtr.Add(pointerPtr, (IntPtr.Size * attributeBytes.Count) + IntPtr.Size);
+                    foreach (byte[] attr in attributeBytes)
+                    {
+                        Marshal.WriteIntPtr(pointerPtr, valuePtr);
+                        Marshal.Copy(attr, 0, valuePtr, attr.Length);
+                        pointerPtr = IntPtr.Add(pointerPtr, IntPtr.Size);
+                        valuePtr = IntPtr.Add(valuePtr, attr.Length);
+                    }
+                    Marshal.WriteIntPtr(pointerPtr, IntPtr.Zero);
+                }
+
+                using SafeMemoryBuffer timeout = TimeoutBuffer(timeoutMS);
+                int rc = ldap_search_ext(ldap, searchBase, scope, filter, attributesBuffer, attributesOnly ? 1 : 0,
+                    IntPtr.Zero, IntPtr.Zero, timeout, sizeLimit, out var msgid);
+                if (rc != 0)
+                    throw new LDAPException(ldap, rc, "ldap_search_ext");
+
+                return msgid;
+            }
+        }
+
+        /// <summary>Sets an integer based LDAP option either globally or on a connection.</summary>
+        /// <param name="ldap">The LDAP connection or null to set globally.</param>
+        /// <param name="option">The LDAP option to set.</param>
+        /// <param name="value">The option value as an integer.</param>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when setting the option.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_set_option&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_set_option</see>
+        public static void SetOption(SafeLdapHandle? ldap, LDAPOption option, int value)
+        {
+            int res = ldap_set_option(ldap ?? new SafeLdapHandle(), option, ref value);
             if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_set_option({option})");
         }
 
-        public static void SetOption(SafeLdapHandle ldap, LDAPOption option, IntPtr value)
+        /// <summary>Set a raw pointer based LDAP option either globally or on a connection.</summary>
+        /// <param name="ldap">The LDAP connection or null to set globally.</param>
+        /// <param name="option">The LDAP option to set.</param>
+        /// <param name="value">The option value as an integer.</param>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when setting the option.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_set_option&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_set_option</see>
+        public static void SetOption(SafeLdapHandle? ldap, LDAPOption option, IntPtr value)
         {
-            int res = ldap_set_option(ldap, option, value);
+            int res = ldap_set_option(ldap ?? new SafeLdapHandle(), option, value);
             if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_set_option({option})");
+        }
+
+        /// <summary>Initiate a StartTLS bind on the LDAP connection.</summary>
+        /// <param name="ldap">The LDAP handle to perform the StartTLS operation on.</param>
+        /// <exception cref="LDAPException">A general LDAP failure occurred when performing the StartTLS operation.</exception>
+        /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_start_tls_s&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_start_tls_s</see>
+        public static void StartTlsS(SafeLdapHandle ldap)
+        {
+            int res = ldap_start_tls_s(ldap, IntPtr.Zero, IntPtr.Zero);
+            if (res != 0)
+                throw new LDAPException(ldap, res, "ldap_start_tls_ts");
+        }
+
+        private static SafeMemoryBuffer TimeoutBuffer(int timeoutMS)
+        {
+            if (timeoutMS == 0)
+                return new SafeMemoryBuffer();
+            else if (timeoutMS == -1)
+                timeoutMS = -1000;
+
+            Helpers.timeval timeout = new Helpers.timeval()
+            {
+                tv_sec = (int)Math.Floor((double)timeoutMS / 1000),
+                tv_usec = timeoutMS % 1000,
+            };
+
+            SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.timeval>());
+            try
+            {
+                Marshal.StructureToPtr(timeout, buffer.DangerousGetHandle(), false);
+            }
+            catch
+            {
+                buffer.Dispose();
+                throw;
+            }
+
+            return buffer;
         }
     }
 
@@ -439,6 +697,19 @@ namespace PSOpenAD.Native
         }
     }
 
+    internal class SafeBerElement : SafeHandle
+    {
+        internal SafeBerElement() : base(IntPtr.Zero, true) { }
+
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
+        protected override bool ReleaseHandle()
+        {
+            OpenLDAP.ber_free(handle, 0);
+            return true;
+        }
+    }
+
     internal class SafeLdapHandle : SafeHandle
     {
         internal SafeLdapHandle() : base(IntPtr.Zero, true) { }
@@ -453,6 +724,8 @@ namespace PSOpenAD.Native
 
     internal class SafeLdapMessage : SafeHandle
     {
+        public LDAPResultType ResultType { get; set; } = LDAPResultType.LDAP_RES_UNKNOWN;
+
         internal SafeLdapMessage() : base(IntPtr.Zero, true) { }
 
         public override bool IsInvalid => handle == IntPtr.Zero;
@@ -502,6 +775,19 @@ namespace PSOpenAD.Native
         }
     }
 
+    internal class SafeLdapValueArray : SafeHandle
+    {
+        internal SafeLdapValueArray() : base(IntPtr.Zero, true) { }
+
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
+        protected override bool ReleaseHandle()
+        {
+            OpenLDAP.ldap_value_free_len(handle);
+            return true;
+        }
+    }
+
     internal class SafeMemoryBuffer : SafeHandle
     {
         public int Length { get; } = 0;
@@ -539,6 +825,7 @@ namespace PSOpenAD.Native
 
     internal enum LDAPResultType
     {
+        LDAP_RES_UNKNOWN = 0x00,
         LDAP_RES_BIND = 0x61,
         LDAP_RES_SEARCH_ENTRY = 0x64,
         LDAP_RES_SEARCH_RESULT = 0x65,
@@ -557,7 +844,7 @@ namespace PSOpenAD.Native
         LDAP_SASL_BIND_IN_PROGRESS = 14,
     }
 
-    internal enum LDAPMessageAll
+    internal enum LDAPMessageCount
     {
         LDAP_MSG_ONE = 0x00,
         LDAP_MSG_ALL = 0x01,
@@ -647,6 +934,14 @@ namespace PSOpenAD.Native
         LDAP_OPT_X_KEEPALIVE_PROBES = 0x6301,
         LDAP_OPT_X_KEEPALIVE_INTERVAL = 0x6302,
         LDAP_OPT_PRIVATE_EXTENSION_BASE = 0x7000,
+    }
+
+    public enum LDAPSearchScope
+    {
+        LDAP_SCOPE_BASE = 0,
+        LDAP_SCOPE_ONELEVEL = 1,
+        LDAP_SCOPE_SUBTREE = 2,
+        LDAP_SCOPE_SUBORDINATE = 3,
     }
 
     public enum LDAPTlsSettings

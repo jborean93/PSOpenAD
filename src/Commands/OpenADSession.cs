@@ -2,8 +2,8 @@ using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
 using System.Management.Automation;
+using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace PSOpenAD.Commands
 {
@@ -151,11 +151,7 @@ namespace PSOpenAD.Commands
             else if (Authentication == AuthenticationMethod.Simple)
             {
                 WriteVerbose("Connecting to LDAP host with SIMPLE auth");
-                using (CurrentCancelToken = new CancellationTokenSource())
-                {
-                    Task bindTask = OpenLDAP.SimpleBindAsync(ldap, username, password, cancelToken: CurrentCancelToken.Token);
-                    bindTask.GetAwaiter().GetResult();
-                }
+                SimpleBind(ldap, username, password);
             }
             else
             {
@@ -213,7 +209,6 @@ namespace PSOpenAD.Commands
                 }
 
                 using (cred)
-                using (CurrentCancelToken = new CancellationTokenSource())
                 {
                     // Newer versions of cyrus-sasl will do this for us but we can still manually do this for
                     // compatibility with older versions. This tells the GSSAPI context to really turn off integration
@@ -226,34 +221,125 @@ namespace PSOpenAD.Commands
                     }
 
                     GSSAPIPrompter prompter = new GSSAPIPrompter(ldap, cred.Creds);
-                    Task bindTask = OpenLDAP.SaslInteractiveBindAsync(ldap, "", selectedAuth.NativeId, prompter,
-                        cancelToken: CurrentCancelToken.Token);
-                    bindTask.GetAwaiter().GetResult();
-
-                    int ssf;
-                    try
-                    {
-                        ssf = OpenLDAP.GetOptionInt(ldap, LDAPOption.LDAP_OPT_X_SASL_SSF);
-                    }
-                    catch (LDAPException)
-                    {
-                        // If the SSF was 0 then the context isn't saved in OpenLDAP and this fails. Mask over this
-                        // weirdness.
-                        ssf = 0;
-                    }
-                    WriteVerbose($"SASL SSF set to {ssf}");
-                    isSigned = ssf > 0;
-                    isEncrypted = ssf > 1;
+                    SaslInteractiveBind(ldap, selectedAuth.NativeId, prompter);
                 }
+
+                int ssf;
+                try
+                {
+                    ssf = OpenLDAP.GetOptionInt(ldap, LDAPOption.LDAP_OPT_X_SASL_SSF);
+                }
+                catch (LDAPException)
+                {
+                    // If the SSF was 0 then the context isn't saved in OpenLDAP and this fails. Mask over this
+                    // weirdness.
+                    ssf = 0;
+                }
+                WriteVerbose($"SASL SSF set to {ssf}");
+                isSigned = ssf > 0;
+                isEncrypted = ssf > 1;
             }
 
+            // Attempt to get the default naming context.
+            string? defaultNamingContext = null;
+            int msgid = OpenLDAP.SearchExt(ldap, "", LDAPSearchScope.LDAP_SCOPE_BASE, null,
+                new string[] { "defaultNamingContext" }, false);
+            using (var res = OpenLDAP.Result(ldap, msgid, LDAPMessageCount.LDAP_MSG_ALL))
+            {
+                foreach (IntPtr entry in OpenLDAP.GetEntries(ldap, res))
+                {
+                    foreach (string attribute in OpenLDAP.GetAttributes(ldap, entry))
+                    {
+                        foreach (byte[] value in OpenLDAP.GetValues(ldap, entry, attribute))
+                        {
+                            defaultNamingContext = Encoding.UTF8.GetString(value);
+                            goto ContextFound;
+                        }
+                    }
+                }
+            }
+            ContextFound:;
+
             WriteObject(new OpenADSession(ldap, Uri, Authentication, transportIsTLS || isSigned,
-                transportIsTLS || isEncrypted));
+                transportIsTLS || isEncrypted, defaultNamingContext ?? ""));
         }
 
         protected override void StopProcessing()
         {
             CurrentCancelToken?.Cancel();
+        }
+
+        private void SaslInteractiveBind(SafeLdapHandle ldap, string mech, SaslInteract prompt,
+            int timeoutMS = 5000)
+        {
+            using (CurrentCancelToken = new CancellationTokenSource())
+            {
+                IntPtr rmech = IntPtr.Zero;
+                SafeLdapMessage result = new SafeLdapMessage();
+
+                while (true)
+                {
+                    (bool more, int msgid) = OpenLDAP.SaslInteractiveBind(ldap, "", mech,
+                        SASLInteractionFlags.LDAP_SASL_QUIET, prompt, result, ref rmech);
+                    if (!more)
+                        break;
+
+                    while (true)
+                    {
+                        try
+                        {
+                            result = OpenLDAP.Result(ldap, msgid, LDAPMessageCount.LDAP_MSG_ALL, timeoutMS);
+                        }
+                        catch (TimeoutException)
+                        {
+                            timeoutMS -= 200;
+                            if (timeoutMS <= 0 || CurrentCancelToken.IsCancellationRequested)
+                                throw;
+
+                            continue;
+                        }
+
+                        (int rc, string _, string errMsg) = OpenLDAP.ParseResult(ldap, result);
+                        if (rc != 0 && rc != (int)LDAPResultCode.LDAP_SASL_BIND_IN_PROGRESS)
+                            throw new LDAPException(ldap, rc, "ldap_sasl_interactive_bind", errorMessage: errMsg);
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        private void SimpleBind(SafeLdapHandle ldap, string who, string password, int timeoutMS = 5000)
+        {
+            using (CurrentCancelToken = new CancellationTokenSource())
+            {
+                int msgid = OpenLDAP.SaslBind(ldap, who, null, Encoding.UTF8.GetBytes(password));
+
+                while (true)
+                {
+                    SafeLdapMessage result;
+                    try
+                    {
+                        result = OpenLDAP.Result(ldap, msgid, LDAPMessageCount.LDAP_MSG_ALL, timeoutMS);
+                    }
+                    catch (TimeoutException)
+                    {
+                        timeoutMS -= 200;
+                        if (timeoutMS <= 0 || CurrentCancelToken.IsCancellationRequested)
+                            throw;
+
+                        continue;
+                    }
+
+                    using (result)
+                    {
+                        (int rc, string _, string errMsg) = OpenLDAP.ParseResult(ldap, result);
+                        if (rc != 0)
+                            throw new LDAPException(ldap, rc, "ldap_sasl_bind", errorMessage: errMsg);
+                    }
+                    break;
+                }
+            }
         }
     }
 

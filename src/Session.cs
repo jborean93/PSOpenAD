@@ -13,17 +13,21 @@ namespace PSOpenAD
 
         public bool IsEncrypted { get; }
 
+        public string DefaultNamingContext { get; internal set; }
+
         public bool IsClosed { get; internal set; } = false;
 
         internal SafeLdapHandle Handle { get; }
 
-        internal OpenADSession(SafeLdapHandle ldap, Uri uri, AuthenticationMethod auth, bool isSigned, bool isEncrypted)
+        internal OpenADSession(SafeLdapHandle ldap, Uri uri, AuthenticationMethod auth, bool isSigned, bool isEncrypted,
+            string defaultNamingContext)
         {
             Handle = ldap;
             Uri = uri;
             Authentication = auth;
             IsSigned = isSigned;
             IsEncrypted = isEncrypted;
+            DefaultNamingContext = defaultNamingContext;
         }
     }
 }
