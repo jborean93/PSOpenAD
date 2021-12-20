@@ -47,6 +47,7 @@ namespace PSOpenAD.Commands
         public OpenADSession Session { get; set; } = null!;
 
         [Parameter()]
+        [Alias("Properties")]
         [ValidateNotNullOrEmpty]
         public string[]? Property { get; set; }
 
@@ -79,14 +80,21 @@ namespace PSOpenAD.Commands
                 }
             }
 
-            int msgid = OpenLDAP.SearchExt(Session.Handle, searchBase, ldapScope, LDAPFilter, Property, false);
+            HashSet<string> requestedProperties = OpenADObject.DEFAULT_PROPERTIES.ToHashSet<string>();
+            foreach (string prop in Property ?? Array.Empty<string>())
+                requestedProperties.Add(prop);
+
+            int msgid = OpenLDAP.SearchExt(Session.Handle, searchBase, ldapScope, LDAPFilter,
+                requestedProperties.ToArray(), false);
             SafeLdapMessage res = OpenLDAP.Result(Session.Handle, msgid, LDAPMessageCount.LDAP_MSG_ALL);
             foreach (IntPtr entry in OpenLDAP.GetEntries(Session.Handle, res))
             {
                 Dictionary<string, object> props = new Dictionary<string, object>();
                 foreach (string attribute in OpenLDAP.GetAttributes(Session.Handle, entry))
                 {
-                    AttributeTypes? attrInfo = Session.AttributeTypes.GetValueOrDefault(attribute, null);
+                    AttributeTypes? attrInfo = null;
+                    if (Session.AttributeTypes.ContainsKey(attribute))
+                        attrInfo = Session.AttributeTypes[attribute];
                     object[] values = OpenLDAP.GetValues(Session.Handle, entry, attribute).Select(
                         v => ParseEntryValue(attrInfo, v)).ToArray();
 
@@ -98,13 +106,12 @@ namespace PSOpenAD.Commands
                 // This adds a script property on the main object to the actual property value as a nice shorthand.
                 // Should this continue to happen, should there be a mapping of known raw types to a structured value
                 // that takes precedence as well?
-                string[] filterList = new string[] { "distinguishedName", "name", "objectClass", "objectGUID" };
-                foreach (string key in props.Keys.Where(v => !filterList.Contains(v)).OrderBy(v => v))
-                {
-                    string safeKey = CodeGeneration.EscapeSingleQuotedStringContent(key);
-                    PSObject.AsPSObject(adObj).Properties.Add(new PSScriptProperty(key,
-                        ScriptBlock.Create($"$this.Properties['{safeKey}']")));
-                }
+                PSObject adPSObj = PSObject.AsPSObject(adObj);
+                props.Keys
+                    .Where(v => !OpenADObject.DEFAULT_PROPERTIES.Contains(v))
+                    .OrderBy(v => v)
+                    .ToList()
+                    .ForEach(v => adPSObj.Properties.Add(CreatePropertyAlias(v, props[v])));
 
                 WriteObject(adObj);
             }
@@ -140,5 +147,37 @@ namespace PSOpenAD.Commands
         }
 
         private static string ParseStringValue(byte[] value) => Encoding.UTF8.GetString(value);
+
+        private static PSPropertyInfo CreatePropertyAlias(string attribute, object value)
+        {
+            switch (attribute.ToLowerInvariant())
+            {
+                case "accountexpires":
+                case "badpasswordtime":
+                case "lastlogoff":
+                case "lastlogon":
+                case "lastlogontimestamp":
+                case "pwdlastset":
+                    Int64 raw = (Int64)value;
+                    if (raw == Int64.MaxValue)
+                        return new PSNoteProperty(attribute, null);
+                    else
+                        return new PSNoteProperty(attribute, DateTime.FromFileTimeUtc(raw));
+
+                case "objectsid":
+                    return new PSNoteProperty(attribute, new SecurityIdentifier((byte[])value));
+
+                case "samaccounttype":
+                    return new PSNoteProperty(attribute, (SAMAccountType)value);
+
+
+                case "useraccountcontrol":
+                    return new PSNoteProperty(attribute, (UserAccountControl)(uint)(int)value);
+
+                default:
+                    string safeKey = CodeGeneration.EscapeSingleQuotedStringContent(attribute);
+                    return new PSScriptProperty(attribute, ScriptBlock.Create($"$this.Properties['{safeKey}']"));
+            }
+        }
     }
 }
