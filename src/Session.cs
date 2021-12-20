@@ -1,5 +1,6 @@
 using PSOpenAD.Native;
 using System;
+using System.Collections.Generic;
 
 namespace PSOpenAD
 {
@@ -18,6 +19,8 @@ namespace PSOpenAD
         public bool IsClosed { get; internal set; } = false;
 
         internal SafeLdapHandle Handle { get; }
+
+        internal Dictionary<string, AttributeTypes> AttributeTypes { get; } = new Dictionary<string, AttributeTypes>();
 
         internal OpenADSession(SafeLdapHandle ldap, Uri uri, AuthenticationMethod auth, bool isSigned, bool isEncrypted,
             string defaultNamingContext)

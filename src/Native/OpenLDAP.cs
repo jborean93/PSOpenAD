@@ -223,7 +223,10 @@ namespace PSOpenAD.Native
             if (res.IsInvalid)
             {
                 int rc = GetOptionInt(ldap, LDAPOption.LDAP_OPT_RESULT_CODE);
-                throw new LDAPException(ldap, rc, "ldap_first_attribute");
+                if (rc != 0)
+                    throw new LDAPException(ldap, rc, "ldap_first_attribute");
+
+                yield break;
             }
 
             using (element)
@@ -253,7 +256,10 @@ namespace PSOpenAD.Native
             if (entry == IntPtr.Zero)
             {
                 (int rc, string _, string errMsg) = ParseResult(ldap, result);
-                throw new LDAPException(ldap, rc, "ldap_first_entry", errorMessage: errMsg);
+                if (rc != 0)
+                    throw new LDAPException(ldap, rc, "ldap_first_entry", errorMessage: errMsg);
+
+                yield break;
             }
 
             while (entry != IntPtr.Zero)

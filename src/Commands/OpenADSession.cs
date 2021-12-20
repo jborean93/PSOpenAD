@@ -1,8 +1,10 @@
 using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace PSOpenAD.Commands
@@ -241,32 +243,86 @@ namespace PSOpenAD.Commands
             }
 
             // Attempt to get the default naming context.
-            string? defaultNamingContext = null;
-            int msgid = OpenLDAP.SearchExt(ldap, "", LDAPSearchScope.LDAP_SCOPE_BASE, null,
-                new string[] { "defaultNamingContext" }, false);
+            Dictionary<string, string[]> rootInfo = LdapQuery(ldap, "", LDAPSearchScope.LDAP_SCOPE_BASE, null,
+                new string[] { "defaultNamingContext", "subschemaSubentry" });
+            string defaultNamingContext = rootInfo["defaultNamingContext"][0];
+            string subschemaSubentry = rootInfo["subschemaSubentry"][0];
+
+            // Attempt to get the schema info of the host so the code can parse the raw LDAP attribute values into the
+            // required PowerShell type.
+            // These attributes are from the below but so far the code only uses the uncommented one.
+            // https://ldapwiki.com/wiki/LDAP%20Query%20For%20Schema
+            string[] schemaAttributes = new string[]
+            {
+                "attributeTypes",
+                //"dITStructureRules",
+                //"objectClasses",
+                //"nameForms",
+                //"dITContentRules",
+                //"matchingRules",
+                //"ldapSyntaxes",
+                //"matchingRuleUse",
+            };
+            Dictionary<string, string[]> schemaInfo = LdapQuery(ldap, subschemaSubentry,
+                LDAPSearchScope.LDAP_SCOPE_BASE, null, schemaAttributes);
+
+            // foreach (string objectClass in schemaInfo["objectClasses"])
+            // {
+            //     ObjectClassDefinition def = new ObjectClassDefinition(objectClass);
+            // }
+
+            OpenADSession session = new OpenADSession(ldap, Uri, Authentication, transportIsTLS || isSigned,
+                transportIsTLS || isEncrypted, defaultNamingContext ?? "");
+
+            foreach (string attributeTypes in schemaInfo["attributeTypes"])
+            {
+                // In testing 2 attributes (respsTo, and repsFrom) had the string value here
+                if (attributeTypes.Contains("SYNTAX 'OctetString'"))
+                    attributeTypes.Replace("SYNTAX 'OctetString'", "SYNTAX '1.3.6.1.4.1.1466.115.121.1.40");
+
+                // Neither Syntax or Name should be undefined but they are technically optional in the spec. Write a
+                // debug entry to help with future debugging if this becomes more of an issue.
+                AttributeTypes attrTypes = new AttributeTypes(attributeTypes);
+                if (String.IsNullOrEmpty(attrTypes.Syntax))
+                {
+                    WriteDebug($"Failed to parse SYNTAX: '{attributeTypes}'");
+                    continue;
+                }
+                if (String.IsNullOrEmpty(attrTypes.Name))
+                {
+                    WriteDebug($"Failed to parse NAME: '{attributeTypes}'");
+                    continue;
+                }
+
+                session.AttributeTypes[attrTypes.Name] = attrTypes;
+            }
+
+            WriteObject(session);
+        }
+
+        protected override void StopProcessing()
+        {
+            CurrentCancelToken?.Cancel();
+        }
+
+        private Dictionary<string, string[]> LdapQuery(SafeLdapHandle ldap, string searchBase, LDAPSearchScope scope,
+            string? filter, string[]? attributes)
+        {
+            int msgid = OpenLDAP.SearchExt(ldap, searchBase, scope, filter, attributes, false);
+            Dictionary<string, string[]> result = new Dictionary<string, string[]>();
             using (var res = OpenLDAP.Result(ldap, msgid, LDAPMessageCount.LDAP_MSG_ALL))
             {
                 foreach (IntPtr entry in OpenLDAP.GetEntries(ldap, res))
                 {
                     foreach (string attribute in OpenLDAP.GetAttributes(ldap, entry))
                     {
-                        foreach (byte[] value in OpenLDAP.GetValues(ldap, entry, attribute))
-                        {
-                            defaultNamingContext = Encoding.UTF8.GetString(value);
-                            goto ContextFound;
-                        }
+                        result[attribute] = OpenLDAP.GetValues(ldap, entry, attribute).Select(
+                            v => Encoding.UTF8.GetString(v)).ToArray();
                     }
                 }
             }
-            ContextFound:;
 
-            WriteObject(new OpenADSession(ldap, Uri, Authentication, transportIsTLS || isSigned,
-                transportIsTLS || isEncrypted, defaultNamingContext ?? ""));
-        }
-
-        protected override void StopProcessing()
-        {
-            CurrentCancelToken?.Cancel();
+            return result;
         }
 
         private void SaslInteractiveBind(SafeLdapHandle ldap, string mech, SaslInteract prompt,
