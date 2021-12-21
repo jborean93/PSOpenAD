@@ -1,27 +1,12 @@
 using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Management.Automation;
-using System.Management.Automation.Language;
-using System.Text;
 
 namespace PSOpenAD.Commands
 {
-    public enum SearchScope
-    {
-        Base,
-        OneLevel,
-        Subtree,
-    }
-
-    [Cmdlet(
-        VerbsCommon.Get, "OpenADObject",
-        DefaultParameterSetName = "Identity"
-    )]
-    [OutputType(typeof(OpenADObject))]
-    public class GetOpenADObject : PSCmdlet
+    public abstract class GetOpenADOperation : PSCmdlet
     {
         [Parameter(
             Mandatory = true,
@@ -61,6 +46,12 @@ namespace PSOpenAD.Commands
         [Parameter()]
         public SwitchParameter IncludeDeletedObjects { get; set; }
 
+        internal abstract (string, bool)[] DefaultProperties { get; }
+
+        internal abstract OpenADObject CreateADObject(Dictionary<string, object?> attributes);
+
+        internal abstract string ParseIdentityToFilter(string identity);
+
         protected override void ProcessRecord()
         {
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
@@ -76,11 +67,11 @@ namespace PSOpenAD.Commands
                 }
                 else
                 {
-                    LDAPFilter = $"(distinguishedName={Identity})";
+                    LDAPFilter = ParseIdentityToFilter(Identity);
                 }
             }
 
-            HashSet<string> requestedProperties = OpenADObject.DEFAULT_PROPERTIES.ToHashSet<string>();
+            HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet();
             foreach (string prop in Property ?? Array.Empty<string>())
                 requestedProperties.Add(prop);
 
@@ -89,95 +80,84 @@ namespace PSOpenAD.Commands
             SafeLdapMessage res = OpenLDAP.Result(Session.Handle, msgid, LDAPMessageCount.LDAP_MSG_ALL);
             foreach (IntPtr entry in OpenLDAP.GetEntries(Session.Handle, res))
             {
-                Dictionary<string, object> props = new Dictionary<string, object>();
+                Dictionary<string, object?> props = new Dictionary<string, object?>();
                 foreach (string attribute in OpenLDAP.GetAttributes(Session.Handle, entry))
                 {
-                    AttributeTypes? attrInfo = null;
-                    if (Session.AttributeTypes.ContainsKey(attribute))
-                        attrInfo = Session.AttributeTypes[attribute];
-                    object[] values = OpenLDAP.GetValues(Session.Handle, entry, attribute).Select(
-                        v => ParseEntryValue(attrInfo, v)).ToArray();
-
-                    props[attribute] = attrInfo?.SingleValue == true ? values[0] : values;
+                    byte[][] rawValues = OpenLDAP.GetValues(Session.Handle, entry, attribute).ToArray();
+                    props[attribute] = Session.AttributeTransformer.Transform(attribute, rawValues);
                 }
 
-                OpenADObject adObj = new OpenADObject(props);
+                OpenADObject adObj = CreateADObject(props);
 
                 // This adds a script property on the main object to the actual property value as a nice shorthand.
                 // Should this continue to happen, should there be a mapping of known raw types to a structured value
                 // that takes precedence as well?
                 PSObject adPSObj = PSObject.AsPSObject(adObj);
                 props.Keys
-                    .Where(v => !OpenADObject.DEFAULT_PROPERTIES.Contains(v))
+                    .Where(v => !DefaultProperties.Contains((v, true)))
                     .OrderBy(v => v)
                     .ToList()
-                    .ForEach(v => adPSObj.Properties.Add(CreatePropertyAlias(v, props[v])));
+                    .ForEach(v => adPSObj.Properties.Add(new PSNoteProperty(v, props[v])));
 
                 WriteObject(adObj);
             }
         }
+    }
 
-        private object ParseEntryValue(AttributeTypes? attrInfo, byte[] value) => attrInfo?.Syntax switch
-        {
-            "1.2.840.113556.1.4.903" => throw new NotImplementedException("DNWithOctetString"),
-            "1.2.840.113556.1.4.904" => throw new NotImplementedException("DNWithString"),
-            "1.2.840.113556.1.4.905" => throw new NotImplementedException("Telex"),
-            "1.2.840.113556.1.4.906" => Int64.Parse(ParseStringValue(value)), // INTEGER8
-            "1.2.840.113556.1.4.907" => throw new NotImplementedException("ObjectSecurityDescriptor"),
-            "1.3.6.1.4.1.1466.115.121.1.7" => ParseStringValue(value) == "TRUE", // Boolean
-            "1.3.6.1.4.1.1466.115.121.1.12" => ParseStringValue(value), // DN
-            "1.3.6.1.4.1.1466.115.121.1.15" => ParseStringValue(value), // DirectoryString
-            "1.3.6.1.4.1.1466.115.121.1.24" => ParseDateTimeValue(value), // GeneralizedTime
-            "1.3.6.1.4.1.1466.115.121.1.26" => throw new NotImplementedException("IA5String"),
-            "1.3.6.1.4.1.1466.115.121.1.27" => Int32.Parse(ParseStringValue(value)), // INTEGER
-            "1.3.6.1.4.1.1466.115.121.1.36" => throw new NotImplementedException("NumericString"),
-            "1.3.6.1.4.1.1466.115.121.1.38" => ParseStringValue(value), // OID
-            "1.3.6.1.4.1.1466.115.121.1.40" => value, // OctetString
-            "1.3.6.1.4.1.1466.115.121.1.43" => throw new NotImplementedException("PresentationAddress"),
-            "1.3.6.1.4.1.1466.115.121.1.44" => throw new NotImplementedException("PrintableString"),
-            "1.3.6.1.4.1.1466.115.121.1.53" => throw new NotImplementedException("UTCTime"),
-            _ => ParseStringValue(value),
-        };
+    [Cmdlet(
+        VerbsCommon.Get, "OpenADObject",
+        DefaultParameterSetName = "Identity"
+    )]
+    [OutputType(typeof(OpenADObject))]
+    public class GetOpenADObject : GetOpenADOperation
+    {
+        internal override (string, bool)[] DefaultProperties => OpenADObject.DEFAULT_PROPERTIES;
 
-        private static DateTime ParseDateTimeValue(byte[] value)
-        {
-            // Needs to be expanded to support https://ldapwiki.com/wiki/GeneralizedTime
-            string rawDT = ParseStringValue(value);
-            return DateTime.ParseExact(rawDT, "yyyyMMddHHmmss.fK", CultureInfo.InvariantCulture);
-        }
+        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADObject(attributes);
 
-        private static string ParseStringValue(byte[] value) => Encoding.UTF8.GetString(value);
-
-        private static PSPropertyInfo CreatePropertyAlias(string attribute, object value)
-        {
-            switch (attribute.ToLowerInvariant())
-            {
-                case "accountexpires":
-                case "badpasswordtime":
-                case "lastlogoff":
-                case "lastlogon":
-                case "lastlogontimestamp":
-                case "pwdlastset":
-                    Int64 raw = (Int64)value;
-                    if (raw == Int64.MaxValue)
-                        return new PSNoteProperty(attribute, null);
-                    else
-                        return new PSNoteProperty(attribute, DateTime.FromFileTimeUtc(raw));
-
-                case "objectsid":
-                    return new PSNoteProperty(attribute, new SecurityIdentifier((byte[])value));
-
-                case "samaccounttype":
-                    return new PSNoteProperty(attribute, (SAMAccountType)value);
+        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
+    }
 
 
-                case "useraccountcontrol":
-                    return new PSNoteProperty(attribute, (UserAccountControl)(uint)(int)value);
+    [Cmdlet(
+        VerbsCommon.Get, "OpenADComputer",
+        DefaultParameterSetName = "Identity"
+    )]
+    [OutputType(typeof(OpenADComputer))]
+    public class GetOpenADComputer : GetOpenADOperation
+    {
+        internal override (string, bool)[] DefaultProperties => OpenADComputer.DEFAULT_PROPERTIES;
 
-                default:
-                    string safeKey = CodeGeneration.EscapeSingleQuotedStringContent(attribute);
-                    return new PSScriptProperty(attribute, ScriptBlock.Create($"$this.Properties['{safeKey}']"));
-            }
-        }
+        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADComputer(attributes);
+
+        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
+    }
+
+    [Cmdlet(
+        VerbsCommon.Get, "OpenADUser",
+        DefaultParameterSetName = "Identity"
+    )]
+    [OutputType(typeof(OpenADUser))]
+    public class GetOpenADUser : GetOpenADOperation
+    {
+        internal override (string, bool)[] DefaultProperties => OpenADUser.DEFAULT_PROPERTIES;
+
+        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADUser(attributes);
+
+        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
+    }
+
+    [Cmdlet(
+        VerbsCommon.Get, "OpenADGroup",
+        DefaultParameterSetName = "Identity"
+    )]
+    [OutputType(typeof(OpenADGroup))]
+    public class GetOpenADGroup : GetOpenADOperation
+    {
+        internal override (string, bool)[] DefaultProperties => OpenADGroup.DEFAULT_PROPERTIES;
+
+        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADGroup(attributes);
+
+        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
     }
 }

@@ -271,9 +271,7 @@ namespace PSOpenAD.Commands
             //     ObjectClassDefinition def = new ObjectClassDefinition(objectClass);
             // }
 
-            OpenADSession session = new OpenADSession(ldap, Uri, Authentication, transportIsTLS || isSigned,
-                transportIsTLS || isEncrypted, defaultNamingContext ?? "");
-
+            Dictionary<string, AttributeTypes> attrInfo = new Dictionary<string, AttributeTypes>();
             foreach (string attributeTypes in schemaInfo["attributeTypes"])
             {
                 // In testing 2 attributes (respsTo, and repsFrom) had the string value here
@@ -294,8 +292,11 @@ namespace PSOpenAD.Commands
                     continue;
                 }
 
-                session.AttributeTypes[attrTypes.Name] = attrTypes;
+                attrInfo[attrTypes.Name] = attrTypes;
             }
+
+            OpenADSession session = new OpenADSession(ldap, Uri, Authentication, transportIsTLS || isSigned,
+                transportIsTLS || isEncrypted, defaultNamingContext ?? "", new AttributeTransformer(attrInfo));
 
             WriteObject(session);
         }

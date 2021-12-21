@@ -1,6 +1,5 @@
 using PSOpenAD.Native;
 using System;
-using System.Collections.Generic;
 
 namespace PSOpenAD
 {
@@ -20,10 +19,10 @@ namespace PSOpenAD
 
         internal SafeLdapHandle Handle { get; }
 
-        internal Dictionary<string, AttributeTypes> AttributeTypes { get; } = new Dictionary<string, AttributeTypes>();
+        internal AttributeTransformer AttributeTransformer { get; }
 
         internal OpenADSession(SafeLdapHandle ldap, Uri uri, AuthenticationMethod auth, bool isSigned, bool isEncrypted,
-            string defaultNamingContext)
+            string defaultNamingContext, AttributeTransformer transformer)
         {
             Handle = ldap;
             Uri = uri;
@@ -31,6 +30,7 @@ namespace PSOpenAD
             IsSigned = isSigned;
             IsEncrypted = isEncrypted;
             DefaultNamingContext = defaultNamingContext;
+            AttributeTransformer = transformer;
         }
     }
 }

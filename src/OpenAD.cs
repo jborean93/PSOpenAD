@@ -7,18 +7,151 @@ namespace PSOpenAD
 {
     public class OpenADObject
     {
-        internal static string[] DEFAULT_PROPERTIES = new string[] { "distinguishedName", "name", "objectClass",
-            "objectGUID" };
+        internal static (string, bool)[] DEFAULT_PROPERTIES = new (string, bool)[] {
+            ("distinguishedName", true),
+            ("name", true),
+            ("objectClass", true),
+            ("objectGUID", true),
+        };
 
-        public string DistinguishedName { get => (string)Properties["distinguishedName"]; }
-        public string Name { get => (string)Properties["name"]; }
-        public string ObjectClass { get => (string)((object[])Properties["objectClass"]).Last(); }
-        public Guid ObjectGuid { get => new Guid((byte[])Properties["objectGUID"]); }
-        public Dictionary<string, object> Properties { get; }
+        public string DistinguishedName { get; }
+        public string Name { get; }
+        public string ObjectClass { get; }
+        public Guid ObjectGuid { get; }
 
-        public OpenADObject(Dictionary<string, object> properties)
+        public OpenADObject(Dictionary<string, object?> attributes)
         {
-            Properties = properties;
+            DistinguishedName = (string?)attributes["distinguishedName"] ?? "";
+            Name = (string?)attributes["name"] ?? "";
+            ObjectClass = ((object[]?)attributes["objectClass"] ?? new string[] { "" }).Cast<string>().ToArray()[0];
+            ObjectGuid = (Guid?)attributes["objectGUID"] ?? Guid.Empty;
+        }
+
+        internal static (string, bool)[] ExtendPropertyList((string, bool)[] existing, (string, bool)[] toAdd)
+        {
+            List<(string, bool)> properties = existing.ToList();
+            properties.AddRange(toAdd);
+            return properties.ToArray();
+        }
+    }
+
+    public class OpenADPrincipal : OpenADObject
+    {
+        internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
+            OpenADObject.DEFAULT_PROPERTIES, new (string, bool)[] {
+                ("sAMAccountName", true),
+                ("objectSid", true),
+            });
+
+        public string SamAccountName { get; }
+        public SecurityIdentifier SecurityIdentifier { get; }
+
+        public OpenADPrincipal(Dictionary<string, object?> attributes) : base(attributes)
+        {
+            SamAccountName = (string?)attributes.GetValueOrDefault("sAMAccountName", null) ?? "";
+            SecurityIdentifier = (SecurityIdentifier?)attributes["objectSid"] ?? new SecurityIdentifier(Array.Empty<byte>());
+        }
+    }
+
+    public class OpenADAccount : OpenADPrincipal
+    {
+        internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
+            OpenADPrincipal.DEFAULT_PROPERTIES, new (string, bool)[] {
+                ("userAccountControl", false),
+                ("userPrincipalName", true),
+            });
+
+        public bool Enabled { get; }
+
+        public string UserPrincipalName { get; }
+
+        public OpenADAccount(Dictionary<string, object?> attributes) : base(attributes)
+        {
+            UserAccountControl control = (UserAccountControl?)attributes["userAccountControl"] ?? UserAccountControl.None;
+            Enabled = (control & UserAccountControl.AccountDisable) == 0;
+            UserPrincipalName = (string?)attributes.GetValueOrDefault("userPrincipalName", null) ?? "";
+        }
+    }
+
+    public class OpenADComputer : OpenADAccount
+    {
+        internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
+            OpenADAccount.DEFAULT_PROPERTIES, new (string, bool)[] {
+                ("dNSHostName", true),
+            });
+
+        public string DNSHostName { get; }
+
+        public OpenADComputer(Dictionary<string, object?> attributes) : base(attributes)
+        {
+            DNSHostName = (string?)attributes.GetValueOrDefault("dNSHostName", null) ?? "";
+        }
+    }
+
+    public class OpenADServiceAccount : OpenADAccount
+    {
+        internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
+            OpenADAccount.DEFAULT_PROPERTIES, new (string, bool)[] {
+                ("servicePrincipalName", true),
+            });
+
+        public string[] ServicePrincipalNames { get; }
+
+        public OpenADServiceAccount(Dictionary<string, object?> attributes) : base(attributes)
+        {
+            ServicePrincipalNames = ((object[]?)attributes["servicePrincipalName"] ?? Array.Empty<string>()).
+                Cast<string>()
+                .ToArray();
+        }
+    }
+
+    public class OpenADUser : OpenADAccount
+    {
+        internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
+            OpenADAccount.DEFAULT_PROPERTIES, new (string, bool)[] {
+                ("givenName", true),
+                ("sn", true),
+            });
+
+        public string GivenName { get; }
+        public string Surname { get; }
+
+        public OpenADUser(Dictionary<string, object?> attributes) : base(attributes)
+        {
+            GivenName = (string?)attributes.GetValueOrDefault("givenName", null) ?? "";
+            Surname = (string?)attributes.GetValueOrDefault("sn", null) ?? "";
+        }
+    }
+
+    public class OpenADGroup : OpenADPrincipal
+    {
+        internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
+            OpenADPrincipal.DEFAULT_PROPERTIES, new (string, bool)[] {
+                ("groupType", false),
+            });
+
+        public ADGroupCategory GroupCategory { get; }
+
+        public ADGroupScope GroupScope { get; }
+
+        public OpenADGroup(Dictionary<string, object?> attributes) : base(attributes)
+        {
+            GroupType grouptType = (GroupType?)attributes["groupType"] ?? GroupType.None;
+            GroupCategory = (grouptType & GroupType.IsSecurity) != 0
+                ? ADGroupCategory.Security : ADGroupCategory.Distribution;
+
+            switch (grouptType)
+            {
+                case GroupType.DomainLocal:
+                    GroupScope = ADGroupScope.DomainLocal;
+                    break;
+                case GroupType.Global:
+                    GroupScope = ADGroupScope.Global;
+                    break;
+                default:
+                    GroupScope = ADGroupScope.Universal;
+                    break;
+            }
         }
     }
 
@@ -45,6 +178,65 @@ namespace PSOpenAD
         }
 
         public override string ToString() => Value;
+    }
+
+    public enum SearchScope
+    {
+        Base,
+        OneLevel,
+        Subtree,
+    }
+
+    [Flags]
+    public enum SupportedEncryptionTypes
+    {
+        None = 0x00,
+        DesCbcCrc = 0x01,
+        DesCbcMd5 = 0x02,
+        Rc4Hmac = 0x04,
+        Aes128CtsHmacSha196 = 0x08,
+        Aes256CtsHmacSha196 = 0x10,
+
+    }
+
+    public enum ADGroupCategory
+    {
+        Distribution,
+        Security,
+    }
+
+    public enum ADGroupScope
+    {
+        DomainLocal,
+        Global,
+        Universal,
+    }
+
+    // https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/11972272-09ec-4a42-bf5e-3e99b321cf55
+    [Flags]
+    public enum GroupType : uint
+    {
+        None = 0x00000000,
+        System = 0x00000001,
+        Global = 0x00000002,
+        DomainLocal = 0x00000004,
+        Universal = 0x00000008,
+        AppBasic = 0x00000010,
+        AppQuery = 0x00000020,
+        IsSecurity = 0x80000000,
+    }
+
+    // https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-ada1/3c95bace-a9bd-4227-9c32-de1015d2bcd2
+    [Flags]
+    public enum InstanceType
+    {
+        None = 0x0000000,
+        HeadOfNamingContext = 0x00000001,
+        ReplicaNotInstantiated = 0x00000002,
+        IsWritableOnDirectory = 0x00000004,
+        NamingContextAboveIsHeld = 0x00000008,
+        NamingContextBeingConstructed = 0x00000010,
+        NamingContextBeingRemoved = 0x00000020,
     }
 
     [Flags]

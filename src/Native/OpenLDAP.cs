@@ -262,10 +262,21 @@ namespace PSOpenAD.Native
                 yield break;
             }
 
-            while (entry != IntPtr.Zero)
+            while (true)
             {
                 yield return entry;
                 entry = ldap_next_entry(ldap, entry);
+
+                if (entry == IntPtr.Zero)
+                {
+                    (int rc, string _, string errMsg) = ParseResult(ldap, result);
+                    if (rc != 0)
+                        throw new LDAPException(ldap, rc, "ldap_next_entry", errorMessage: errMsg);
+
+                    yield break;
+                }
+
+                yield return entry;
             }
         }
 
@@ -306,7 +317,7 @@ namespace PSOpenAD.Native
         /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_set_option&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_get_option</see>
         public static List<string> GetOptionSaslMechList(SafeLdapHandle? ldap)
         {
-            LDAPOption option = LDAPOption.LDAP_OPT_X_SASL_MECHLIST;
+            const LDAPOption option = LDAPOption.LDAP_OPT_X_SASL_MECHLIST;
             int res = ldap_get_option(ldap ?? new SafeLdapHandle(), option, out IntPtr value);
             if (res != 0)
                 throw new LDAPException(ldap, res, $"ldap_get_option({option})");
@@ -343,19 +354,20 @@ namespace PSOpenAD.Native
             }
 
             int count = ldap_count_values_len(raw);
-            IntPtr valPtr = raw.DangerousGetHandle();
-            byte[][] values = new byte[count][];
-            for (int i = 0; i < count; i++)
+            List<byte[]> values = new List<byte[]>(count);
+            unsafe
             {
-                Helpers.berval v = Marshal.PtrToStructure<Helpers.berval>(Marshal.ReadIntPtr(valPtr));
-                valPtr = IntPtr.Add(valPtr, IntPtr.Size);
+                foreach (IntPtr ptr in new Span<IntPtr>(raw.DangerousGetHandle().ToPointer(), count))
+                {
+                    Helpers.berval* v = (Helpers.berval*)ptr.ToPointer();
 
-                byte[] data = new byte[v.bv_len];
-                Marshal.Copy(v.bv_val, data, 0, data.Length);
-                values[i] = data;
+                    byte[] data = new byte[v->bv_len];
+                    Marshal.Copy(v->bv_val, data, 0, data.Length);
+                    values.Add(data);
+                }
             }
 
-            return values;
+            return values.ToArray();
         }
 
         /// <summary>Initializes an LDAP handle for the URI specified.</summary>
