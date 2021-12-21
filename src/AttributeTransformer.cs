@@ -41,7 +41,7 @@ namespace PSOpenAD
                 { "objectGUID", ((_, v) => new Guid(v)) },
 
                 // SecurityIdentifier
-                { "objectSid", ((_, v) => new SecurityIdentifier(v) ) },
+                { "objectSid", ((_, v) => new SecurityIdentifier(v, 0) ) },
 
                 // SAMAccountType
                 { "sAMAccountType", ((_, v) => (SAMAccountType)Int32.Parse(AttributeTransformer.ParseStringValue(v))) },
@@ -146,7 +146,7 @@ namespace PSOpenAD
                     default:
                         processed.Add(ParseStringValue(val));
                         break;
-               }
+                }
             }
 
             return attrInfo?.SingleValue == true ? processed[0] : processed.ToArray();

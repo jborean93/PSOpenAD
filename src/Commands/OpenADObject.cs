@@ -8,14 +8,7 @@ namespace PSOpenAD.Commands
 {
     public abstract class GetOpenADOperation : PSCmdlet
     {
-        [Parameter(
-            Mandatory = true,
-            Position = 0,
-            ValueFromPipeline = true,
-            ValueFromPipelineByPropertyName = true,
-            ParameterSetName = "Identity"
-        )]
-        public string Identity { get; set; } = "";
+        internal string _ldapFilter = "";
 
         [Parameter(
             Mandatory = true,
@@ -23,7 +16,7 @@ namespace PSOpenAD.Commands
             ValueFromPipelineByPropertyName = true,
             ParameterSetName = "LDAPFilter"
         )]
-        public string? LDAPFilter { get; set; }
+        public string LDAPFilter { get => _ldapFilter; set => _ldapFilter = value; }
 
         [Parameter(
             Mandatory = true,
@@ -42,7 +35,6 @@ namespace PSOpenAD.Commands
         [Parameter()]
         public SearchScope SearchScope { get; set; } = SearchScope.Subtree;
 
-
         [Parameter()]
         public SwitchParameter IncludeDeletedObjects { get; set; }
 
@@ -50,32 +42,17 @@ namespace PSOpenAD.Commands
 
         internal abstract OpenADObject CreateADObject(Dictionary<string, object?> attributes);
 
-        internal abstract string ParseIdentityToFilter(string identity);
-
         protected override void ProcessRecord()
         {
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
             LDAPSearchScope ldapScope = (LDAPSearchScope)SearchScope;
 
-            if (ParameterSetName == "Identity")
-            {
-                if (Guid.TryParse(Identity, out var identityGuid))
-                {
-                    byte[] guidBytes = identityGuid.ToByteArray();
-                    string escapedHex = BitConverter.ToString(guidBytes).Replace("-", "\\");
-                    LDAPFilter = String.Format("(objectGUID=\\{0})", escapedHex);
-                }
-                else
-                {
-                    LDAPFilter = ParseIdentityToFilter(Identity);
-                }
-            }
-
             HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet();
-            foreach (string prop in Property ?? Array.Empty<string>())
+            string[] explicitProperties = Property ?? Array.Empty<string>();
+            foreach (string prop in explicitProperties)
                 requestedProperties.Add(prop);
 
-            int msgid = OpenLDAP.SearchExt(Session.Handle, searchBase, ldapScope, LDAPFilter,
+            int msgid = OpenLDAP.SearchExt(Session.Handle, searchBase, ldapScope, _ldapFilter,
                 requestedProperties.ToArray(), false);
             SafeLdapMessage res = OpenLDAP.Result(Session.Handle, msgid, LDAPMessageCount.LDAP_MSG_ALL);
             foreach (IntPtr entry in OpenLDAP.GetEntries(Session.Handle, res))
@@ -89,12 +66,11 @@ namespace PSOpenAD.Commands
 
                 OpenADObject adObj = CreateADObject(props);
 
-                // This adds a script property on the main object to the actual property value as a nice shorthand.
-                // Should this continue to happen, should there be a mapping of known raw types to a structured value
-                // that takes precedence as well?
+                // This adds a note property for each explicitly requested property, excluding the ones the object
+                // naturally exposes.
                 PSObject adPSObj = PSObject.AsPSObject(adObj);
                 props.Keys
-                    .Where(v => !DefaultProperties.Contains((v, true)))
+                    .Where(v => explicitProperties.Contains(v) && !DefaultProperties.Contains((v, true)))
                     .OrderBy(v => v)
                     .ToList()
                     .ForEach(v => adPSObj.Properties.Add(new PSNoteProperty(v, props[v])));
@@ -111,11 +87,18 @@ namespace PSOpenAD.Commands
     [OutputType(typeof(OpenADObject))]
     public class GetOpenADObject : GetOpenADOperation
     {
+        [Parameter(
+            Mandatory = true,
+            Position = 0,
+            ValueFromPipeline = true,
+            ValueFromPipelineByPropertyName = true,
+            ParameterSetName = "Identity"
+        )]
+        public ADObjectIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
+
         internal override (string, bool)[] DefaultProperties => OpenADObject.DEFAULT_PROPERTIES;
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADObject(attributes);
-
-        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
     }
 
 
@@ -126,11 +109,18 @@ namespace PSOpenAD.Commands
     [OutputType(typeof(OpenADComputer))]
     public class GetOpenADComputer : GetOpenADOperation
     {
+        [Parameter(
+            Mandatory = true,
+            Position = 0,
+            ValueFromPipeline = true,
+            ValueFromPipelineByPropertyName = true,
+            ParameterSetName = "Identity"
+        )]
+        public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
+
         internal override (string, bool)[] DefaultProperties => OpenADComputer.DEFAULT_PROPERTIES;
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADComputer(attributes);
-
-        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
     }
 
     [Cmdlet(
@@ -140,11 +130,18 @@ namespace PSOpenAD.Commands
     [OutputType(typeof(OpenADUser))]
     public class GetOpenADUser : GetOpenADOperation
     {
+        [Parameter(
+            Mandatory = true,
+            Position = 0,
+            ValueFromPipeline = true,
+            ValueFromPipelineByPropertyName = true,
+            ParameterSetName = "Identity"
+        )]
+        public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
+
         internal override (string, bool)[] DefaultProperties => OpenADUser.DEFAULT_PROPERTIES;
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADUser(attributes);
-
-        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
     }
 
     [Cmdlet(
@@ -154,10 +151,17 @@ namespace PSOpenAD.Commands
     [OutputType(typeof(OpenADGroup))]
     public class GetOpenADGroup : GetOpenADOperation
     {
+        [Parameter(
+            Mandatory = true,
+            Position = 0,
+            ValueFromPipeline = true,
+            ValueFromPipelineByPropertyName = true,
+            ParameterSetName = "Identity"
+        )]
+        public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
+
         internal override (string, bool)[] DefaultProperties => OpenADGroup.DEFAULT_PROPERTIES;
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADGroup(attributes);
-
-        internal override string ParseIdentityToFilter(string identity) => $"(distinguishedName={Identity})";
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace PSOpenAD
 {
@@ -44,12 +43,12 @@ namespace PSOpenAD
             });
 
         public string SamAccountName { get; }
-        public SecurityIdentifier SecurityIdentifier { get; }
+        public SecurityIdentifier SID { get; }
 
         public OpenADPrincipal(Dictionary<string, object?> attributes) : base(attributes)
         {
             SamAccountName = (string?)attributes.GetValueOrDefault("sAMAccountName", null) ?? "";
-            SecurityIdentifier = (SecurityIdentifier?)attributes["objectSid"] ?? new SecurityIdentifier(Array.Empty<byte>());
+            SID = (SecurityIdentifier?)attributes["objectSid"] ?? new SecurityIdentifier("");
         }
     }
 
@@ -157,27 +156,56 @@ namespace PSOpenAD
 
     public sealed class SecurityIdentifier
     {
-        public string Value { get; }
+        private byte _revision;
+        private UInt64 _authority;
+        private uint[] _rid;
 
-        public SecurityIdentifier(byte[] sid)
+        public int BinaryLength => 8 + (_rid.Length * 4);
+
+        public string Value => ToString();
+
+        public SecurityIdentifier(string sid)
         {
-            byte[] rawAuthority = new byte[8];
-            Array.Copy(sid, 2, rawAuthority, 2, 6);
-            Array.Reverse(rawAuthority);
-            UInt64 authority = BitConverter.ToUInt64(rawAuthority);
-
-            StringBuilder sidValue = new StringBuilder($"S-{sid[0]}-{authority}");
-            for (int i = 0; i < sid[1]; i++)
-            {
-                byte[] idBytes = new byte[4];
-                Array.Copy(sid, 8 + (i * 4), idBytes, 0, 4);
-                uint id = BitConverter.ToUInt32(idBytes);
-                sidValue.Append($"-{id}");
-            }
-            Value = sidValue.ToString();
+            throw new NotImplementedException();
         }
 
-        public override string ToString() => Value;
+        public SecurityIdentifier(byte[] binaryForm, int offset)
+        {
+            _revision = binaryForm[offset];
+
+            byte[] rawAuthority = new byte[8];
+            Array.Copy(binaryForm, offset + 2, rawAuthority, 2, 6);
+            Array.Reverse(rawAuthority);
+            _authority = BitConverter.ToUInt64(rawAuthority);
+
+            _rid = new uint[binaryForm[offset + 1]];
+            for (int i = 0; i < _rid.Length; i++)
+            {
+                byte[] idBytes = new byte[4];
+                Array.Copy(binaryForm, offset + 8 + (i * 4), idBytes, 0, idBytes.Length);
+                uint rid = BitConverter.ToUInt32(idBytes);
+                _rid[i] = rid;
+            }
+        }
+
+        public void GetBinaryForm(byte[] binaryForm, int offset)
+        {
+            binaryForm[offset] = _revision;
+            binaryForm[offset + 1] = (byte)_rid.Length;
+
+            byte[] authority = BitConverter.GetBytes(_authority);
+            Array.Reverse(authority);
+            Array.Copy(authority, 2, binaryForm, offset + 2, 6);
+
+            for (int i = 0; i < _rid.Length; i++)
+            {
+                byte[] rawRid = BitConverter.GetBytes(_rid[i]);
+                Array.Copy(rawRid, 0, binaryForm, offset + 8 + (i * 4), rawRid.Length);
+            }
+            return;
+        }
+
+        public override string ToString() => $"S-{_revision}-{_authority}-" + String.Join("-", _rid);
     }
 
     public enum SearchScope
