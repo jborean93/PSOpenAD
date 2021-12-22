@@ -1,4 +1,3 @@
-using System;
 using System.Management.Automation;
 
 namespace PSOpenAD.Commands
@@ -11,7 +10,7 @@ namespace PSOpenAD.Commands
     {
         protected override void EndProcessing()
         {
-            foreach (AuthenticationProvider provider in ClientAuthentication.Providers)
+            foreach (AuthenticationProvider provider in GlobalState.Providers.Values)
                 WriteObject(provider);
         }
     }

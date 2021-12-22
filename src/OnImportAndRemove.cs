@@ -94,13 +94,16 @@ namespace PSOpenAD
             // While this is needed for Negotiate/Kerberos auth users can still use Simple auth so it's optional.
             bool hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2", "GSSAPI authentication", true);
 
+            // This is only used to lookup the default realm which is used to determine the default server.
+            bool hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so", "Kerberos authentication", true);
+
             // While channel binding isn't technically done by both these methods an Active Directory implementation
             // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
             // server end.
-            ClientAuthentication.Providers.Add(new AuthenticationProvider(
-                AuthenticationMethod.Anonymous, "Anonymous", true, false, true, ""));
-            ClientAuthentication.Providers.Add(new AuthenticationProvider(
-                AuthenticationMethod.Simple, "Simple", true, false, true, ""));
+            GlobalState.Providers[AuthenticationMethod.Anonymous] = new AuthenticationProvider(
+                AuthenticationMethod.Anonymous, "Anonymous", true, false, true, "");
+            GlobalState.Providers[AuthenticationMethod.Simple] = new AuthenticationProvider(
+                AuthenticationMethod.Simple, "Simple", true, false, true, "");
 
             // Even if SASL wasn't found this uses the OpenLDAP lib to report the mechs available. If SASL is
             // available we can get further details on the mechanism to provide a clearer picture of what it supports.
@@ -149,14 +152,27 @@ namespace PSOpenAD
 
                 }
 
-                ClientAuthentication.Providers.Add(new AuthenticationProvider(
-                    kvp.Key, kvp.Value, present, canSign, supportsCB, details));
+                GlobalState.Providers[kvp.Key] = new AuthenticationProvider(kvp.Key, kvp.Value, present, canSign,
+                    supportsCB, details);
             }
 
+            // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
+            if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && hasKrb5)
+            {
+                using SafeKrb5Context ctx = Kerberos.InitContext();
+                try
+                {
+                    GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
+                }
+                catch (KerberosException) { }
+            }
         }
 
         public void OnRemove(PSModuleInfo module)
         {
+            foreach (OpenADSession session in GlobalState.ImplicitSessions.Values)
+                session.Close();
+
             Resolver?.Dispose();
         }
     }

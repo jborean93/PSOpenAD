@@ -160,6 +160,13 @@ namespace PSOpenAD.Native
             SafeHandle desired_object,
             ref Helpers.gss_buffer_desc value);
 
+        /// <summary>Acquire GSSAPI credential</summary>
+        /// <param name="name">The principal to get the cred for, if null the default principal is used.</param>
+        /// <param name="ttl">The lifetime of the credential retrieved.</param>
+        /// <param name="desiredMechs">A list of mechanisms the credential should work for.</param>
+        /// <param name="usage">The usage type of the credential.</param>
+        /// <returns>A handle to the retrieved GSSAPI credential.</returns>
+        /// <exception cref="GSSAPIException">Failed to find the credential.</exception>
         public static GssapiCredential AcquireCred(SafeGssapiName? name, UInt32 ttl, List<byte[]> desiredMechs,
             GssapiCredUsage usage)
         {
@@ -176,6 +183,14 @@ namespace PSOpenAD.Native
             return new GssapiCredential(outputCreds, actualTtls, actualMechs);
         }
 
+        /// <summary>Get a new GSSAPI credential with the password specified.</summary>
+        /// <param name="name">The principal to get the cred for, if null the default principal is used.</param>
+        /// <param name="password">The password used to generate the new credential.</param>
+        /// <param name="ttl">The lifetime of the credential retrieved.</param>
+        /// <param name="desiredMechs">A list of mechanisms the credential should work for.</param>
+        /// <param name="usage">The usage type of the credential.</param>
+        /// <returns>A handle to the retrieved GSSAPI credential.</returns>
+        /// <exception cref="GSSAPIException">Failed to get a new credential with the creds specified.</exception>
         public static GssapiCredential AcquireCredWithPassword(SafeHandle name, string password, UInt32 ttl,
             List<byte[]> desiredMechs, GssapiCredUsage usage)
         {
@@ -190,6 +205,11 @@ namespace PSOpenAD.Native
             return new GssapiCredential(outputCreds, actualTtls, actualMechs);
         }
 
+        /// <summary>Get the GSSAPI error message for the error code.</summary>
+        /// <param name="errorCode">The error code to get the status for.</param>
+        /// <param name="isMajorCode">The error code is a major error code and not minor.</param>
+        /// <param name="mech">Optional mech the error code is associated with.</param>
+        /// <returns>The error message for the code specified.</returns>
         public static string DisplayStatus(int errorCode, bool isMajorCode, byte[]? mech)
         {
             Helpers.gss_buffer_desc msgBuffer = new Helpers.gss_buffer_desc();
@@ -221,6 +241,11 @@ namespace PSOpenAD.Native
             return msg.ToString();
         }
 
+        /// <summary>Create a GSSAPI name object.</summary>
+        /// <param name="name">The name to create the name object for.</param>
+        /// <param nameType="The type of name to create."></param>
+        /// <returns>The GSSAPI name buffer handle.</returns>
+        /// <exception cref="GSSAPIException">Failed to create name object.</exception>
         public static SafeGssapiName ImportName(string name, byte[] nameType)
         {
             using SafeMemoryBuffer inputBuffer = StringBuffer(name);
@@ -232,9 +257,13 @@ namespace PSOpenAD.Native
             return outputName;
         }
 
-        public static void SetCredOption(SafeGssapiCred cred, byte[] obj)
+        /// <summary>Set an option on a GSSAPI credential.</summary>
+        /// <param name="cred">The credential to set the option on.</param>
+        /// <param name="oid">The credential option to set.</param>
+        /// <exception cref="GSSAPIException">Failed to set option on the credential.</exception>
+        public static void SetCredOption(SafeGssapiCred cred, byte[] oid)
         {
-            using SafeMemoryBuffer objOID = OIDBuffer(obj);
+            using SafeMemoryBuffer objOID = OIDBuffer(oid);
             Helpers.gss_buffer_desc valueBuffer = new Helpers.gss_buffer_desc();
             int majorStatus = gss_set_cred_option(out var minorStatus, cred, objOID, ref valueBuffer);
             if (majorStatus != 0)

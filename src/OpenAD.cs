@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace PSOpenAD
 {
@@ -39,7 +40,7 @@ namespace PSOpenAD
         internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
             OpenADObject.DEFAULT_PROPERTIES, new (string, bool)[] {
                 ("sAMAccountName", true),
-                ("objectSid", true),
+                ("objectSid", false),
             });
 
         public string SamAccountName { get; }
@@ -109,7 +110,7 @@ namespace PSOpenAD
         internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
             OpenADAccount.DEFAULT_PROPERTIES, new (string, bool)[] {
                 ("givenName", true),
-                ("sn", true),
+                ("sn", false),
             });
 
         public string GivenName { get; }
@@ -156,17 +157,33 @@ namespace PSOpenAD
 
     public sealed class SecurityIdentifier
     {
-        private byte _revision;
-        private UInt64 _authority;
-        private uint[] _rid;
+        private readonly byte _revision;
+        private readonly UInt64 _identifierAuthority;
+        private readonly uint[] _subAuthorities;
 
-        public int BinaryLength => 8 + (_rid.Length * 4);
+        public int BinaryLength => 8 + (_subAuthorities.Length * 4);
 
         public string Value => ToString();
 
         public SecurityIdentifier(string sid)
         {
-            throw new NotImplementedException();
+            Match m = Regex.Match(sid, @"^S-(?<revision>\d)-(?<authority>\d+)(?:-\d+){1,15}$");
+            if (m.Success)
+            {
+                _revision = byte.Parse(m.Groups["revision"].Value);
+                _identifierAuthority = UInt64.Parse(m.Groups["authority"].Value);
+                string[] sidSplit = sid.Split('-');
+
+                _subAuthorities = new uint[sidSplit.Length - 3];
+                for (int i = 3; i < sidSplit.Length; i++)
+                {
+                    _subAuthorities[i - 3] = uint.Parse(sidSplit[i]);
+                }
+            }
+            else
+            {
+                throw new ArgumentException(nameof(sid));
+            }
         }
 
         public SecurityIdentifier(byte[] binaryForm, int offset)
@@ -176,36 +193,34 @@ namespace PSOpenAD
             byte[] rawAuthority = new byte[8];
             Array.Copy(binaryForm, offset + 2, rawAuthority, 2, 6);
             Array.Reverse(rawAuthority);
-            _authority = BitConverter.ToUInt64(rawAuthority);
+            _identifierAuthority = BitConverter.ToUInt64(rawAuthority);
 
-            _rid = new uint[binaryForm[offset + 1]];
-            for (int i = 0; i < _rid.Length; i++)
+            _subAuthorities = new uint[binaryForm[offset + 1]];
+            for (int i = 0; i < _subAuthorities.Length; i++)
             {
                 byte[] idBytes = new byte[4];
                 Array.Copy(binaryForm, offset + 8 + (i * 4), idBytes, 0, idBytes.Length);
-                uint rid = BitConverter.ToUInt32(idBytes);
-                _rid[i] = rid;
+                _subAuthorities[i] = BitConverter.ToUInt32(idBytes);
             }
         }
 
         public void GetBinaryForm(byte[] binaryForm, int offset)
         {
             binaryForm[offset] = _revision;
-            binaryForm[offset + 1] = (byte)_rid.Length;
+            binaryForm[offset + 1] = (byte)_subAuthorities.Length;
 
-            byte[] authority = BitConverter.GetBytes(_authority);
+            byte[] authority = BitConverter.GetBytes(_identifierAuthority);
             Array.Reverse(authority);
             Array.Copy(authority, 2, binaryForm, offset + 2, 6);
 
-            for (int i = 0; i < _rid.Length; i++)
+            for (int i = 0; i < _subAuthorities.Length; i++)
             {
-                byte[] rawRid = BitConverter.GetBytes(_rid[i]);
+                byte[] rawRid = BitConverter.GetBytes(_subAuthorities[i]);
                 Array.Copy(rawRid, 0, binaryForm, offset + 8 + (i * 4), rawRid.Length);
             }
-            return;
         }
 
-        public override string ToString() => $"S-{_revision}-{_authority}-" + String.Join("-", _rid);
+        public override string ToString() => $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities);
     }
 
     public enum SearchScope

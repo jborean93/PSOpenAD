@@ -77,6 +77,7 @@
         'Get-OpenADObject'
         'Get-OpenADUser'
         'New-OpenADSession'
+        'New-OpenADSessionOption'
         'Remove-OpenADSession'
     )
 

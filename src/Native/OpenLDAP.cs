@@ -15,7 +15,7 @@ namespace PSOpenAD.Native
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct ldapcontrol
+        public struct LDAPControl
         {
             public IntPtr ldctl_oid;
             public berval ldctl_value;
@@ -27,6 +27,23 @@ namespace PSOpenAD.Native
         {
             public int tv_sec;
             public int tv_usec;
+        }
+    }
+
+    internal class LDAPControl
+    {
+        public const string LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417";
+        public const string LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID = "1.2.840.113556.1.4.2065";
+
+        public string Oid { get; }
+        public byte[]? Value { get; }
+        public bool IsCritical { get; }
+
+        public LDAPControl(string oid, byte[]? value, bool isCritical)
+        {
+            Oid = oid;
+            Value = value;
+            IsCritical = isCritical;
         }
     }
 
@@ -145,8 +162,8 @@ namespace PSOpenAD.Native
             string dn,
             string? mechanism,
             SafeHandle cred,
-            IntPtr sctrls,
-            IntPtr cctrls,
+            SafeHandle sctrls,
+            SafeHandle cctrls,
             out int msgidp);
 
         [DllImport(LIB_LDAP)]
@@ -154,8 +171,8 @@ namespace PSOpenAD.Native
             SafeLdapHandle ld,
             string dn,
             string mechs,
-            IntPtr sctrls,
-            IntPtr cctrls,
+            SafeHandle sctrls,
+            SafeHandle cctrls,
             SASLInteractionFlags flags,
             [MarshalAs(UnmanagedType.FunctionPtr)] LDAP_SASL_INTERACT_PROC interact,
             IntPtr defaults,
@@ -171,8 +188,8 @@ namespace PSOpenAD.Native
             string? filter,
             SafeHandle attrs,
             int attrsonly,
-            IntPtr serverctrls,
-            IntPtr clientctrls,
+            SafeHandle serverctrls,
+            SafeHandle clientctrls,
             SafeHandle timeout,
             int sizelimit,
             out int msgidp);
@@ -192,8 +209,8 @@ namespace PSOpenAD.Native
         [DllImport(LIB_LDAP)]
         public static extern int ldap_start_tls_s(
             SafeLdapHandle ld,
-            IntPtr serverctrls,
-            IntPtr clientctrls);
+            SafeHandle serverctrls,
+            SafeHandle clientctrls);
 
         [DllImport(LIB_LDAP)]
         public static extern int ldap_unbind(
@@ -469,10 +486,13 @@ namespace PSOpenAD.Native
         /// <param name="dn">Who/username to bind with.</param>
         /// <param name="mechanism">The SASL mechanism used or null for SIMPLE auth.</param>
         /// <param name="cred">The raw credential to exchange.</param>
+        /// <param name="serverControls">Optional LDAP control codes to be sent to the server for the request.</param>
+        /// <param name="clientControls">Optional LDAP control codes to be used by the client for the request.</param>
         /// <returns>The message identifier for the bind request.</returns>
         /// <exception cref="LDAPException">A general LDAP failure occurred when starting the bind operation.</exception>
         /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_sasl_bind&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_sasl_bind</see>
-        public static int SaslBind(SafeLdapHandle ldap, string dn, string? mechanism, byte[] cred)
+        public static int SaslBind(SafeLdapHandle ldap, string dn, string? mechanism, byte[] cred,
+            LDAPControl[]? serverControls = null, LDAPControl[]? clientControls = null)
         {
             int credStructLength = Marshal.SizeOf<Helpers.berval>();
             using SafeMemoryBuffer credBuffer = new SafeMemoryBuffer(credStructLength + cred.Length);
@@ -484,8 +504,9 @@ namespace PSOpenAD.Native
             Marshal.Copy(cred, 0, credStruct.bv_val, cred.Length);
             Marshal.StructureToPtr(credStruct, credBuffer.DangerousGetHandle(), false);
 
-            int rc = ldap_sasl_bind(ldap, dn, mechanism, credBuffer, IntPtr.Zero, IntPtr.Zero,
-                out var msgid);
+            using SafeMemoryBuffer serverCC = ControlCodeBuffer(serverControls);
+            using SafeMemoryBuffer clientCC = ControlCodeBuffer(clientControls);
+            int rc = ldap_sasl_bind(ldap, dn, mechanism, credBuffer, serverCC, clientCC, out var msgid);
 
             if (rc != 0)
                 throw new LDAPException(ldap, rc, "ldap_sasl_bind");
@@ -516,6 +537,8 @@ namespace PSOpenAD.Native
         /// <param name="prompt">The callback used by the SASL mechanism when prompting for further information.</param>
         /// <param name="result">The input result data for SASL to process from a <C>Result</C> or null for the first invocation.</param>
         /// <param name="rmech">A reference IntPtr that contains the current SASL mech being used. This must be the same value across multiple called.</param>
+        /// <param name="serverControls">Optional LDAP control codes to be sent to the server for the request.</param>
+        /// <param name="clientControls">Optional LDAP control codes to be used by the client for the request.</param>
         /// <returns>
         /// A tuple of 2 values:
         ///   1 - Whether more processing is required with <C>Result</C>.
@@ -524,9 +547,12 @@ namespace PSOpenAD.Native
         /// <exception cref="LDAPException">A general LDAP failure occurred when starting the SASL bind operation.</exception>
         /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_sasl_bind&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_sasl_interactive_bind</see>
         public static (bool, int) SaslInteractiveBind(SafeLdapHandle ldap, string dn, string mech,
-            SASLInteractionFlags interactionFlags, SaslInteract prompt, SafeLdapMessage result, ref IntPtr rmech)
+            SASLInteractionFlags interactionFlags, SaslInteract prompt, SafeLdapMessage result, ref IntPtr rmech,
+            LDAPControl[]? serverControls = null, LDAPControl[]? clientControls = null)
         {
-            int rc = ldap_sasl_interactive_bind(ldap, dn, mech, IntPtr.Zero, IntPtr.Zero, interactionFlags,
+            using SafeMemoryBuffer serverCC = ControlCodeBuffer(serverControls);
+            using SafeMemoryBuffer clientCC = ControlCodeBuffer(clientControls);
+            int rc = ldap_sasl_interactive_bind(ldap, dn, mech, serverCC, clientCC, interactionFlags,
                 prompt.SaslInteractProc, IntPtr.Zero, result, ref rmech, out var msgid);
             // While the caller may have this in a using block it doesn't hurt to call it more than once.
             result.Dispose();
@@ -567,11 +593,14 @@ namespace PSOpenAD.Native
         /// A value of 0 will use the server defined operation timeout value.
         /// </param>
         /// <param name="sizeLimit">The number of entries to return with 0 indicating no limits.</param>
+        /// <param name="serverControls">Optional LDAP control codes to be sent to the server for the request.</param>
+        /// <param name="clientControls">Optional LDAP control codes to be used by the client for the request.</param>
         /// <returns>The search message id to be used with <C>Result</C></returns>
         /// <exception cref="LDAPException">A general LDAP failure occurred when getting the result.</exception>
         /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_search_ext&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_search_ext</see>
         public static int SearchExt(SafeLdapHandle ldap, string searchBase, LDAPSearchScope scope, string? filter,
-            string[]? attributes, bool attributesOnly, int timeoutMS = 0, int sizeLimit = 0)
+            string[]? attributes, bool attributesOnly, int timeoutMS = 0, int sizeLimit = 0,
+            LDAPControl[]? serverControls = null, LDAPControl[]? clientControls = null)
         {
             SafeMemoryBuffer attributesBuffer;
             int attributesLength = IntPtr.Size; // Include null pointer at the end of the pointer array
@@ -608,9 +637,11 @@ namespace PSOpenAD.Native
                     Marshal.WriteIntPtr(pointerPtr, IntPtr.Zero);
                 }
 
+                using SafeMemoryBuffer serverCC = ControlCodeBuffer(serverControls);
+                using SafeMemoryBuffer clientCC = ControlCodeBuffer(clientControls);
                 using SafeMemoryBuffer timeout = TimeoutBuffer(timeoutMS);
                 int rc = ldap_search_ext(ldap, searchBase, scope, filter, attributesBuffer, attributesOnly ? 1 : 0,
-                    IntPtr.Zero, IntPtr.Zero, timeout, sizeLimit, out var msgid);
+                    serverCC, clientCC, timeout, sizeLimit, out var msgid);
                 if (rc != 0)
                     throw new LDAPException(ldap, rc, "ldap_search_ext");
 
@@ -646,13 +677,89 @@ namespace PSOpenAD.Native
 
         /// <summary>Initiate a StartTLS bind on the LDAP connection.</summary>
         /// <param name="ldap">The LDAP handle to perform the StartTLS operation on.</param>
+        /// <param name="serverControls">Optional LDAP control codes to be sent to the server for the request.</param>
+        /// <param name="clientControls">Optional LDAP control codes to be used by the client for the request.</param>
         /// <exception cref="LDAPException">A general LDAP failure occurred when performing the StartTLS operation.</exception>
         /// <see href="https://www.openldap.org/software/man.cgi?query=ldap_start_tls_s&amp;apropos=0&amp;sektion=0&amp;manpath=OpenLDAP+2.6-Release&amp;arch=default&amp;format=html">ldap_start_tls_s</see>
-        public static void StartTlsS(SafeLdapHandle ldap)
+        public static void StartTlsS(SafeLdapHandle ldap, LDAPControl[]? serverControls = null,
+            LDAPControl[]? clientControls = null)
         {
-            int res = ldap_start_tls_s(ldap, IntPtr.Zero, IntPtr.Zero);
+            using SafeMemoryBuffer serverCC = ControlCodeBuffer(serverControls);
+            using SafeMemoryBuffer clientCC = ControlCodeBuffer(clientControls);
+            int res = ldap_start_tls_s(ldap, serverCC, clientCC);
             if (res != 0)
                 throw new LDAPException(ldap, res, "ldap_start_tls_ts");
+        }
+
+        private static SafeMemoryBuffer ControlCodeBuffer(LDAPControl[]? codes)
+        {
+            if (!(codes?.Length > 0))
+                return new SafeMemoryBuffer();
+
+            int pointerSize = IntPtr.Size + (IntPtr.Size * codes.Length);
+            //int pointerSize = IntPtr.Size;
+            int structSize = Marshal.SizeOf<Helpers.LDAPControl>() * codes.Length;
+            int oidSize = 0;
+            int valueSize = 0;
+            List<byte[]> oidBytes = new List<byte[]>(codes.Length);
+
+            foreach (LDAPControl code in codes)
+            {
+                byte[] oid = Encoding.UTF8.GetBytes(code.Oid + '\0');
+                oidSize += oid.Length;
+                oidBytes.Add(oid);
+                valueSize += code.Value?.Length ?? 0;
+            }
+
+            SafeMemoryBuffer buffer = new SafeMemoryBuffer(pointerSize + structSize + oidSize + valueSize);
+            try
+            {
+                IntPtr structPtr = IntPtr.Add(buffer.DangerousGetHandle(), pointerSize);
+                //IntPtr structPtr = IntPtr.Add(buffer.DangerousGetHandle(), 0);
+                IntPtr oidPtr = IntPtr.Add(structPtr, structSize);
+                //IntPtr oidPtr = IntPtr.Add(structPtr, IntPtr.Size + structSize);
+                IntPtr valuePtr = IntPtr.Add(oidPtr, oidSize);
+
+                for (int i = 0; i < codes.Length; i++)
+                {
+                    LDAPControl code = codes[i];
+
+                    Helpers.LDAPControl control = new Helpers.LDAPControl()
+                    {
+                        ldctl_oid = oidPtr,
+                        ldctl_value = new Helpers.berval()
+                        {
+                            bv_len = 0,
+                            bv_val = IntPtr.Zero,
+                        },
+                        ldctl_iscritical = code.IsCritical,
+                    };
+
+                    byte[] oid = oidBytes[i];
+                    Marshal.Copy(oid, 0, oidPtr, oid.Length);
+                    oidPtr = IntPtr.Add(oidPtr, oid.Length);
+
+                    if (code.Value?.Length > 0)
+                    {
+                        control.ldctl_value.bv_len = code.Value.Length;
+                        control.ldctl_value.bv_val = valuePtr;
+                        Marshal.Copy(code.Value, 0, valuePtr, code.Value.Length);
+                        valuePtr = IntPtr.Add(valuePtr, code.Value.Length);
+                    }
+
+                    Marshal.StructureToPtr(control, structPtr, false);
+                    Marshal.WriteIntPtr(buffer.DangerousGetHandle(), i * IntPtr.Size, structPtr);
+                    structPtr = IntPtr.Add(structPtr, Marshal.SizeOf<Helpers.LDAPControl>());
+                }
+                Marshal.WriteIntPtr(buffer.DangerousGetHandle(), pointerSize - IntPtr.Size, IntPtr.Zero);
+
+                return buffer;
+            }
+            catch
+            {
+                buffer.Dispose();
+                throw;
+            }
         }
 
         private static SafeMemoryBuffer TimeoutBuffer(int timeoutMS)

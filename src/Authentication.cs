@@ -1,9 +1,8 @@
-using System.Collections.Generic;
-
 namespace PSOpenAD
 {
     public enum AuthenticationMethod
     {
+        Default,
         Anonymous,
         Simple,
         Negotiate,
@@ -29,11 +28,5 @@ namespace PSOpenAD
             SupportsCB = supportsCB;
             Details = details;
         }
-    }
-
-    internal static class ClientAuthentication
-    {
-        // Populated by OnImport
-        public static List<AuthenticationProvider> Providers = new List<AuthenticationProvider>();
     }
 }

@@ -1,7 +1,7 @@
 ---
 external help file: PSOpenAD.dll-Help.xml
 Module Name: PSOpenAD
-online version: github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADAuthSupport.md
+online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADAuthSupport.md
 schema: 2.0.0
 ---
 

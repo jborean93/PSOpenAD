@@ -1,7 +1,7 @@
 ---
 external help file: PSOpenAD.dll-Help.xml
 Module Name: PSOpenAD
-online version: github.com/jborean93/PSOpenAD/blob/main/docs/en-US/New-OpenADSession.md
+online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/New-OpenADSession.md
 schema: 2.0.0
 ---
 
@@ -14,45 +14,114 @@ Creates an authenticated connection to an LDAP/AD host.
 
 ### ComputerName (Default)
 ```
-New-OpenADSession [-ComputerName] <String> [-Port <Int32>] [-UseSSL] [-StartTLS] [-Credential <PSCredential>]
- [-Authentication <AuthenticationMethod>] [-NoEncryption] [-NoSigning] [-NoChannelBinding]
- [-SkipCertificateCheck] [<CommonParameters>]
+New-OpenADSession [-ComputerName] <String> [-Port <Int32>] [-UseSSL] [-Credential <PSCredential>]
+ [-AuthType <AuthenticationMethod>] [-StartTLS] [-SessionOption <OpenADSessionOptions>] [<CommonParameters>]
 ```
 
 ### Uri
 ```
-New-OpenADSession [-Uri] <Uri> [-StartTLS] [-Credential <PSCredential>]
- [-Authentication <AuthenticationMethod>] [-NoEncryption] [-NoSigning] [-NoChannelBinding]
- [-SkipCertificateCheck] [<CommonParameters>]
+New-OpenADSession [-Uri] <Uri> [-Credential <PSCredential>] [-AuthType <AuthenticationMethod>] [-StartTLS]
+ [-SessionOption <OpenADSessionOptions>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
 Connects and authenticates the client to an LDAP/AD host.
 The session created can then be used by other cmdlets to get/set data from the LDAP connection.
+When creating an `OpenAD` session, PowerShell will:
+
++ Open a connection to the endpoint configured
+
++ Optionally perform the `StartTLS` bind if `-StartTLS` is specified.
+
++ Bind/authenticate the client with the method specified
+
++ Get the default naming context from the Root DSE used for subsequent queries on that connection
+
++ Get the schema attribute information used to parse the raw data returned by the server
+
+When the session is no longer needed, dispose of the connection using `Remove-OpenADSession`.
 
 ## EXAMPLES
 
-### Example 1
+### Example 1: Create a session using the defaults
 ```powershell
-PS C:\> {{ Add example code here }}
+PS C:\> $session = New-OpenADSession -ComputerName dc01.domain.test
 ```
 
-{{ Add example description here }}
+Creates an `OpenAD` session to the domain controller at `dc01.domain.test`.
+
+### Example 2: Create a session with explicit credentials
+```powershell
+PS C:\> $cred = Get-Credential
+PS C:\> $session = New-OpenADSession -ComputerName dc01 -Credential $cred
+```
+
+Creates an `OpenAD` session to the domain controller at `dc01` using the credentials specified.
+
+### Example 3: Create a connection with SIMPLE auth and StartTLS
+```powershell
+PS C:\> $cred = Get-Credential
+PS C:\> $session = New-OpenADSession -ComputerName dc -AuthType Simple -StartTLS -Credential $cred
+```
+
+Creates an `OpenAD` session and upgrades the connection using `StartTLS`.
+Once the TLS handshake occurs the user is authenticated using the credentials specified.
+Because `StartTLS` is used, the SIMPLE auth exchange is encrypted and the credentials are not exposed on the network.
+
+### Example 4: Create an LDAPS connection
+```powershell
+PS C:\> $session = New-OpenADSession -ComputerName dc -UseSSL
+```
+
+Creates an `OpenAD` session using LDAPS.
+
+### Example 5: Create a connection as an anonymous user
+```powershell
+PS C:\> $session = New-OpenADSession -ComputerName dc -AuthType Anonymous
+```
+
+Creates an `OpenAD` session as an anonymous user.
+An anonymous user is typically limited in what it can do on the remote host.
 
 ## PARAMETERS
 
-### -Authentication
-The authentication method to use.
-The default is `Simple` auth which sends the credentials in plaintext and should only be used with `LDAPS` or `-StartTLS`.
-The `Negotiate` or `Kerberos` auth require both an install of SASL and GSSAPI on the client, use `Get-OpenADAuthSupport` to learn more.
-The `-Credential` parameter must be used when using `Simple` auth.
-The `-Credential` parameter is optional if using `Kerberos` or `Negotiate` auth as it will attempt to use the cached Kerberos ticket if available.
+### -AuthType
+The authentication type to use when authenticating the user.
+The available options are:
+
++ `Default` - The default auth type used when one isn't explicitly defined
+
++ `Anonymous` - No credentials are used, the user is treated as an anonymous user on the server
+
++ `Simple` - Like HTTP Basic auth, the credentials are sent in plaintext to the server
+
++ `Kerberos` - Uses the SASL `GSSAPI` mech which is configured for Kerberos authentication
+
++ `Negotiate` - Uses the SASL `GSS-SPNEGO` mech which is configured for SPNEGO/Negotiate authentication
+
+The `Default` auth type will attempt to use `Negotiate` if it's available on the client.
+If it is not then it will fallback to `Simple` if both a credential is provided and TLS is used on the connection.
+Finally it falls back to `Anonymous` auth if all else fails.
+
+The `Anonymous` and `Simple` auth types are always available as the functionality is builtin to the LDAP client.
+When using `Simple` you should always use LDAPS or specify `-StartTLS` to encrypt the data.
+Failure to do so will expose both the username and password in plaintext on the network.
+
+The `Kerberos` and `Negotiate` options both rely on a few factors before they are ready to use:
+
++ A SASL provider is installed and OpenLDAP is configured to use it
+
++ The GSSAPI libraries are installed so the module can get and manage the credentials used
+
++ The version of OpenLDAP and the SASL implementation is new enough to support GSSAPI authentication
+
+Use `Get-OpenADAuthSupport` to get more information around authentication.
+
 
 ```yaml
 Type: AuthenticationMethod
 Parameter Sets: (All)
 Aliases:
-Accepted values: Anonymous, Simple, Negotiate, Kerberos
 
 Required: False
 Position: Named
@@ -62,7 +131,7 @@ Accept wildcard characters: False
 ```
 
 ### -ComputerName
-The host to connect to.
+The LDAP/AD host to connect to.
 
 ```yaml
 Type: String
@@ -78,59 +147,10 @@ Accept wildcard characters: False
 
 ### -Credential
 The username and password to authenticate with.
-This is optional if using `-Authentication Kerberos|Negotiate` and there is an available cached Kerberos ticket.
+This is only required when using `-AuthType Simple` other mechanisms can still use explicit credentials but can also rely on system wide caches, like `kinit`.
 
 ```yaml
 Type: PSCredential
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NoChannelBinding
-Disable channel binding when connecting over LDAPS or using `-StartTLS`.
-This should only be used for compatibility support.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NoEncryption
-Disable `Negotiate` or `Kerberos` encryption when connecting over LDAP.
-The authentication token will still be secure but subsequent communication will only be signed and not encrypted allowing others to see the traffic.
-The `-Authentication Negotiate` option must also set `-NoSigning` to disable encryption.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NoSigning
-Disable `Negotiate` or `Kerberos` signatures when connecting over LDAP.
-This must be combined with `-NoEncryption` as encryption takes priority over signing.
-
-```yaml
-Type: SwitchParameter
 Parameter Sets: (All)
 Aliases:
 
@@ -157,11 +177,12 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -SkipCertificateCheck
-Skip certificate verification when using LDAPS or `-StartTLS`.
+### -SessionOption
+Advanced sessions options to use when creating the connection.
+These session options can be generated by `New-OpenADSessionOption`.
 
 ```yaml
-Type: SwitchParameter
+Type: OpenADSessionOptions
 Parameter Sets: (All)
 Aliases:
 
@@ -175,6 +196,7 @@ Accept wildcard characters: False
 ### -StartTLS
 Use `StartTLS` over a standard LDAP connection.
 This is used to encrypt data sent over an LDAP connection.
+Either `StartTLS` or an LDAPS connection should be used when `-AuthType Simple` to ensure the data exchanged is encrypted and the server's identity is verified.
 
 ```yaml
 Type: SwitchParameter
@@ -190,7 +212,7 @@ Accept wildcard characters: False
 
 ### -Uri
 Connect using the full LDAP URI.
-This can be used instead of `-ComputerName`, `-Port`, and `-UseSSL`.
+This is mutually exclusive with the `-ComputerName`, `-Port`, and `-UseSSL` options.
 
 ```yaml
 Type: Uri
@@ -206,6 +228,7 @@ Accept wildcard characters: False
 
 ### -UseSSL
 Connect over LDAPS rather than standard LDAP.
+Either `StartTLS` or an LDAPS connection should be used when `-AuthType Simple` to ensure the data exchanged is encrypted and the server's identity is verified.
 
 ```yaml
 Type: SwitchParameter
@@ -233,7 +256,7 @@ The LDAP/AD server name to connect to.
 ## OUTPUTS
 
 ### PSOpenAD.OpenADSession
-The connected AD session that can be used for subsequent operations of that host. This object contains the following properties:
+The connected AD session that can be used as an explicit connection on the various `OpenAD` cmdlets. This object contains the following properties:
 
 + `Uri`: The full URI used to connect to the host
 
@@ -242,6 +265,8 @@ The connected AD session that can be used for subsequent operations of that host
 + `IsSigned`: Whether the data on this connection will be signed
 
 + `IsEncrypted`: Whether the data on this connection will be encrypted
+
++ `DefaultNamingContext`: The default naming context of the connected LDAP host used as the search base for future queries
 
 + `IsClosed`: Whether the session is closed or not.
 

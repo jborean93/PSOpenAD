@@ -5,23 +5,23 @@ namespace PSOpenAD.Native
 {
     internal static partial class Helpers
     {
-        [StructLayout(LayoutKind.Sequential)]
-        public struct sasl_interact
-        {
-            public SaslCallbackId id;
-            public string challenge;
-            public string prompt;
-            public string defresult;
-            public IntPtr result;
-            public int len;
-        }
+        // [StructLayout(LayoutKind.Sequential)]
+        // public struct sasl_interact
+        // {
+        //     public SaslCallbackId id;
+        //     public string challenge;
+        //     public string prompt;
+        //     public string defresult;
+        //     public IntPtr result;
+        //     public int len;
+        // }
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct sasl_secret
-        {
-            public int len;
-            public IntPtr data;
-        }
+        // [StructLayout(LayoutKind.Sequential)]
+        // public struct sasl_secret
+        // {
+        //     public int len;
+        //     public IntPtr data;
+        // }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct client_sasl_mechanism
@@ -96,11 +96,15 @@ namespace PSOpenAD.Native
             [MarshalAs(UnmanagedType.FunctionPtr)] sasl_client_info_callback_t info_cb,
             IntPtr info_cb_rock);
 
+        /// <summary>Initializes SASL.</summary>
         public static void ClientInit()
         {
             sasl_client_init(IntPtr.Zero);
         }
 
+        /// <summary>Get information about each registered SASL client plugin.</summary>
+        /// <param name="mechs">Space separated list of mechs to lookup.</param>
+        /// <param name="callback">The callback that is run for every mech reported by SASL.</param>
         public static void ClientPluginInfo(string mechs, ClientInfoCallback callback)
         {
             int res = sasl_client_plugin_info(mechs,
@@ -120,40 +124,41 @@ namespace PSOpenAD.Native
     {
         internal int SaslInteractProc(IntPtr ldap, int flags, IntPtr defaults, IntPtr interact)
         {
-            IntPtr ptr = interact;
-            while (true)
-            {
-                Helpers.sasl_interact callback = Marshal.PtrToStructure<Helpers.sasl_interact>(ptr);
-                if (callback.id == SaslCallbackId.SASL_CB_LIST_END)
-                    break;
+            // We don't use the prompts for any SASL mech, currently we only care that PromptDone() is called.
+            // IntPtr ptr = interact;
+            // while (true)
+            // {
+            //     Helpers.sasl_interact callback = Marshal.PtrToStructure<Helpers.sasl_interact>(ptr);
+            //     if (callback.id == SaslCallbackId.SASL_CB_LIST_END)
+            //         break;
 
-                int resultOffset = (int)Marshal.OffsetOf<Helpers.sasl_interact>("result");
-                int lenOffset = (int)Marshal.OffsetOf<Helpers.sasl_interact>("len");
-                string val;
-                switch (callback.id)
-                {
-                    case SaslCallbackId.SASL_CB_USER:
-                        val = GetUser();
-                        Marshal.WriteIntPtr(ptr, resultOffset, Marshal.StringToHGlobalAnsi(val));
-                        Marshal.WriteInt32(ptr, lenOffset, val.Length);
-                        break;
-                    case SaslCallbackId.SASL_CB_AUTHNAME:
-                        val = GetAuthName();
-                        break;
-                    case SaslCallbackId.SASL_CB_PASS:
-                        val = ""; // sasl_secret
-                        break;
-                    case SaslCallbackId.SASL_CB_GETREALM:
-                        val = GetRealm();
-                        break;
-                    // SASL_CB_ECHOPROMPT
-                    // SASL_CB_NOECHOPROMPT
-                    default:
-                        throw new NotImplementedException();
-                }
+            //     int resultOffset = (int)Marshal.OffsetOf<Helpers.sasl_interact>("result");
+            //     int lenOffset = (int)Marshal.OffsetOf<Helpers.sasl_interact>("len");
+            //     string val;
+            //     switch (callback.id)
+            //     {
+            //         case SaslCallbackId.SASL_CB_USER:
+            //             val = GetUser();
+            //             Marshal.WriteIntPtr(ptr, resultOffset, Marshal.StringToHGlobalAnsi(val));
+            //             Marshal.WriteInt32(ptr, lenOffset, val.Length);
+            //             break;
+            //         case SaslCallbackId.SASL_CB_AUTHNAME:
+            //             val = GetAuthName();
+            //             break;
+            //         case SaslCallbackId.SASL_CB_PASS:
+            //             val = ""; // sasl_secret
+            //             break;
+            //         case SaslCallbackId.SASL_CB_GETREALM:
+            //             val = GetRealm();
+            //             break;
+            //         // SASL_CB_ECHOPROMPT
+            //         // SASL_CB_NOECHOPROMPT
+            //         default:
+            //             throw new NotImplementedException();
+            //     }
 
-                ptr = IntPtr.Add(ptr, Marshal.SizeOf(typeof(Helpers.sasl_interact)));
-            }
+            //     ptr = IntPtr.Add(ptr, Marshal.SizeOf(typeof(Helpers.sasl_interact)));
+            // }
 
             PromptDone();
 
@@ -171,27 +176,27 @@ namespace PSOpenAD.Native
         public virtual void PromptDone() { }
     }
 
-    internal enum SaslCallbackId
-    {
-        SASL_CB_LIST_END = 0,
-        SASL_CB_GETOPT = 1,
-        SASL_CB_LOG = 2,
-        SASL_CB_GETPATH = 3,
-        SASL_CB_VERIFYFILE = 4,
-        SASL_CB_GETCONFPATH = 5,
-        SASL_CB_USER = 0x4001,
-        SASL_CB_AUTHNAME = 0x4002,
-        SASL_CB_LANGUAGE = 0x4003,
-        SASL_CB_PASS = 0x4004,
-        SASL_CB_ECHOPROMPT = 0x4005,
-        SASL_CB_NOECHOPROMPT = 0x4006,
-        SASL_CB_CNONCE = 0x4007,
-        SASL_CB_GETREALM = 0x4008,
-        SASL_CB_PROXY_POLICY = 0x8001,
-        SASL_CB_SERVER_USERDB_CHECKPASS = 0x8005,
-        SASL_CB_SERVER_USERDB_SETPASS = 0x8006,
-        SASL_CB_CANON_USER = 0x8007,
-    }
+    // internal enum SaslCallbackId
+    // {
+    //     SASL_CB_LIST_END = 0,
+    //     SASL_CB_GETOPT = 1,
+    //     SASL_CB_LOG = 2,
+    //     SASL_CB_GETPATH = 3,
+    //     SASL_CB_VERIFYFILE = 4,
+    //     SASL_CB_GETCONFPATH = 5,
+    //     SASL_CB_USER = 0x4001,
+    //     SASL_CB_AUTHNAME = 0x4002,
+    //     SASL_CB_LANGUAGE = 0x4003,
+    //     SASL_CB_PASS = 0x4004,
+    //     SASL_CB_ECHOPROMPT = 0x4005,
+    //     SASL_CB_NOECHOPROMPT = 0x4006,
+    //     SASL_CB_CNONCE = 0x4007,
+    //     SASL_CB_GETREALM = 0x4008,
+    //     SASL_CB_PROXY_POLICY = 0x8001,
+    //     SASL_CB_SERVER_USERDB_CHECKPASS = 0x8005,
+    //     SASL_CB_SERVER_USERDB_SETPASS = 0x8006,
+    //     SASL_CB_CANON_USER = 0x8007,
+    // }
 
     internal enum SaslCallbackStage
     {

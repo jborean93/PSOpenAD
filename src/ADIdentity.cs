@@ -42,7 +42,7 @@ namespace PSOpenAD
         {
             filter = "";
 
-            if (Regex.Match(value, @"^((CN=([^,]*)),)?((((?:CN|OU)=[^,]+,?)+),)?((DC=[^,]+,?)+)$").Success)
+            if (Regex.Match(value, "^((CN=([^,]*)),)?((((?:CN|OU)=[^,]+,?)+),)?((DC=[^,]+,?)+)$").Success)
             {
                 filter = $"(distinguishedName={value})";
                 return true;
