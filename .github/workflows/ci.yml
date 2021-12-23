@@ -67,9 +67,9 @@ jobs:
       run: |
         $manifestItem = Get-Item ([IO.Path]::Combine('module', '*.psd1'))
         $moduleName = $manifestItem.BaseName
-        $manifest = Test-ModuleManifest -Path $manifestItem.FullName -ErrorAction Stop -WarningAction Ignore
+        $manifest = Import-PowerShellDataFile -Path $manifestItem.FullName -ErrorAction Stop
 
-        $destPath = [IO.Path]::Combine('output', $moduleName, $manifest.Version)
+        $destPath = [IO.Path]::Combine('output', $moduleName, $manifest.ModuleVersion)
         if (-not (Test-Path -LiteralPath $destPath)) {
             New-Item -Path $destPath -ItemType Directory | Out-Null
         }
