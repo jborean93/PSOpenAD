@@ -252,7 +252,12 @@ namespace PSOpenAD
             // Attempt to get the default naming context.
             Dictionary<string, string[]> rootInfo = LdapQuery(ldap, "", LDAPSearchScope.LDAP_SCOPE_BASE, null,
                 new string[] { "defaultNamingContext", "subschemaSubentry" });
-            string defaultNamingContext = rootInfo["defaultNamingContext"][0];
+
+            // While AD should have this some LDAP servers do not, just try with no base value.
+            string defaultNamingContext = "";
+            if (rootInfo.ContainsKey("defaultNamingContext"))
+                defaultNamingContext = (rootInfo["defaultNamingContext"] ?? new string[] { "" })[0];
+
             string subschemaSubentry = rootInfo["subschemaSubentry"][0];
 
             // Attempt to get the schema info of the host so the code can parse the raw LDAP attribute values into the

@@ -88,6 +88,10 @@ namespace PSOpenAD
                     continue;
                 }
 
+                /*
+                OIDs under 1.3.6.1.4.1.1466.115.121.1 are defined in RFC 4517 3.3
+                https://datatracker.ietf.org/doc/html/rfc4517#section-3.3
+                */
                 switch (attrInfo?.Syntax)
                 {
                     case "1.2.840.113556.1.4.903": // DNWithOctetString
@@ -114,9 +118,6 @@ namespace PSOpenAD
                         processed.Add(ParseDateTimeValue(val));
                         break;
 
-                    case "1.3.6.1.4.1.1466.115.121.1.26": // IA5String
-                        throw new NotImplementedException("IA5String");
-
                     case "1.3.6.1.4.1.1466.115.121.1.27": // INTEGER
                         processed.Add(Int32.Parse(ParseStringValue(val)));
                         break;
@@ -135,14 +136,13 @@ namespace PSOpenAD
                     case "1.3.6.1.4.1.1466.115.121.1.43": // PresentationAddress
                         throw new NotImplementedException("PresentationAddress");
 
-                    case "1.3.6.1.4.1.1466.115.121.1.44": // PrintableString
-                        throw new NotImplementedException("PrintableString");
-
                     case "1.3.6.1.4.1.1466.115.121.1.53": // UTCTime
                         throw new NotImplementedException("UTCTime");
 
                     case "1.3.6.1.4.1.1466.115.121.1.12": // DN
                     case "1.3.6.1.4.1.1466.115.121.1.15": // DirectoryString
+                    case "1.3.6.1.4.1.1466.115.121.1.26": // IA5String
+                    case "1.3.6.1.4.1.1466.115.121.1.44": // PrintableString
                     default:
                         processed.Add(ParseStringValue(val));
                         break;

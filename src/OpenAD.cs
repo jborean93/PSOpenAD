@@ -21,10 +21,10 @@ namespace PSOpenAD
 
         public OpenADObject(Dictionary<string, object?> attributes)
         {
-            DistinguishedName = (string?)attributes["distinguishedName"] ?? "";
-            Name = (string?)attributes["name"] ?? "";
-            ObjectClass = ((object[]?)attributes["objectClass"] ?? new string[] { "" }).Cast<string>().ToArray()[0];
-            ObjectGuid = (Guid?)attributes["objectGUID"] ?? Guid.Empty;
+            DistinguishedName = (string?)attributes.GetValueOrDefault("distinguishedName", null) ?? "";
+            Name = (string?)attributes.GetValueOrDefault("name", null) ?? "";
+            ObjectClass = ((object[]?)attributes["objectClass"] ?? new string[] { "" }).Cast<string>().Last();
+            ObjectGuid = (Guid?)attributes.GetValueOrDefault("objectGUID", null) ?? Guid.Empty;
         }
 
         internal static (string, bool)[] ExtendPropertyList((string, bool)[] existing, (string, bool)[] toAdd)
