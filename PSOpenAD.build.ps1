@@ -161,25 +161,9 @@ task DoTest {
     }
 }
 
-task DoInstall {
-    $installBase = $Home
-    if ($profile) {
-        $installBase = $profile | Split-Path
-    }
-
-    $installPath = [IO.Path]::Combine($installBase, 'Modules', $ModuleName, $Version)
-    if (-not (Test-Path $installPath)) {
-        New-Item $installPath -ItemType Directory | Out-Null
-    }
-
-    Copy-Item -Path ([IO.Path]::Combine($ReleasePath, '*')) -Destination $installPath -Force -Recurse
-}
-
 task Build -Jobs Clean, BuildManaged, CopyToRelease, BuildDocs, Package
 
 # FIXME: Work out why we need the obj and bin folder for coverage to work
-task Test -Jobs BuildManaged, Analyze, DoTest
-
-task Install -Jobs DoInstall
+task Test -Jobs Analyze, DoTest
 
 task . Build

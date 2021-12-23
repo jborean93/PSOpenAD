@@ -6,7 +6,7 @@ param(
     $Configuration = 'Debug',
 
     [Parameter()]
-    [string]
+    [string[]]
     $Task = 'Build'
 )
 
