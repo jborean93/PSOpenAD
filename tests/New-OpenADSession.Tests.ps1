@@ -3,7 +3,8 @@ BeforeAll {
 }
 
 Describe "New-OpenADSession" {
-    It "Runs test" {
-        "a" | Should -Be "a"
+    It "Creates a session using default credentials" {
+        $s = New-OpenADSession -ComputeName $env:PSOPENAD_DC -Verbose
+        $s | Remove-OpenADSession
     }
 }

@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 IMAGE=${1}
 if [[ -z "${IMAGE}" ]]; then
@@ -66,10 +66,11 @@ $DOCKER_BIN run \
   --network "${NETWORK_NAME}" \
   --network-alias app \
   --network-alias "app.${REALM,,}" \
-  "${IMAGE}" /bin/bash -ex -c 'source /dev/stdin' << 'EOF'
+  "${IMAGE}" /bin/bash -e -c 'source /dev/stdin' << 'EOF'
 
 source ./tools/lib.sh
 
 lib::setup::system_requirements
+lib::setup::gssapi
 lib::tests::run
 EOF
