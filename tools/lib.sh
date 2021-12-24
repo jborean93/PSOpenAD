@@ -36,9 +36,8 @@ lib::tests::run() {
         echo "::group::Running Tests"
     fi
 
-    # TODO: Figure out a way to check the DC is online, the Docker network seems to accept the connection even if it's
-    # not online yet.
-    # pwsh -NoProfile -NoLogo -File ./tools/WaitSocket.ps1 -TargetHost dc.psopenad.test -Port 389 -Timeout 60000
+    # Wait for the DC to have been created and is ready for connections
+    pwsh -NoProfile -NoLogo -File ./tools/WaitSocket.ps1 -TargetHost dc.psopenad.test -Port 389 -Timeout 60000
 
     pwsh -File ./build.ps1 -Configuration "${BUILD_CONFIGURATION:-Debug}" -Task Test
 

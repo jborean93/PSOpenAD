@@ -12,15 +12,21 @@ param (
     $Timeout = 0
 )
 
+$start = Get-Date
 
-$client = [System.Net.Sockets.TcpClient]::new()
+while ($true) {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $connectTask = $client.ConnectAsync($TargetHost, $Port)
+    while (-not $connectTask.AsyncWaitHandle.WaitOne(200)) {}
 
-$currentWait = 0
-$connectTask = $client.ConnectAsync($TargetHost, $Port)
-while (-not $connectTask.AsyncWaitHandle.WaitOne(200)) {
-    $currentWait += 200
-
-    if ($Timeout -ne 0 -and $currentWait -gt $Timeout) {
-        throw "Timed out waiting for $($TargetHost):$Port"
+    try {
+        $connectTask.GetAwaiter().GetResult()
+        break
+    }
+    catch {
+        $end = (Get-Date) - $start
+        if ($Timeout -ne 0 -and $end.TotalMilliseconds -gt $Timeout) {
+            throw "Timed out waiting for connection $($TargetHost):$($Port)"
+        }
     }
 }
