@@ -8,6 +8,16 @@ namespace PSOpenAD.Native
     internal static partial class Helpers
     {
         [StructLayout(LayoutKind.Sequential)]
+        public struct gss_channel_bindings_struct
+        {
+            public int initiator_addrtype;
+            public gss_buffer_desc initiator_address;
+            public int acceptor_addrtype;
+            public gss_buffer_desc acceptor_address;
+            public gss_buffer_desc application_data;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct gss_OID_set_desc
         {
             public IntPtr count;
@@ -29,7 +39,7 @@ namespace PSOpenAD.Native
         }
     }
 
-    internal class GssapiCredential : IDisposable
+    internal class GssapiCredential
     {
         public SafeGssapiCred Creds { get; }
         public UInt32 TimeToLive { get; }
@@ -56,13 +66,27 @@ namespace PSOpenAD.Native
                 }
             }
         }
+    }
 
-        public void Dispose()
+    internal class GssapiSecContext
+    {
+        public SafeGssapiSecContext Context { get; }
+        public byte[] MechType { get; }
+        public byte[] OutputToken { get; }
+        public GssapiContextFlags Flags { get; }
+        public Int32 TimeToLive { get; }
+        public bool MoreNeeded { get; }
+
+        public GssapiSecContext(SafeGssapiSecContext context, byte[] mechType, byte[] outputToken,
+            GssapiContextFlags flags, int ttl, bool moreNeeded)
         {
-            Creds.Dispose();
-            GC.SuppressFinalize(this);
+            Context = context;
+            MechType = mechType;
+            OutputToken = outputToken;
+            Flags = flags;
+            TimeToLive = ttl;
+            MoreNeeded = moreNeeded;
         }
-        ~GssapiCredential() => Dispose();
     }
 
     internal static class GSSAPI
@@ -70,6 +94,10 @@ namespace PSOpenAD.Native
         public const string LIB_GSSAPI = "PSOpenAD.libgssapi";
 
         // Name Types
+        public static byte[] GSS_C_NT_HOSTBASED_SERVICE = new byte[] {
+            0x2A, 0x86, 0x48, 0x86, 0xF7, 0x12, 0x01, 0x02, 0x01, 0x04
+        }; // 1.2.840.113554.1.2.1.4
+
         public static byte[] GSS_C_NT_USER_NAME = new byte[] {
             0x2A, 0x86, 0x48, 0x86, 0xF7, 0x12, 0x01, 0x02, 0x01, 0x01
         }; // 1.2.840.113554.1.2.1.1
@@ -123,6 +151,12 @@ namespace PSOpenAD.Native
             out SafeGssapiOidSet target_set);
 
         [DllImport(LIB_GSSAPI)]
+        public static extern int gss_delete_sec_context(
+            out int min_stat,
+            ref IntPtr context,
+            IntPtr output_token);
+
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_display_status(
             out int min_status,
             int status_value,
@@ -139,19 +173,40 @@ namespace PSOpenAD.Native
             out SafeGssapiName output_name);
 
         [DllImport(LIB_GSSAPI)]
+        public static extern int gss_init_sec_context(
+            out int minor_status,
+            SafeGssapiCred cred_handle,
+            ref SafeGssapiSecContext context_handle,
+            SafeHandle target_name,
+            SafeHandle mech_type,
+            GssapiContextFlags req_flags,
+            int time_req,
+            SafeHandle input_chan_bindings,
+            SafeHandle input_token,
+            ref IntPtr actual_mech_type,
+            ref Helpers.gss_buffer_desc output_token,
+            out GssapiContextFlags ret_flags,
+            out int time_rec);
+
+        [DllImport(LIB_GSSAPI)]
+        public static extern int gss_release_buffer(
+            out int min_stat,
+            ref Helpers.gss_buffer_desc buffer);
+
+        [DllImport(LIB_GSSAPI)]
         public static extern int gss_release_cred(
             out int min_stat,
-            IntPtr creds);
+            ref IntPtr creds);
 
         [DllImport(LIB_GSSAPI)]
         public static extern int gss_release_name(
             out int min_stat,
-            IntPtr name);
+            ref IntPtr name);
 
         [DllImport(LIB_GSSAPI)]
         public static extern int gss_release_oid_set(
             out int min_stat,
-            IntPtr target_set);
+            ref IntPtr target_set);
 
         [DllImport(LIB_GSSAPI)]
         public static extern int gss_set_cred_option(
@@ -159,6 +214,34 @@ namespace PSOpenAD.Native
             SafeGssapiCred cred,
             SafeHandle desired_object,
             ref Helpers.gss_buffer_desc value);
+
+        [DllImport(LIB_GSSAPI)]
+        public static extern int gss_unwrap(
+            out int minor_status,
+            SafeGssapiSecContext context_handle,
+            ref Helpers.gss_buffer_desc input_message,
+            ref Helpers.gss_buffer_desc output_message,
+            out int conf_state,
+            out int qop_state);
+
+        [DllImport(LIB_GSSAPI)]
+        public static extern int gss_wrap(
+            out int minor_status,
+            SafeGssapiSecContext context_handle,
+            int conf_req,
+            int qop_req,
+            ref Helpers.gss_buffer_desc input_message,
+            out int conf_state,
+            ref Helpers.gss_buffer_desc output_message);
+
+        [DllImport(LIB_GSSAPI)]
+        public static extern int gss_wrap_size_limit(
+            out int minor_status,
+            SafeGssapiSecContext context_handle,
+            int conf_req,
+            int qop_req,
+            UInt32 size_req,
+            out UInt32 max_size);
 
         /// <summary>Acquire GSSAPI credential</summary>
         /// <param name="name">The principal to get the cred for, if null the default principal is used.</param>
@@ -217,7 +300,7 @@ namespace PSOpenAD.Native
             int messageContext = 0;
 
             using SafeMemoryBuffer mechOid = OIDBuffer(mech);
-            StringBuilder msg = new StringBuilder();
+            List<string> lines = new List<string>();
             while (true)
             {
                 int contextValue = messageContext;
@@ -232,13 +315,13 @@ namespace PSOpenAD.Native
 
                 string? status = Marshal.PtrToStringUTF8(msgBuffer.value, (int)msgBuffer.length);
                 if (!String.IsNullOrEmpty(status))
-                    msg.Append(status);
+                    lines.Add(status);
 
                 if (contextValue == 0)
                     break;
             }
 
-            return msg.ToString();
+            return String.Join(". ", lines);
         }
 
         /// <summary>Create a GSSAPI name object.</summary>
@@ -257,6 +340,62 @@ namespace PSOpenAD.Native
             return outputName;
         }
 
+        public static GssapiSecContext InitSetContext(SafeGssapiCred? cred, SafeGssapiSecContext? context,
+            SafeGssapiName targetName, byte[]? mechType, GssapiContextFlags reqFlags, int ttl,
+            Helpers.gss_channel_bindings_struct? chanBindings, byte[]? inputToken)
+        {
+            cred ??= new SafeGssapiCred();
+            context ??= new SafeGssapiSecContext();
+            using SafeMemoryBuffer mechTypeBuffer = OIDBuffer(mechType);
+            using SafeMemoryBuffer chanBindingBuffer = ChannelBindingBuffer(chanBindings);
+            using SafeMemoryBuffer inputTokenBuffer = ByteBuffer(inputToken);
+            Helpers.gss_buffer_desc outputTokenBuffer = new Helpers.gss_buffer_desc();
+            IntPtr actualMechBuffer = IntPtr.Zero;
+
+            int majorStatus = gss_init_sec_context(out var minorStatus, cred, ref context, targetName, mechTypeBuffer,
+                reqFlags, ttl, chanBindingBuffer, inputTokenBuffer, ref actualMechBuffer, ref outputTokenBuffer,
+                out var actualFlags, out var actualTTL);
+
+            if (majorStatus != 0 && majorStatus != 1)
+                throw new GSSAPIException(majorStatus, minorStatus, "gss_init_sec_context");
+
+            try
+            {
+                byte[] actualMechType;
+                if (actualMechBuffer == IntPtr.Zero)
+                {
+                    actualMechType = Array.Empty<byte>();
+                }
+                else
+                {
+                    unsafe
+                    {
+                        var actualMech = (Helpers.gss_OID_desc*)actualMechBuffer.ToPointer();
+                        actualMechType = new byte[actualMech->length];
+                        Marshal.Copy(actualMech->elements, actualMechType, 0, actualMechType.Length);
+                    }
+                }
+
+                byte[] outputToken;
+                if ((int)outputTokenBuffer.length > 0)
+                {
+                    outputToken = new byte[(int)outputTokenBuffer.length];
+                    Marshal.Copy(outputTokenBuffer.value, outputToken, 0, outputToken.Length);
+                }
+                else
+                {
+                    outputToken = Array.Empty<byte>();
+                }
+
+                return new GssapiSecContext(context, actualMechType, outputToken, actualFlags, actualTTL,
+                    majorStatus == 1);
+            }
+            finally
+            {
+                gss_release_buffer(out var minStatus2, ref outputTokenBuffer);
+            }
+        }
+
         /// <summary>Set an option on a GSSAPI credential.</summary>
         /// <param name="cred">The credential to set the option on.</param>
         /// <param name="oid">The credential option to set.</param>
@@ -268,6 +407,105 @@ namespace PSOpenAD.Native
             int majorStatus = gss_set_cred_option(out var minorStatus, cred, objOID, ref valueBuffer);
             if (majorStatus != 0)
                 throw new GSSAPIException(majorStatus, minorStatus, "gss_set_cred_option");
+        }
+
+        public static (byte[], bool, int) Unwrap(SafeGssapiSecContext context, byte[] inputMessage)
+        {
+            Helpers.gss_buffer_desc outputBuffer = new Helpers.gss_buffer_desc();
+            int confState;
+            int qopState;
+
+            unsafe
+            {
+                fixed (byte* p = inputMessage)
+                {
+                    Helpers.gss_buffer_desc inputBuffer = new Helpers.gss_buffer_desc()
+                    {
+                        length = (IntPtr)inputMessage.Length,
+                        value = (IntPtr)p,
+                    };
+                    int majorStatus = gss_unwrap(out var minorStatus, context, ref inputBuffer, ref outputBuffer,
+                        out confState, out qopState);
+                    if (majorStatus != 0)
+                        throw new GSSAPIException(majorStatus, minorStatus, "gss_unwrap");
+                }
+            }
+
+            try
+            {
+                byte[] output = new byte[(int)outputBuffer.length];
+                Marshal.Copy(outputBuffer.value, output, 0, output.Length);
+
+                return (output, confState == 1, qopState);
+            }
+            finally
+            {
+                gss_release_buffer(out var _, ref outputBuffer);
+            }
+        }
+
+        public static (byte[], bool) Wrap(SafeGssapiSecContext context, bool confRequired, int qopReq,
+            byte[] inputMessage)
+        {
+            Helpers.gss_buffer_desc outputBuffer = new Helpers.gss_buffer_desc();
+            int confState;
+
+            unsafe
+            {
+                fixed (byte* p = inputMessage)
+                {
+                    Helpers.gss_buffer_desc inputBuffer = new Helpers.gss_buffer_desc()
+                    {
+                        length = (IntPtr)inputMessage.Length,
+                        value = (IntPtr)p,
+                    };
+                    int majorStatus = gss_wrap(out var minorStatus, context, confRequired ? 1 : 0, qopReq, ref inputBuffer,
+                        out confState, ref outputBuffer);
+                    if (majorStatus != 0)
+                        throw new GSSAPIException(majorStatus, minorStatus, "gss_unwrap");
+                }
+            }
+
+            try
+            {
+                byte[] output = new byte[(int)outputBuffer.length];
+                Marshal.Copy(outputBuffer.value, output, 0, output.Length);
+
+                return (output, confState == 1);
+            }
+            finally
+            {
+                gss_release_buffer(out var _, ref outputBuffer);
+            }
+        }
+
+        public static UInt32 WrapSizeLimit(SafeGssapiSecContext context, bool confReq, int qopReq, UInt32 size)
+        {
+            int majorStatus = gss_wrap_size_limit(out var minorStatus, context, confReq ? 1 : 0, qopReq, size,
+                out var maxSize);
+            if (majorStatus != 0)
+                throw new GSSAPIException(majorStatus, minorStatus, "gss_wrap_size_limit");
+
+            return maxSize;
+        }
+
+        private static SafeMemoryBuffer ChannelBindingBuffer(Helpers.gss_channel_bindings_struct? bindings)
+        {
+            if (bindings == null)
+                return new SafeMemoryBuffer();
+
+            SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.gss_channel_bindings_struct>());
+            try
+            {
+                Marshal.StructureToPtr(bindings, buffer.DangerousGetHandle(), false);
+            }
+            catch
+            {
+                buffer.Dispose();
+                throw;
+            }
+
+            return buffer;
         }
 
         private static SafeGssapiOidSet OIDSetBuffer(List<byte[]> oids)
@@ -298,8 +536,11 @@ namespace PSOpenAD.Native
 
         private static SafeMemoryBuffer OIDBuffer(byte[]? oid)
         {
+            if (oid == null)
+                return new SafeMemoryBuffer();
+
             int structSize = Marshal.SizeOf<Helpers.gss_OID_desc>();
-            int oidLength = oid?.Length ?? 0;
+            int oidLength = oid.Length;
 
             SafeMemoryBuffer nameTypeBuffer = new SafeMemoryBuffer(structSize + oidLength);
             try
@@ -327,20 +568,21 @@ namespace PSOpenAD.Native
             return nameTypeBuffer;
         }
 
-        private static SafeMemoryBuffer StringBuffer(string value)
+        private static SafeMemoryBuffer ByteBuffer(byte[]? value)
         {
-            int structSize = Marshal.SizeOf<Helpers.gss_buffer_desc>();
-            byte[] data = Encoding.UTF8.GetBytes(value);
+            if (value == null)
+                return new SafeMemoryBuffer();
 
-            SafeMemoryBuffer buffer = new SafeMemoryBuffer(structSize + data.Length);
+            int structSize = Marshal.SizeOf<Helpers.gss_buffer_desc>();
+            SafeMemoryBuffer buffer = new SafeMemoryBuffer(structSize + value.Length);
             try
             {
                 Helpers.gss_buffer_desc bufferDesc = new Helpers.gss_buffer_desc()
                 {
-                    length = new IntPtr(data.Length),
+                    length = new IntPtr(value.Length),
                     value = IntPtr.Add(buffer.DangerousGetHandle(), structSize),
                 };
-                Marshal.Copy(data, 0, bufferDesc.value, data.Length);
+                Marshal.Copy(value, 0, bufferDesc.value, value.Length);
                 Marshal.StructureToPtr(bufferDesc, buffer.DangerousGetHandle(), false);
             }
             catch
@@ -350,6 +592,11 @@ namespace PSOpenAD.Native
             }
 
             return buffer;
+        }
+
+        private static SafeMemoryBuffer StringBuffer(string value)
+        {
+            return ByteBuffer(Encoding.UTF8.GetBytes(value));
         }
     }
 
@@ -385,12 +632,39 @@ namespace PSOpenAD.Native
         }
     }
 
+    [Flags]
+    internal enum GssapiContextFlags
+    {
+        GSS_C_DELEG_FLAG = 1,
+        GSS_C_MUTUAL_FLAG = 2,
+        GSS_C_REPLAY_FLAG = 4,
+        GSS_C_SEQUENCE_FLAG = 8,
+        GSS_C_CONF_FLAG = 16,
+        GSS_C_INTEG_FLAG = 32,
+        GSS_C_ANON_FLAG = 64,
+        GSS_C_PROT_READY_FLAG = 128,
+        GSS_C_TRANS_FLAG = 256,
+        GSS_C_DELEG_POLICY_FLAG = 32768,
+    }
+
     internal enum GssapiCredUsage
     {
         GSS_C_BOTH = 0,
         GSS_C_INITIATE = 1,
         GSS_C_ACCEPT = 2,
     }
+
+    // internal class SafeGssapiBuffer : SafeHandle
+    // {
+    //     internal SafeGssapiBuffer() : base(IntPtr.Zero, true) { }
+
+    //     public override bool IsInvalid => handle == IntPtr.Zero;
+
+    //     protected override bool ReleaseHandle()
+    //     {
+    //         return GSSAPI.gss_release_buffer(out var _, handle) == 0;
+    //     }
+    // }
 
     internal class SafeGssapiCred : SafeHandle
     {
@@ -400,7 +674,7 @@ namespace PSOpenAD.Native
 
         protected override bool ReleaseHandle()
         {
-            return GSSAPI.gss_release_cred(out var _, handle) == 0;
+            return GSSAPI.gss_release_cred(out var _, ref handle) == 0;
         }
     }
 
@@ -412,7 +686,7 @@ namespace PSOpenAD.Native
 
         protected override bool ReleaseHandle()
         {
-            return GSSAPI.gss_release_name(out var _, handle) == 0;
+            return GSSAPI.gss_release_name(out var _, ref handle) == 0;
         }
     }
 
@@ -424,10 +698,19 @@ namespace PSOpenAD.Native
 
         protected override bool ReleaseHandle()
         {
-            using SafeMemoryBuffer setPtr = new SafeMemoryBuffer(IntPtr.Size);
-            Marshal.WriteIntPtr(setPtr.DangerousGetHandle(), 0, handle);
+            return GSSAPI.gss_release_oid_set(out var _, ref handle) == 0;
+        }
+    }
 
-            return GSSAPI.gss_release_oid_set(out var _, setPtr.DangerousGetHandle()) == 0;
+    internal class SafeGssapiSecContext : SafeHandle
+    {
+        internal SafeGssapiSecContext() : base(IntPtr.Zero, true) { }
+
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
+        protected override bool ReleaseHandle()
+        {
+            return GSSAPI.gss_delete_sec_context(out var _, ref handle, IntPtr.Zero) == 0;
         }
     }
 }

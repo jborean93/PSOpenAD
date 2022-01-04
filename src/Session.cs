@@ -197,24 +197,24 @@ namespace PSOpenAD
                 // option can be set as the SASL context will have been created.
                 byte[] mech = auth == AuthenticationMethod.Negotiate ? GSSAPI.SPNEGO : GSSAPI.KERBEROS;
 
-                GssapiCredential cred;
+                SafeGssapiCred cred;
                 if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
                 {
                     cmdlet?.WriteVerbose("Getting GSSAPI credential with explicit credentials");
                     using SafeGssapiName name = GSSAPI.ImportName(username, GSSAPI.GSS_C_NT_USER_NAME);
                     cred = GSSAPI.AcquireCredWithPassword(name, password, 0, new List<byte[]> { mech },
-                        GssapiCredUsage.GSS_C_INITIATE);
+                        GssapiCredUsage.GSS_C_INITIATE).Creds;
                 }
                 else if (!string.IsNullOrEmpty(username))
                 {
                     cmdlet?.WriteVerbose("Getting cached GSSAPI credential for explicit user");
                     using SafeGssapiName name = GSSAPI.ImportName(username, GSSAPI.GSS_C_NT_USER_NAME);
-                    cred = GSSAPI.AcquireCred(name, 0, new List<byte[]> { mech }, GssapiCredUsage.GSS_C_INITIATE);
+                    cred = GSSAPI.AcquireCred(name, 0, new List<byte[]> { mech }, GssapiCredUsage.GSS_C_INITIATE).Creds;
                 }
                 else
                 {
                     cmdlet?.WriteVerbose("Getting cached GSSAPI credential");
-                    cred = GSSAPI.AcquireCred(null, 0, new List<byte[]> { mech }, GssapiCredUsage.GSS_C_INITIATE);
+                    cred = GSSAPI.AcquireCred(null, 0, new List<byte[]> { mech }, GssapiCredUsage.GSS_C_INITIATE).Creds;
                 }
 
                 using (cred)
@@ -226,10 +226,10 @@ namespace PSOpenAD
                     if (transportIsTLS)
                     {
                         cmdlet?.WriteVerbose("Disabling GSSAPI integrity/encryption for TLS connection");
-                        GSSAPI.SetCredOption(cred.Creds, GSSAPI.GSS_KRB5_CRED_NO_CI_FLAGS_X);
+                        GSSAPI.SetCredOption(cred, GSSAPI.GSS_KRB5_CRED_NO_CI_FLAGS_X);
                     }
 
-                    GSSAPIPrompter prompter = new GSSAPIPrompter(ldap, cred.Creds);
+                    GSSAPIPrompter prompter = new GSSAPIPrompter(ldap, cred);
                     SaslInteractiveBind(ldap, selectedAuth.NativeId, prompter, cancelToken: cancelToken);
                 }
 

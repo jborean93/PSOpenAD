@@ -1,3 +1,5 @@
+using System;
+using System.Formats.Asn1;
 using System.Management.Automation;
 
 namespace PSOpenAD.Commands
