@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 
 namespace PSOpenAD
@@ -73,20 +72,6 @@ namespace PSOpenAD
                 throw new AsnContentException("ASN.1 content contains too much data to decode");
 
             return data.Length >= (int)length;
-        }
-
-        public static IEnumerable<(Asn1Tag, int, int)> EnumerateSequence(ReadOnlyMemory<byte> data,
-            AsnEncodingRules ruleSet)
-        {
-            int offset = 0;
-            while (offset < data.Length)
-            {
-                Asn1Tag tag = AsnDecoder.ReadEncodedValue(data.Span[offset..], ruleSet, out var contentOffset,
-                    out var contentLength, out var bytesConsumed);
-                offset += bytesConsumed;
-
-                yield return (tag, contentOffset, contentLength);
-            }
         }
     }
 }

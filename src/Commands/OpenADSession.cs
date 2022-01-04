@@ -1,6 +1,7 @@
 using PSOpenAD.LDAP;
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Security.Authentication.ExtendedProtection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -297,6 +298,12 @@ namespace PSOpenAD.Commands
 
             string whoami = Encoding.UTF8.GetString(whoamiResp.Value ?? Array.Empty<byte>());
             Console.WriteLine($"User {whoami}");
+
+            ldap.SearchRequest("", SearchScope.Base, DereferencingPolicy.Never, 0, 0, false, "",
+                new List<string>() { "defaultNamingContext", "subschemaEntry" });
+
+            // Dictionary<string, string[]> rootInfo = LdapQuery(ldap, "", LDAPSearchScope.LDAP_SCOPE_BASE, null,
+            //     new string[] { "defaultNamingContext", "subschemaSubentry" });
 
             ldap.Unbind();
             byte[] unbindData = ldap.DataToSend();

@@ -48,6 +48,33 @@ namespace PSOpenAD.LDAP
             return BindRequest(dn, saslMech: mechanism, saslCred: cred);
         }
 
+        public int SearchRequest(string baseObject, SearchScope scope, DereferencingPolicy derefPolicy, int sizeLimit,
+            int timeLimit, bool typesOnly, string filter, List<string> attributeSelection)
+        {
+            AsnWriter writer = new AsnWriter(AsnEncodingRules.BER);
+            using (AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.Application, 3, true)))
+            {
+                writer.WriteOctetString(Encoding.UTF8.GetBytes(baseObject));
+                writer.WriteEnumeratedValue(scope);
+                writer.WriteEnumeratedValue(derefPolicy);
+                writer.WriteInteger(sizeLimit);
+                writer.WriteInteger(timeLimit);
+                writer.WriteBoolean(typesOnly);
+                writer.WriteOctetString(LDAPWriter.WriteLDAPFilter(filter).Span,
+                    new Asn1Tag(TagClass.Application, 7, false));
+                using (AsnWriter.Scope _2 = writer.PushSequence())
+                {
+                    foreach (string attr in attributeSelection)
+                    {
+                        writer.WriteOctetString(Encoding.UTF8.GetBytes(attr));
+
+                    }
+                }
+            }
+
+            return PutRequest(writer.Encode());
+        }
+
         public int Unbind()
         {
             AsnWriter writer = new AsnWriter(AsnEncodingRules.BER);

@@ -88,6 +88,62 @@ namespace PSOpenAD.LDAP
         }
     }
 
+    internal static class LDAPWriter
+    {
+        public static ReadOnlyMemory<byte> WriteLDAPFilter(string filter,
+            AsnEncodingRules ruleSet = AsnEncodingRules.BER)
+        {
+            if (!(filter.StartsWith("(") && filter.EndsWith(")")))
+                throw new ArgumentException();
+
+            ReadOnlySpan<char> filterSpan = filter.AsSpan().Slice(1, filter.Length - 2);
+            AsnWriter writer = new AsnWriter(ruleSet);
+
+            if (filterSpan[0] == '&' || filterSpan[0] == '|') // and | or
+            {
+                filterSpan = filterSpan.Slice(1);
+                if (!(filterSpan.StartsWith("(") && filterSpan.EndsWith(")")))
+                    throw new ArgumentException();
+
+                int tagValue = filterSpan[0] == '&' ? 0 : 1;
+                using (AsnWriter.Scope _ = writer.PushSetOf(new Asn1Tag(TagClass.ContextSpecific, tagValue, true)))
+                {
+                    while (filterSpan[0] == '(')
+                    {
+                        int endIdx = filterSpan.IndexOf(')');
+                        ReadOnlyMemory<byte> entryValue = WriteLDAPFilter(filterSpan.Slice(0, endIdx).ToString());
+                        writer.WriteEncodedValue(entryValue.Span);
+                        filterSpan = filterSpan.Slice(1, endIdx - 2);
+                    }
+                }
+            }
+            else if (filterSpan[0] == '!') // not
+            {
+                ReadOnlyMemory<byte> subValue = WriteLDAPFilter(filterSpan.Slice(1).ToString());
+                writer.WriteOctetString(subValue.Span, new Asn1Tag(TagClass.ContextSpecific, 2, false));
+            }
+            else // other
+            {
+                // AttributeValueAssertion
+                //  equalityMatch   (3) - (attr=value)
+                //  greaterOrEqual  (5) - (attr>=value)
+                //  lessOrEqual     (6) - (attr<=value)
+                //  approxMatch     (8) - (attr~=value)
+
+                // SubstringFilter
+                //  substrings      (4) - (attr=*) - multiple *'s can be used
+
+                // AttributeDescription
+                //  present         (7) - (attr)
+
+                // MatchingRuleAssertion
+                //  extensibleMatch (9) - () - this is weird and complex
+            }
+
+            return writer.Encode();
+        }
+    }
+
     internal static class LDAPReader
     {
         public static LDAPControl ReadLDAPControl(ReadOnlySpan<byte> data, out int bytesConsumed,

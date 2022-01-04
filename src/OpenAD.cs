@@ -223,6 +223,14 @@ namespace PSOpenAD
         public override string ToString() => $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities);
     }
 
+    public enum DereferencingPolicy
+    {
+        Never,
+        InSearching,
+        FindingBaseObj,
+        Always,
+    }
+
     public enum SearchScope
     {
         Base,
