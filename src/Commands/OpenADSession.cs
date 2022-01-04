@@ -1,10 +1,15 @@
 using PSOpenAD.LDAP;
 using System;
 using System.Buffers;
+using System.Security.Authentication.ExtendedProtection;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.IO;
 using System.IO.Pipelines;
 using System.Management.Automation;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -182,7 +187,8 @@ namespace PSOpenAD.Commands
 
             using (CurrentCancelToken = new CancellationTokenSource())
             {
-                CreateSession(Uri.Host, Uri.Port, CurrentCancelToken.Token, SessionOption).GetAwaiter().GetResult();
+                CreateSession(Uri, Credential, AuthType, StartTLS, SessionOption, CurrentCancelToken.Token, this
+                    ).GetAwaiter().GetResult();
             }
 
             // using (CurrentCancelToken = new CancellationTokenSource())
@@ -209,29 +215,70 @@ namespace PSOpenAD.Commands
             // }
         }
 
-        private async Task CreateSession(string hostname, int port, CancellationToken cancelToken,
-            OpenADSessionOptions sessionOptions)
+        private async Task CreateSession(Uri uri, PSCredential? credential, AuthenticationMethod auth, bool startTLS,
+            OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet = null)
         {
+            cmdlet?.WriteVerbose($"Connecting to LDAP host at {uri}");
             TcpClient client = new TcpClient();
-            Task connectTask = client.ConnectAsync(hostname, port);
+            Task connectTask = client.ConnectAsync(uri.DnsSafeHost, uri.Port);
             if (!connectTask.Wait(10000, cancelToken))
                 throw new TimeoutException();
 
             OpenADConnection connection = new OpenADConnection(client, client.GetStream());
             LDAPSession ldap = new LDAPSession();
 
-            string username = "vagrant-domain@DOMAIN.TEST";
-            string password = "VagrantPass1";
-            string targetSpn = $"ldap@{hostname}";
-
-            if (AuthType == AuthenticationMethod.Kerberos || AuthType == AuthenticationMethod.Negotiate)
+            bool transportIsTLS = false;
+            byte[]? channelBindings = null;
+            if (startTLS || uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
             {
-                bool integrity = !sessionOptions.NoSigning;
-                bool confidentiality = !sessionOptions.NoEncryption;
+                transportIsTLS = true;
 
-                GssapiContext context = new GssapiContext(username, password, AuthType, targetSpn, null, integrity,
-                    confidentiality);
-                string saslMech = AuthType == AuthenticationMethod.Negotiate ? "GSS-SPNEGO" : "GSSAPI";
+                if (sessionOptions.NoEncryption || sessionOptions.NoSigning)
+                    throw new ArgumentException("Cannot disable encryption or signatures for TLS based connection");
+
+                if (startTLS && uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    throw new ArgumentException("Cannot use StartTLS over an LDAPS connection");
+                }
+                else if (startTLS)
+                {
+                    cmdlet?.WriteVerbose("Running StartTLS on the LDAP connection");
+                    ldap.ExtendedRequest("1.3.6.1.4.1.1466.20037"); // StartTLS
+                    await connection.WriteAsync(ldap.DataToSend(), cancelToken);
+
+                    ExtendedResponse extResp = (ExtendedResponse)await connection.ReadAsync(ldap, cancelToken);
+                    if (extResp.Result.ResultCode != LDAPResultCode.Success)
+                        throw new LDAPException(extResp.Result);
+                }
+
+                SslClientAuthenticationOptions authOptions = new SslClientAuthenticationOptions()
+                {
+                    RemoteCertificateValidationCallback = ValidateServerCertificate,
+                    TargetHost = uri.DnsSafeHost,
+                };
+                SslStream tls = new SslStream(connection.IOStream, false);
+                await tls.AuthenticateAsClientAsync(authOptions, cancelToken);
+                connection.IOStream = tls;
+
+                if (!sessionOptions.NoChannelBinding)
+                {
+                    //cmdlet?.WriteVerbose("Attempting to get TLS channel bindings for SASL authentication");
+                    channelBindings = GetTlsChannelBindings(tls);
+                }
+            }
+
+            string username = credential?.UserName ?? "";
+            string password = credential?.GetNetworkCredential().Password ?? "";
+            string targetSpn = $"ldap@{uri.DnsSafeHost}";
+
+            if (auth == AuthenticationMethod.Kerberos || auth == AuthenticationMethod.Negotiate)
+            {
+                bool integrity = !(transportIsTLS || sessionOptions.NoSigning);
+                bool confidentiality = !(transportIsTLS || sessionOptions.NoEncryption);
+
+                GssapiContext context = new GssapiContext(username, password, auth, targetSpn, channelBindings,
+                    integrity, confidentiality);
+                string saslMech = auth == AuthenticationMethod.Negotiate ? "GSS-SPNEGO" : "GSSAPI";
                 await SaslAuth(connection, ldap, context, saslMech, integrity, confidentiality, cancelToken);
                 connection.SecurityContext = context;
                 connection.Sign = integrity;
@@ -244,17 +291,56 @@ namespace PSOpenAD.Commands
 
             ldap.ExtendedRequest("1.3.6.1.4.1.4203.1.11.3");
             await connection.WriteAsync(ldap.DataToSend(), cancelToken);
-            ExtendedResponse extResp = (ExtendedResponse)await connection.ReadAsync(ldap, cancelToken);
-            if (extResp.Result.ResultCode != LDAPResultCode.Success)
-                throw new LDAPException(extResp.Result);
+            ExtendedResponse whoamiResp = (ExtendedResponse)await connection.ReadAsync(ldap, cancelToken);
+            if (whoamiResp.Result.ResultCode != LDAPResultCode.Success)
+                throw new LDAPException(whoamiResp.Result);
 
-            string whoami = Encoding.UTF8.GetString(extResp.Value ?? Array.Empty<byte>());
+            string whoami = Encoding.UTF8.GetString(whoamiResp.Value ?? Array.Empty<byte>());
             Console.WriteLine($"User {whoami}");
 
             ldap.Unbind();
             byte[] unbindData = ldap.DataToSend();
             await connection.WriteAsync(unbindData, cancelToken);
         }
+
+        private static byte[]? GetTlsChannelBindings(SslStream tls)
+        {
+            using X509Certificate2 cert = new X509Certificate2(tls.RemoteCertificate);
+
+            byte[] certHash;
+            switch (cert.SignatureAlgorithm.Value)
+            {
+                case "2.16.840.1.101.3.4.2.2": // SHA384
+                case "1.2.840.10045.4.3.3": // SHA384ECDSA
+                case "1.2.840.113549.1.1.12": // SHA384RSA
+                    using (SHA384 hasher = SHA384.Create())
+                        certHash = hasher.ComputeHash(cert.RawData);
+                    break;
+
+                case "2.16.840.1.101.3.4.2.3": // SHA512
+                case "1.2.840.10045.4.3.4": // SHA512ECDSA
+                case "1.2.840.113549.1.1.13": // SHA512RSA
+                    using (SHA512 hasher = SHA512.Create())
+                        certHash = hasher.ComputeHash(cert.RawData);
+                    break;
+
+                // Older protocols default to SHA256, use this as a catch all in case of a weird algorithm.
+                default:
+                    using (SHA256 hasher = SHA256.Create())
+                        certHash = hasher.ComputeHash(cert.RawData);
+                    break;
+            }
+
+            byte[] prefix = Encoding.UTF8.GetBytes("tls-server-end-point:");
+            byte[] finalCB = new byte[prefix.Length + certHash.Length];
+            Array.Copy(prefix, 0, finalCB, 0, prefix.Length);
+            Array.Copy(certHash, 0, finalCB, prefix.Length, certHash.Length);
+
+            return finalCB;
+        }
+
+        private static bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain,
+            SslPolicyErrors sslPolicyErrors) => true;
 
         private async Task SimpleAuth(OpenADConnection connection, LDAPSession ldap, string? username, string? password,
             CancellationToken cancelToken)
