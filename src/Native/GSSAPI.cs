@@ -713,4 +713,32 @@ namespace PSOpenAD.Native
             return GSSAPI.gss_delete_sec_context(out var _, ref handle, IntPtr.Zero) == 0;
         }
     }
+
+    internal class SafeMemoryBuffer : SafeHandle
+    {
+        public int Length { get; } = 0;
+
+        internal SafeMemoryBuffer() : base(IntPtr.Zero, true) { }
+
+        internal SafeMemoryBuffer(int size) : base(Marshal.AllocHGlobal(size), true) => Length = size;
+
+        internal SafeMemoryBuffer(string value) : base(IntPtr.Zero, true)
+        {
+            byte[] data = Encoding.UTF8.GetBytes(value);
+            Length = data.Length;
+
+            handle = Marshal.AllocHGlobal(Length);
+            Marshal.Copy(data, 0, handle, Length);
+        }
+
+        internal SafeMemoryBuffer(IntPtr buffer, bool ownsHandle) : base(buffer, ownsHandle) { }
+
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
+        protected override bool ReleaseHandle()
+        {
+            Marshal.FreeHGlobal(handle);
+            return true;
+        }
+    }
 }

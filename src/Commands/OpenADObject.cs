@@ -1,4 +1,4 @@
-using PSOpenAD.Native;
+using PSOpenAD.LDAP;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -95,12 +95,12 @@ namespace PSOpenAD.Commands
                 requestedProperties.Add(prop);
             }
 
-            List<LDAPControl> serverControls = new List<LDAPControl>();
-            if (_includeDeleted)
-            {
-                serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DELETED_OID, null, false));
-                serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID, null, false));
-            }
+            List<LDAPControl>? serverControls = null;
+            // if (_includeDeleted)
+            // {
+            //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DELETED_OID, null, false));
+            //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID, null, false));
+            // }
 
             if (ParameterSetName.StartsWith("Server"))
             {
@@ -124,23 +124,33 @@ namespace PSOpenAD.Commands
                     ldapUri = new Uri($"ldap://{Server}:389/");
                 }
 
-                Session = OpenADSessionFactory.CreateOrUseDefault(ldapUri, Credential, AuthType,
-                    StartTLS, SessionOption, this);
+                Session = OpenADSessionFactory.CreateOrUseDefaultAsync(ldapUri, Credential, AuthType,
+                    StartTLS, SessionOption).GetAwaiter().GetResult();
             }
 
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
-            LDAPSearchScope ldapScope = (LDAPSearchScope)SearchScope;
 
-            int msgid = OpenLDAP.SearchExt(Session.Handle, searchBase, ldapScope, _ldapFilter,
-                requestedProperties.ToArray(), false, serverControls: serverControls.ToArray());
-            SafeLdapMessage res = OpenLDAP.Result(Session.Handle, msgid, LDAPMessageCount.LDAP_MSG_ALL);
-            foreach (IntPtr entry in OpenLDAP.GetEntries(Session.Handle, res))
+            LDAPFilter filter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
+            Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0, false, filter,
+                requestedProperties.ToArray(), serverControls?.ToArray());
+
+            Session.Connection.WriteAsync(Session.Ldap.DataToSend()).GetAwaiter().GetResult();
+            while (true)
             {
+                LDAPMessage response = Session.Connection.ReadAsync(Session.Ldap).GetAwaiter().GetResult();
+                if (response is ExtendedResponse failResp)
+                    throw new LDAPException(failResp.Result);
+                else if (response is SearchResultDone)
+                    break;
+                else if (response is SearchResultReference)
+                    continue; // FIXME
+
+                SearchResultEntry entry = (SearchResultEntry)response;
                 Dictionary<string, object?> props = new Dictionary<string, object?>();
-                foreach (string attribute in OpenLDAP.GetAttributes(Session.Handle, entry))
+                foreach (PartialAttribute attribute in entry.Attributes)
                 {
-                    byte[][] rawValues = OpenLDAP.GetValues(Session.Handle, entry, attribute).ToArray();
-                    props[attribute] = Session.AttributeTransformer.Transform(attribute, rawValues);
+                    byte[][] rawValues = attribute.Values;
+                    props[attribute.Name] = Session.AttributeTransformer.Transform(attribute.Name, rawValues);
                 }
 
                 OpenADObject adObj = CreateADObject(props);

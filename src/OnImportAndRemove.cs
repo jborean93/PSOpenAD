@@ -84,12 +84,12 @@ namespace PSOpenAD
         public void OnImport()
         {
             Resolver = new NativeResolver();
-            Resolver.CacheLibrary(OpenLDAP.LIB_LDAP, "libldap.so", "LDAP connections");
+            // Resolver.CacheLibrary(OpenLDAP.LIB_LDAP, "libldap.so", "LDAP connections");
 
-            // The OpenLDAP may by linked with a custom path, the best we can do is search using the default name
-            // for capability inspection. It's up to OpenLDAP to talk to SASL during the auth stage and report what
-            // mechs are available.
-            bool hasSasl = Resolver.CacheLibrary(CyrusSASL.LIB_SASL, "libsasl2.so", "SASL authentication", true);
+            // // The OpenLDAP may by linked with a custom path, the best we can do is search using the default name
+            // // for capability inspection. It's up to OpenLDAP to talk to SASL during the auth stage and report what
+            // // mechs are available.
+            // bool hasSasl = Resolver.CacheLibrary(CyrusSASL.LIB_SASL, "libsasl2.so", "SASL authentication", true);
 
             // While this is needed for Negotiate/Kerberos auth users can still use Simple auth so it's optional.
             bool hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2", "GSSAPI authentication", true);
@@ -105,55 +105,27 @@ namespace PSOpenAD
             GlobalState.Providers[AuthenticationMethod.Simple] = new AuthenticationProvider(
                 AuthenticationMethod.Simple, "Simple", true, false, true, "");
 
-            // Even if SASL wasn't found this uses the OpenLDAP lib to report the mechs available. If SASL is
-            // available we can get further details on the mechanism to provide a clearer picture of what it supports.
-            List<string> saslMechs = OpenLDAP.GetOptionSaslMechList(new SafeLdapHandle());
-            Dictionary<string, SaslClientMechanism> saslDetails = new Dictionary<string, SaslClientMechanism>();
-            if (hasSasl && saslMechs.Count > 0)
-            {
-                CyrusSASL.ClientInit();
-                CyrusSASL.ClientPluginInfo(String.Join(" ", saslMechs),
-                    (SaslCallbackStage _, SaslClientMechanism? mech) =>
-                    {
-                        if (mech == null)
-                            return;
-
-                        saslDetails[mech.Plugin.MechName] = mech;
-                    });
-            }
-
             foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
             {
                 { AuthenticationMethod.Kerberos, "GSSAPI" },
                 { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
             })
             {
-                bool present, canSign, supportsCB;
-                present = canSign = supportsCB = false;
+                bool present, canSign;
+                present = canSign = false;
                 string details = "";
 
-                if (hasGssapi && saslMechs.Contains(kvp.Value))
+                if (hasGssapi)
                 {
                     present = canSign = true;
-
-                    SaslPluginFeatures? features = saslDetails.GetValueOrDefault(kvp.Value)?.Plugin.Features;
-                    supportsCB = ((features ?? 0) & SaslPluginFeatures.SASL_FEAT_CHANNEL_BINDING) != 0;
-
-                    if (!supportsCB)
-                        details = "Older SASL library without CB support";
-                }
-                else if (!hasGssapi)
-                {
-                    details = "GSSAPI library not found";
                 }
                 else
                 {
-                    details = "SASL library not detected by OpenLDAP";
-
+                    details = "GSSAPI library not found";
                 }
 
                 GlobalState.Providers[kvp.Key] = new AuthenticationProvider(kvp.Key, kvp.Value, present, canSign,
-                    supportsCB, details);
+                    true, details);
             }
 
             // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.

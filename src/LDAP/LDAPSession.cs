@@ -3,7 +3,6 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.IO.Pipelines;
-using System.Text;
 
 namespace PSOpenAD.LDAP
 {
@@ -23,64 +22,47 @@ namespace PSOpenAD.LDAP
             Version = version;
         }
 
-        public int ExtendedRequest(string oid, byte[]? value = null)
+        public int Bind(string dn, string password, LDAPControl[]? controls = null)
         {
-            AsnWriter writer = new AsnWriter(AsnEncodingRules.BER);
-            using (AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.Application, 23, true)))
-            {
-                writer.WriteOctetString(Encoding.UTF8.GetBytes(oid), tag: new Asn1Tag(TagClass.ContextSpecific, 0));
-                if (value != null)
-                {
-                    writer.WriteOctetString(value, tag: new Asn1Tag(TagClass.ContextSpecific, 1));
-                }
-            }
+            BindRequestSimple request = new BindRequestSimple(NextMessageId(), controls, Version, dn, password);
+            PutRequest(request);
 
-            return PutRequest(writer.Encode());
+            return request.MessageId;
         }
 
-        public int Bind(string dn, string password)
+        public int SaslBind(string dn, string mechanism, byte[] cred, LDAPControl[]? controls = null)
         {
-            return BindRequest(dn, password: password);
+            BindRequestSasl request = new BindRequestSasl(NextMessageId(), controls, Version, dn, mechanism, cred);
+            PutRequest(request);
+
+            return request.MessageId;
         }
 
-        public int SaslBind(string dn, string mechanism, ReadOnlySpan<byte> cred)
+        public int ExtendedRequest(string name, byte[]? value = null, LDAPControl[]? controls = null)
         {
-            return BindRequest(dn, saslMech: mechanism, saslCred: cred);
+            ExtendedRequest request = new ExtendedRequest(NextMessageId(), controls, name, value);
+            PutRequest(request);
+
+            return request.MessageId;
         }
 
-        public int SearchRequest(string baseObject, SearchScope scope, DereferencingPolicy derefPolicy, int sizeLimit,
-            int timeLimit, bool typesOnly, string filter, List<string> attributeSelection)
+        public int SearchRequest(string baseObject, SearchScope scope, DereferencingPolicy derefAliases,
+            int sizeLimit, int timeLimit, bool typesOnly, LDAPFilter filter, string[] attributeSelection,
+            LDAPControl[]? controls = null)
         {
-            AsnWriter writer = new AsnWriter(AsnEncodingRules.BER);
-            using (AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.Application, 3, true)))
-            {
-                writer.WriteOctetString(Encoding.UTF8.GetBytes(baseObject));
-                writer.WriteEnumeratedValue(scope);
-                writer.WriteEnumeratedValue(derefPolicy);
-                writer.WriteInteger(sizeLimit);
-                writer.WriteInteger(timeLimit);
-                writer.WriteBoolean(typesOnly);
-                writer.WriteOctetString(LDAPWriter.WriteLDAPFilter(filter).Span,
-                    new Asn1Tag(TagClass.Application, 7, false));
-                using (AsnWriter.Scope _2 = writer.PushSequence())
-                {
-                    foreach (string attr in attributeSelection)
-                    {
-                        writer.WriteOctetString(Encoding.UTF8.GetBytes(attr));
+            SearchRequest request = new SearchRequest(NextMessageId(), controls, baseObject, scope, derefAliases,
+                sizeLimit, timeLimit, typesOnly, filter, attributeSelection);
+            PutRequest(request);
 
-                    }
-                }
-            }
-
-            return PutRequest(writer.Encode());
+            return request.MessageId;
         }
 
         public int Unbind()
         {
-            AsnWriter writer = new AsnWriter(AsnEncodingRules.BER);
-            writer.WriteNull(new Asn1Tag(TagClass.Application, 2, false));
+            UnbindRequest request = new UnbindRequest(NextMessageId(), null);
+            PutRequest(request);
 
-            return PutRequest(writer.Encode());
+            return request.MessageId;
         }
 
         public byte[] DataToSend()
@@ -112,63 +94,43 @@ namespace PSOpenAD.LDAP
             }
 
             if (!Asn1Helper.HasEnoughData(buffer))
+            {
+                _incoming.Reader.AdvanceTo(readResult.Buffer.Start, readResult.Buffer.End);
                 return null;
+            }
 
             const AsnEncodingRules ruleSet = AsnEncodingRules.BER;
             AsnDecoder.ReadSequence(buffer, ruleSet, out var sequenceOffset, out var sequenceLength,
                 out var consumed);
             try
             {
-                return LDAPReader.ReadLDAPMessage(buffer.Slice(sequenceOffset, sequenceLength), out var _,
+                return LDAPMessage.FromBytes(buffer.Slice(sequenceOffset, sequenceLength), out var _,
                     ruleSet: ruleSet);
             }
             finally
             {
-                _incoming.Reader.AdvanceTo(readResult.Buffer.Slice(consumed).Start, readResult.Buffer.End);
+                _incoming.Reader.AdvanceTo(readResult.Buffer.Slice(consumed).Start);
             }
         }
 
-        private int PutRequest(ReadOnlySpan<byte> data)
+        private void PutRequest(LDAPMessage message)
         {
-            int messageId = _messageCounter += 1;
             AsnWriter writer = new AsnWriter(AsnEncodingRules.BER);
             using (AsnWriter.Scope _ = writer.PushSequence())
             {
-                writer.WriteInteger(messageId);
-                writer.WriteEncodedValue(data);
+                writer.WriteInteger(message.MessageId);
+                message.ToBytes(writer);
             }
 
             _outgoing.Add(writer.Encode());
-
-            return messageId;
         }
 
-        private int BindRequest(string dn, string? password = null, string? saslMech = null,
-            ReadOnlySpan<byte> saslCred = default)
+        private int NextMessageId()
         {
-            AsnWriter writer = new AsnWriter(AsnEncodingRules.BER);
-            using (AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.Application, 0, true)))
-            {
-                writer.WriteInteger(3);
-                writer.WriteOctetString(Encoding.UTF8.GetBytes(dn));
+            int messageId = _messageCounter + 1;
+            _messageCounter++;
 
-                if (String.IsNullOrEmpty(saslMech))
-                {
-                    Asn1Tag tag = new Asn1Tag(TagClass.ContextSpecific, 0, false);
-                    writer.WriteOctetString(Encoding.UTF8.GetBytes(password ?? ""), tag);
-                }
-                else
-                {
-                    Asn1Tag tag = new Asn1Tag(TagClass.ContextSpecific, 3, false);
-                    using AsnWriter.Scope _2 = writer.PushSequence(tag);
-                    writer.WriteOctetString(Encoding.UTF8.GetBytes(saslMech ?? ""));
-
-                    if (saslCred.Length > 0)
-                        writer.WriteOctetString(saslCred);
-                }
-            }
-
-            return PutRequest(writer.Encode());
+            return messageId;
         }
     }
 }
