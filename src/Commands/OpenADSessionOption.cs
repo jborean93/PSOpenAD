@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Security.Cryptography.X509Certificates;
 
 namespace PSOpenAD.Commands
 {
@@ -20,6 +21,9 @@ namespace PSOpenAD.Commands
         [Parameter()]
         public SwitchParameter SkipCertificateCheck { get; set; }
 
+        [Parameter()]
+        public X509Certificate? Certificate { get; set; }
+
         protected override void EndProcessing()
         {
             WriteObject(new OpenADSessionOptions()
@@ -28,6 +32,7 @@ namespace PSOpenAD.Commands
                 NoSigning = NoSigning,
                 NoChannelBinding = NoChannelBinding,
                 SkipCertificateCheck = SkipCertificateCheck,
+                Certificate = Certificate,
             });
         }
     }

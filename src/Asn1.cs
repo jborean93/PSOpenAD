@@ -5,6 +5,12 @@ namespace PSOpenAD
 {
     internal class Asn1Helper
     {
+        /// <summary>Check if there is enough data to decode the ASN.1 payload.</summary>
+        /// <remarks>
+        /// There is no public API on AsnDecoder to just get the length of the value. Trying to decode an ASN.1
+        /// payload without data will result in an <c>AsnContentException</c> but with no way to check if the error
+        /// was due to malformed data or just not enough.
+        /// </remarks>
         public static bool HasEnoughData(ReadOnlySpan<byte> data)
         {
             Asn1Tag.Decode(data, out int tagLength);

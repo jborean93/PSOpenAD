@@ -38,7 +38,7 @@ namespace PSOpenAD
             AssemblyLoadContext.Default.ResolvingUnmanagedDll += ImportResolver;
         }
 
-        public bool CacheLibrary(string id, string path, string purpose, bool optional = false)
+        public bool CacheLibrary(string id, string path)
         {
             string? envOverride = Environment.GetEnvironmentVariable(id.ToUpperInvariant().Replace(".", "_"));
             if (!String.IsNullOrWhiteSpace(envOverride))
@@ -49,11 +49,8 @@ namespace PSOpenAD
                 NativeHandles[id] = new LibraryInfo(id, path);
                 return true;
             }
-            catch (DllNotFoundException e)
+            catch (DllNotFoundException)
             {
-                if (!optional)
-                    throw new DllNotFoundException($"Failed to load '{path}' for {purpose}", e);
-
                 return false;
             }
         }
@@ -84,26 +81,22 @@ namespace PSOpenAD
         public void OnImport()
         {
             Resolver = new NativeResolver();
-            // Resolver.CacheLibrary(OpenLDAP.LIB_LDAP, "libldap.so", "LDAP connections");
 
-            // // The OpenLDAP may by linked with a custom path, the best we can do is search using the default name
-            // // for capability inspection. It's up to OpenLDAP to talk to SASL during the auth stage and report what
-            // // mechs are available.
-            // bool hasSasl = Resolver.CacheLibrary(CyrusSASL.LIB_SASL, "libsasl2.so", "SASL authentication", true);
+            // This is needed for Negotiate or Kerberos auth.
+            bool hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
 
-            // While this is needed for Negotiate/Kerberos auth users can still use Simple auth so it's optional.
-            bool hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2", "GSSAPI authentication", true);
-
-            // This is only used to lookup the default realm which is used to determine the default server.
-            bool hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so", "Kerberos authentication", true);
+            // This is used to lookup the default realm value used for implicit sessions.
+            bool hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
 
             // While channel binding isn't technically done by both these methods an Active Directory implementation
             // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
-            // server end.
-            GlobalState.Providers[AuthenticationMethod.Anonymous] = new AuthenticationProvider(
-                AuthenticationMethod.Anonymous, "Anonymous", true, false, true, "");
-            GlobalState.Providers[AuthenticationMethod.Simple] = new AuthenticationProvider(
-                AuthenticationMethod.Simple, "Simple", true, false, true, "");
+            // server end.true
+            GlobalState.Providers[AuthenticationMethod.Anonymous] = new(AuthenticationMethod.Anonymous, "ANONYMOUS",
+                true, false, "");
+            GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
+                false, "");
+            GlobalState.Providers[AuthenticationMethod.External] = new(AuthenticationMethod.External, "EXTERNAL",
+                true, false, "");
 
             foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
             {
@@ -111,8 +104,8 @@ namespace PSOpenAD
                 { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
             })
             {
-                bool present, canSign;
-                present = canSign = false;
+                bool present = false;
+                bool canSign = false;
                 string details = "";
 
                 if (hasGssapi)
@@ -124,8 +117,7 @@ namespace PSOpenAD
                     details = "GSSAPI library not found";
                 }
 
-                GlobalState.Providers[kvp.Key] = new AuthenticationProvider(kvp.Key, kvp.Value, present, canSign,
-                    true, details);
+                GlobalState.Providers[kvp.Key] = new(kvp.Key, kvp.Value, present, canSign, details);
             }
 
             // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.

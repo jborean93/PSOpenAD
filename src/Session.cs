@@ -23,6 +23,7 @@ namespace PSOpenAD
         public bool NoSigning { get; set; }
         public bool NoChannelBinding { get; set; }
         public bool SkipCertificateCheck { get; set; }
+        public X509Certificate? Certificate { get; set; }
     }
 
     public sealed class OpenADSession
@@ -69,7 +70,7 @@ namespace PSOpenAD
     internal sealed class OpenADSessionFactory
     {
         internal static OpenADSession CreateOrUseDefault(Uri uri, PSCredential? credential, AuthenticationMethod auth,
-            bool startTLS, OpenADSessionOptions sessionOptions, CancellationToken cancelToken = default,
+            bool startTls, OpenADSessionOptions sessionOptions, CancellationToken cancelToken = default,
             PSCmdlet? cmdlet = null)
         {
             if (GlobalState.ImplicitSessions.TryGetValue(uri.ToString(), out var session) && !session.IsClosed)
@@ -79,7 +80,7 @@ namespace PSOpenAD
             }
             else
             {
-                session = Create(uri, credential, auth, startTLS, sessionOptions, cancelToken, cmdlet: cmdlet);
+                session = Create(uri, credential, auth, startTls, sessionOptions, cancelToken, cmdlet: cmdlet);
                 GlobalState.AddSession(uri.ToString(), session);
 
                 return session;
@@ -87,7 +88,7 @@ namespace PSOpenAD
         }
 
         internal static OpenADSession Create(Uri uri, PSCredential? credential, AuthenticationMethod auth,
-            bool startTLS, OpenADSessionOptions sessionOptions, CancellationToken cancelToken = default,
+            bool startTls, OpenADSessionOptions sessionOptions, CancellationToken cancelToken = default,
             PSCmdlet? cmdlet = null)
         {
             cmdlet?.WriteVerbose($"Connecting to {uri}");
@@ -98,194 +99,98 @@ namespace PSOpenAD
             connectTask.GetAwaiter().GetResult();
 
             OpenADConnection connection = new(client, client.GetStream(), new LDAPSession());
-
-            bool transportIsTLS = false;
-            byte[]? channelBindings = null;
-            if (startTLS || uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
+            try
             {
-                transportIsTLS = true;
-
-                if (sessionOptions.NoEncryption || sessionOptions.NoSigning)
-                    throw new ArgumentException("Cannot disable encryption or signatures for TLS based connection");
-
-                if (startTLS && uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
+                bool transportIsTls = false;
+                byte[]? channelBindings = null;
+                if (startTls || uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    throw new ArgumentException("Cannot use StartTLS over an LDAPS connection");
-                }
-                else if (startTLS)
-                {
-                    int startTlsId = connection.Session.ExtendedRequest("1.3.6.1.4.1.1466.20037");
-                    ExtendedResponse extResp = (ExtendedResponse)connection.WaitForMessage(startTlsId, cancelToken);
-                    connection.RemoveMessageQueue(startTlsId);
-                    if (extResp.Result.ResultCode != LDAPResultCode.Success)
-                        throw new LDAPException(extResp.Result);
+                    transportIsTls = true;
+                    channelBindings = ProcessTlsOptions(connection, uri, startTls, sessionOptions, cancelToken, cmdlet);
                 }
 
-                SslClientAuthenticationOptions authOptions = new()
-                {
-                    RemoteCertificateValidationCallback = ValidateServerCertificate,
-                    TargetHost = uri.DnsSafeHost,
-                };
-                SslStream tls = connection.SetTlsStream(authOptions, cancelToken);
+                Authenticate(connection, uri, auth, credential, channelBindings, transportIsTls, sessionOptions,
+                    cancelToken, cmdlet);
 
-                if (!sessionOptions.NoChannelBinding)
-                {
-                    //cmdlet?.WriteVerbose("Attempting to get TLS channel bindings for SASL authentication");
-                    channelBindings = GetTlsChannelBindings(tls);
-                }
-            }
-
-            if (auth == AuthenticationMethod.Default)
-            {
-                // Always favour Negotiate auth if it is available, otherwise use Simple if both a credential and the
-                // exchange would be encrypted. If all else fails use an anonymous bind.
-                AuthenticationProvider nego = GlobalState.Providers[AuthenticationMethod.Negotiate];
-                if (nego.Available)
-                {
-                    auth = AuthenticationMethod.Negotiate;
-                }
-                else if (credential != null && transportIsTLS)
-                {
-                    auth = AuthenticationMethod.Simple;
-                }
-                else
-                {
-                    auth = AuthenticationMethod.Anonymous;
-                }
-            }
-
-            AuthenticationProvider selectedAuth = GlobalState.Providers[auth];
-            if (!selectedAuth.Available)
-            {
-                throw new ArgumentException($"Client cannot offer -Authentication {auth} as it is not available");
-            }
-
-            string username = credential?.UserName ?? "";
-            string password = credential?.GetNetworkCredential().Password ?? "";
-
-            if (auth == AuthenticationMethod.Kerberos || auth == AuthenticationMethod.Negotiate)
-            {
-                string targetSpn = $"ldap@{uri.DnsSafeHost}";
-                bool integrity = !(transportIsTLS || sessionOptions.NoSigning);
-                bool confidentiality = !(transportIsTLS || sessionOptions.NoEncryption);
-
-                GssapiContext context = new(username, password, auth, targetSpn, channelBindings,
-                    integrity, confidentiality);
-                SaslAuth(connection, context, selectedAuth.NativeId, integrity, confidentiality,
+                // Attempt to get the default naming context.
+                Dictionary<string, string[]> rootInfo = LdapQuery(connection, "", SearchScope.Base,
+                    new FilterPresent("objectClass"), new string[] { "defaultNamingContext", "subschemaSubentry" },
                     cancelToken);
-                connection.SecurityContext = context;
-                connection.Sign = integrity;
-                connection.Encrypt = confidentiality;
+
+                // While AD should have this some LDAP servers do not, just try with no base value.
+                string defaultNamingContext = "";
+                if (rootInfo.ContainsKey("defaultNamingContext"))
+                    defaultNamingContext = (rootInfo["defaultNamingContext"] ?? new string[] { "" })[0];
+
+                // Attempt to get the schema info of the host so the code can parse the raw LDAP attribute values into
+                // the required PowerShell type.
+                string subschemaSubentry = rootInfo["subschemaSubentry"][0];
+                AttributeTransformer attrInfo = QueryAttributeTypes(connection, subschemaSubentry, cancelToken,
+                    cmdlet);
+
+                return new OpenADSession(connection, uri, auth, transportIsTls || connection.Sign,
+                    transportIsTls || connection.Encrypt, defaultNamingContext, attrInfo);
             }
-            else
+            catch
             {
-                SimpleAuth(connection, username, password, cancelToken);
+                connection.Dispose();
+                throw;
             }
-
-            // ldap.ExtendedRequest("1.3.6.1.4.1.4203.1.11.3");
-            // await connection.Write(ldap.DataToSend(), cancelToken);
-            // ExtendedResponse whoamiResp = (ExtendedResponse)await connection.Read(ldap, cancelToken);
-            // if (whoamiResp.Result.ResultCode != LDAPResultCode.Success)
-            //     throw new LDAPException(whoamiResp.Result);
-
-            // string whoami = Encoding.UTF8.GetString(whoamiResp.Value ?? Array.Empty<byte>());
-            // Console.WriteLine($"User {whoami}");
-
-            // Attempt to get the default naming context.
-            Dictionary<string, string[]> rootInfo = LdapQuery(connection, "", SearchScope.Base,
-                "(objectClass=*)", new string[] { "defaultNamingContext", "subschemaSubentry" }, cancelToken);
-
-            // While AD should have this some LDAP servers do not, just try with no base value.
-            string defaultNamingContext = "";
-            if (rootInfo.ContainsKey("defaultNamingContext"))
-                defaultNamingContext = (rootInfo["defaultNamingContext"] ?? new string[] { "" })[0];
-
-            string subschemaSubentry = rootInfo["subschemaSubentry"][0];
-
-            // Attempt to get the schema info of the host so the code can parse the raw LDAP attribute values into the
-            // required PowerShell type.
-            // These attributes are from the below but so far the code only uses the uncommented one.
-            // https://ldapwiki.com/wiki/LDAP%20Query%20For%20Schema
-            string[] schemaAttributes = new string[]
-            {
-                "attributeTypes",
-                //"dITStructureRules",
-                //"objectClasses",
-                //"nameForms",
-                //"dITContentRules",
-                //"matchingRules",
-                //"ldapSyntaxes",
-                //"matchingRuleUse",
-            };
-            Dictionary<string, string[]> schemaInfo = LdapQuery(connection, subschemaSubentry, SearchScope.Base,
-                "(objectClass=*)", schemaAttributes, cancelToken);
-
-            // foreach (string objectClass in schemaInfo["objectClasses"])
-            // {
-            //     ObjectClassDefinition def = new ObjectClassDefinition(objectClass);
-            // }
-
-            Dictionary<string, AttributeTypes> attrInfo = new();
-            foreach (string attributeTypes in schemaInfo["attributeTypes"])
-            {
-                // In testing 2 attributes (respsTo, and repsFrom) had the string value here
-                string rawValue = attributeTypes;
-                if (rawValue.Contains("SYNTAX 'OctetString'"))
-                {
-                    rawValue = rawValue.Replace("SYNTAX 'OctetString'",
-                        "SYNTAX '1.3.6.1.4.1.1466.115.121.1.40");
-                }
-
-                // Neither Syntax or Name should be undefined but they are technically optional in the spec. Write a
-                // debug entry to help with future debugging if this becomes more of an issue.
-                AttributeTypes attrTypes = new(rawValue);
-                if (String.IsNullOrEmpty(attrTypes.Syntax))
-                {
-                    Console.WriteLine($"DEBUG: Failed to parse SYNTAX: '{attributeTypes}'");
-                    continue;
-                }
-                if (String.IsNullOrEmpty(attrTypes.Name))
-                {
-                    Console.WriteLine($"DEBUG: Failed to parse NAME: '{attributeTypes}'");
-                    continue;
-                }
-
-                attrInfo[attrTypes.Name] = attrTypes;
-            }
-
-            return new OpenADSession(connection, uri, auth, transportIsTLS || connection.Sign,
-                transportIsTLS || connection.Encrypt, defaultNamingContext ?? "", new AttributeTransformer(attrInfo));
         }
 
-        private static Dictionary<string, string[]> LdapQuery(OpenADConnection connection, string searchBase,
-            SearchScope scope, string filter, string[] attributes, CancellationToken cancelToken)
+        /// <summary>Performs StartTLS on the LDAP connection and completes the TLS handshake.</summary>
+        /// <param name="connection">The OpenAD connection.</param>
+        /// <param name="uri">The URI used for the connection.</param>
+        /// <param name="startTls">Whether to perform StartTLS on an LDAP connection.</param>
+        /// <param name="sessionOptions">More session options to control the TLS behaviour.</param>
+        /// <param name="cancelToken">Cancellation token for any network requests.</param>
+        /// <param name="cmdlet">PSCmdlet to write verbose records to.</param>
+        /// <returns>The channel binding application data used with SASL authentication if available.</returns>
+        private static byte[]? ProcessTlsOptions(OpenADConnection connection, Uri uri, bool startTls,
+            OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
         {
-            LDAPFilter ldapFilter = LDAPFilter.ParseFilter(filter, 0, filter.Length, out var _);
-            int searchId = connection.Session.SearchRequest(searchBase, scope, DereferencingPolicy.Never, 0, 0, false,
-                ldapFilter, attributes);
+            if (sessionOptions.NoEncryption || sessionOptions.NoSigning)
+                throw new ArgumentException("Cannot disable encryption or signatures for TLS based connection");
 
-            Dictionary<string, string[]> result = new();
-            while (true)
+            if (startTls && uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
             {
-                LDAPMessage searchRes = connection.WaitForMessage(searchId, cancelToken);
-                if (searchRes is ExtendedResponse failResp)
-                    throw new LDAPException(failResp.Result);
-                else if (searchRes is SearchResultDone)
-                    break;
-                else if (searchRes is SearchResultReference)
-                    continue;
-
-                SearchResultEntry entry = (SearchResultEntry)searchRes;
-                foreach (PartialAttribute attribute in entry.Attributes)
-                {
-                    result[attribute.Name] = attribute.Values.Select(v => Encoding.UTF8.GetString(v)).ToArray();
-                }
+                throw new ArgumentException("Cannot use StartTLS over an LDAPS connection");
             }
-            connection.RemoveMessageQueue(searchId);
+            else if (startTls)
+            {
+                cmdlet?.WriteVerbose("Sending StartTLS request to the server");
+                int startTlsId = connection.Session.ExtendedRequest("1.3.6.1.4.1.1466.20037");
 
-            return result;
+                ExtendedResponse extResp = (ExtendedResponse)connection.WaitForMessage(startTlsId, cancelToken);
+                connection.RemoveMessageQueue(startTlsId);
+                if (extResp.Result.ResultCode != LDAPResultCode.Success)
+                    throw new LDAPException(extResp.Result);
+            }
+
+            cmdlet?.WriteVerbose("Performing TLS handshake on connection");
+            SslClientAuthenticationOptions authOptions = new()
+            {
+                // FIXME: only blinding accept if session options want this.
+                RemoteCertificateValidationCallback = ValidateServerCertificate,
+                TargetHost = uri.DnsSafeHost,
+            };
+            SslStream tls = connection.SetTlsStream(authOptions, cancelToken);
+
+            byte[]? cbt = null;
+            if (!sessionOptions.NoChannelBinding)
+                cbt = GetTlsChannelBindings(tls);
+
+            return cbt;
         }
 
+        /// <summary>Get channel binding data for SASL auth</summary>
+        /// <remarks>
+        /// While .NET has it's own function to retrieve this value it returns an opaque pointer with no publicly
+        /// documented structure. To avoid using any internal implementation details this just does the same work to
+        /// achieve the same result.
+        /// </remarks>
+        /// <param name="tls">The SslStream that has been authenticated.</param>
+        /// <returns>The channel binding application data if available.</returns>
         private static byte[]? GetTlsChannelBindings(SslStream tls)
         {
             using X509Certificate2 cert = new(tls.RemoteCertificate);
@@ -322,12 +227,102 @@ namespace PSOpenAD
             return finalCB;
         }
 
-        private static bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain,
-            SslPolicyErrors sslPolicyErrors)
+        /// <summary>Authenticates with the LDAP server.</summary>
+        /// <param name="connection">The LDAP connection to authenticate against.</param>
+        /// <param name="uri">The URI used for the connection, this is used for GSSAPI as the target SPN.</param>
+        /// <param name="auth">The authentication mechanism to use.</param>
+        /// <param name="credential">The explicit username and password to authenticate with.</param>
+        /// <param name="channelBindings">TLS channel bindings to use with GSSAPI authentication.</param>
+        /// <param name="transprotIsTls">Whether the underlying transport is protected with TLS.</param>
+        /// <param name="sessionOptions">More session options to control the auth behaviour.</param>
+        /// <param name="cancelToken">Cancellation token for any network requests.</param>
+        /// <param name="cmdlet">PSCmdlet to write verbose records to.</param>
+        private static void Authenticate(OpenADConnection connection, Uri uri, AuthenticationMethod auth,
+            PSCredential? credential, byte[]? channelBindings, bool transportIsTls,
+            OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
         {
-            return true;
+            if (auth == AuthenticationMethod.Default)
+            {
+                // Always favour Negotiate auth if it is available, otherwise use Simple if both a credential and the
+                // exchange would be encrypted. If all else fails use an anonymous bind.
+                AuthenticationProvider nego = GlobalState.Providers[AuthenticationMethod.Negotiate];
+                if (nego.Available)
+                {
+                    auth = AuthenticationMethod.Negotiate;
+                }
+                else if (credential != null && transportIsTls)
+                {
+                    auth = AuthenticationMethod.Simple;
+                }
+                else if (sessionOptions.Certificate != null && transportIsTls)
+                {
+                    auth = AuthenticationMethod.External;
+                }
+                else
+                {
+                    auth = AuthenticationMethod.Anonymous;
+                }
+
+                cmdlet?.WriteVerbose($"Default authentiation mechanism has been set to {auth}");
+            }
+
+            AuthenticationProvider selectedAuth = GlobalState.Providers[auth];
+            if (!selectedAuth.Available)
+            {
+                string msg = $"";
+                if (!string.IsNullOrWhiteSpace(selectedAuth.Details))
+                    msg += $" - ${selectedAuth.Details}";
+                throw new ArgumentException(msg);
+            }
+
+            string username = credential?.UserName ?? "";
+            string password = credential?.GetNetworkCredential().Password ?? "";
+
+            if (auth == AuthenticationMethod.External)
+            {
+                // FIXME
+                throw new NotImplementedException();
+            }
+            else if (auth == AuthenticationMethod.Kerberos || auth == AuthenticationMethod.Negotiate)
+            {
+                string targetSpn = $"ldap@{uri.DnsSafeHost}";
+                bool integrity = !(transportIsTls || sessionOptions.NoSigning);
+                bool confidentiality = !(transportIsTls || sessionOptions.NoEncryption);
+
+                // GSS-SPNEGO cannot disable confidentiality without also disabling integrity so warn the caller if
+                // this set of session options have been set.
+                if (auth == AuthenticationMethod.Negotiate && sessionOptions.NoEncryption
+                    && !sessionOptions.NoSigning)
+                {
+                    cmdlet?.WriteWarning("-AuthType Negotiate cannot disable encryption without disabling signing");
+                }
+                else if (sessionOptions.NoSigning && !sessionOptions.NoEncryption)
+                {
+                    cmdlet?.WriteWarning("Cannot disable signatures and not encryption");
+                }
+
+                GssapiContext context = new(username, password, auth, targetSpn, channelBindings,
+                    integrity, confidentiality);
+                SaslAuth(connection, context, selectedAuth.SaslId, integrity, confidentiality,
+                    cancelToken);
+
+                connection.SecurityContext = context;
+                connection.Sign = integrity;
+                connection.Encrypt = confidentiality;
+
+                cmdlet?.WriteVerbose($"SASL auth complete - Will Sign {integrity} - Will Encrypt {confidentiality}");
+            }
+            else
+            {
+                SimpleAuth(connection, username, password, cancelToken);
+            }
         }
 
+        /// <summary>Performs a SIMPLE bind to the LDAP server</summary>
+        /// <param name="connection">The LDAP connection to perform the bind on.</param>
+        /// <param name="username">The username used for the SIMPLE bind.</param>
+        /// <param name="password">The password used for the SIMPLE bind.</param>
+        /// <param name="cancelToken">Token to cancel any network IO waits</param>
         private static void SimpleAuth(OpenADConnection connection, string? username, string? password,
             CancellationToken cancelToken)
         {
@@ -335,13 +330,19 @@ namespace PSOpenAD
 
             BindResponse response = (BindResponse)connection.WaitForMessage(bindId, cancelToken);
             connection.RemoveMessageQueue(bindId);
-            if (response.Result.ResultCode != LDAPResultCode.Success &&
-                response.Result.ResultCode != LDAPResultCode.SaslBindInProgress)
+            if (response.Result.ResultCode != LDAPResultCode.Success)
             {
                 throw new LDAPException(response.Result);
             }
         }
 
+        /// <summary>Performs a SASL bind to the LDAP server</summary>
+        /// <param name="connection">The LDAP connection to perform the bind on.</param>
+        /// <param name="context">The security context used to generate the SASL tokens and wrap the data.</param>
+        /// <param name="saslMech">The name of the SASL mechanism used</param>
+        /// <param name="integrity">Whether to negotiate message signatures using the auth context.</param>
+        /// <param name="confidentiality">Whether to negotiate message encryption using the auth context.</param>
+        /// <param name="cancelToken">Token to cancel any network IO waits</param>
         private static void SaslAuth(OpenADConnection connection, SecurityContext context,
             string saslMech, bool integrity, bool confidentiality, CancellationToken cancelToken)
         {
@@ -368,6 +369,7 @@ namespace PSOpenAD
                 inputToken = response.ServerSaslCreds;
             }
 
+            // FIXME: use proper exceptions
             if (integrity && !context.IntegrityAvailable)
                 throw new Exception("No integrity available on context");
 
@@ -390,6 +392,7 @@ namespace PSOpenAD
 
             inputToken = response.ServerSaslCreds;
 
+            // FIXME exceptions
             if (inputToken == null)
                 throw new Exception("Expecting input token to verify security context");
 
@@ -397,16 +400,16 @@ namespace PSOpenAD
             if (contextInfo.Length != 4)
                 throw new Exception("Expecting input to contain 4 bytes");
 
-            SASLSecurityFlags flags = (SASLSecurityFlags)inputToken[0];
-            byte[] maxServerBytes = new byte[4];
-            Array.Copy(inputToken, 1, maxServerBytes, 0, 3);
+            SASLSecurityFlags serverFlags = (SASLSecurityFlags)inputToken[0];
+            inputToken[0] = 0;
             if (BitConverter.IsLittleEndian)
-                Array.Reverse(maxServerBytes);
-            uint maxServerMessageLength = BitConverter.ToUInt32(maxServerBytes);
+                Array.Reverse(inputToken);
+            uint maxServerMessageLength = BitConverter.ToUInt32(inputToken);
 
-            if (flags == SASLSecurityFlags.NoSecurity && maxServerMessageLength != 0)
+            if (serverFlags == SASLSecurityFlags.NoSecurity && maxServerMessageLength != 0)
                 throw new Exception("Max size must be 0 with no security");
 
+            // Build the client flags based on what the client requests
             SASLSecurityFlags clientFlags = SASLSecurityFlags.NoSecurity;
             if (integrity && confidentiality)
                 clientFlags |= SASLSecurityFlags.Confidentiality | SASLSecurityFlags.Integrity;
@@ -415,20 +418,14 @@ namespace PSOpenAD
 
             uint maxClientMessageLength = 0;
             if (clientFlags != SASLSecurityFlags.NoSecurity)
-            {
-                bool confReq = (clientFlags & SASLSecurityFlags.Confidentiality) != 0;
-                maxClientMessageLength = context.MaxWrapSize(maxServerMessageLength, confReq);
-            }
+                maxClientMessageLength = context.MaxWrapSize(maxServerMessageLength, confidentiality);
 
             byte[] clientContextInfo = BitConverter.GetBytes(maxClientMessageLength);
-            Array.Reverse(clientContextInfo);
+            if (BitConverter.IsLittleEndian)
+                Array.Reverse(clientContextInfo);
             clientContextInfo[0] = (byte)clientFlags;
-            byte[] saslMechBytes = Encoding.UTF8.GetBytes("");
 
-            byte[] clientResp = new byte[clientContextInfo.Length + saslMechBytes.Length];
-            Array.Copy(clientContextInfo, clientResp, clientContextInfo.Length);
-            Array.Copy(saslMechBytes, 0, clientResp, clientContextInfo.Length, saslMechBytes.Length);
-            byte[] wrappedResp = context.Wrap(clientResp, false);
+            byte[] wrappedResp = context.Wrap(clientContextInfo, false);
 
             saslId = connection.Session.SaslBind("", saslMech, wrappedResp);
             response = (BindResponse)connection.WaitForMessage(saslId, cancelToken);
@@ -438,6 +435,89 @@ namespace PSOpenAD
             {
                 throw new LDAPException(response.Result);
             }
+        }
+
+        /// <summary>Performs an LDAP search operation.</summary>
+        /// <param name="connection">The LDAP connection to perform the search on on.</param>
+        /// <param name="searchBase">The search base of the query.</param>
+        /// <param name="scope">The scope of the query.</param>
+        /// <param name="filter">The LDAP filter to use for the query.</param>
+        /// <param name="attribute">The attributes to retrieve.</param>
+        /// <param name="cancelToken">Token to cancel any network IO waits</param>
+        /// <returns>A dictionary of each attribute and their values as a string.</returns>
+        private static Dictionary<string, string[]> LdapQuery(OpenADConnection connection, string searchBase,
+            SearchScope scope, LDAPFilter filter, string[] attributes, CancellationToken cancelToken)
+        {
+            int searchId = connection.Session.SearchRequest(searchBase, scope, DereferencingPolicy.Never, 0, 0, false,
+                filter, attributes);
+
+            Dictionary<string, string[]> result = new();
+            while (true)
+            {
+                LDAPMessage searchRes = connection.WaitForMessage(searchId, cancelToken);
+                if (searchRes is SearchResultDone)
+                    break;
+                else if (searchRes is SearchResultReference)
+                    continue;
+
+                SearchResultEntry entry = (SearchResultEntry)searchRes;
+                foreach (PartialAttribute attribute in entry.Attributes)
+                {
+                    result[attribute.Name] = attribute.Values.Select(v => Encoding.UTF8.GetString(v)).ToArray();
+                }
+            }
+            connection.RemoveMessageQueue(searchId);
+
+            return result;
+        }
+
+        /// <summary>Gets the attribute schema information.</summary>
+        /// <param name="connection">The LDAP connection to perform the search on on.</param>
+        /// <param name="subschemaSubentry">The DN of the subschemaSubentry to query.</param>
+        /// <param name="cancelToken">Token to cancel any network IO waits</param>
+        /// <param name="cmdlet">PSCmdlet used to write verbose records.</param>
+        /// <returns>The attribute information from the parse schema information.</returns>
+        private static AttributeTransformer QueryAttributeTypes(OpenADConnection connection, string subschemaSubentry,
+            CancellationToken cancelToken, PSCmdlet? cmdlet)
+        {
+            Dictionary<string, string[]> schemaInfo = LdapQuery(connection, subschemaSubentry, SearchScope.Base,
+                new FilterPresent("objectClass"), new string[] { "attributeTypes" }, cancelToken);
+
+            Dictionary<string, AttributeTypes> attrInfo = new();
+            foreach (string attributeTypes in schemaInfo["attributeTypes"])
+            {
+                // In testing 2 attributes (respsTo, and repsFrom) had the string value here
+                string rawValue = attributeTypes;
+                if (rawValue.Contains("SYNTAX 'OctetString'"))
+                {
+                    rawValue = rawValue.Replace("SYNTAX 'OctetString'",
+                        "SYNTAX '1.3.6.1.4.1.1466.115.121.1.40");
+                }
+
+                // Neither Syntax or Name should be undefined but they are technically optional in the spec. Write a
+                // verbose entry to help with future debugging if this becomes more of an issue.
+                AttributeTypes attrTypes = new(rawValue);
+                if (String.IsNullOrEmpty(attrTypes.Syntax))
+                {
+                    cmdlet?.WriteVerbose($"Failed to parse SYNTAX: '{attributeTypes}'");
+                    continue;
+                }
+                if (String.IsNullOrEmpty(attrTypes.Name))
+                {
+                    cmdlet?.WriteVerbose($"Failed to parse NAME: '{attributeTypes}'");
+                    continue;
+                }
+
+                attrInfo[attrTypes.Name] = attrTypes;
+            }
+
+            return new AttributeTransformer(attrInfo);
+        }
+
+        private static bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain,
+            SslPolicyErrors sslPolicyErrors)
+        {
+            return true;
         }
     }
 
@@ -697,7 +777,11 @@ namespace PSOpenAD
             _recvTask.GetAwaiter().GetResult();
 
             // The unbind response also marks the LDAP outgoing reader as done
-            Session.Unbind();
+            // FIXME: find a way to mark the reader as done here.
+            if (Session.State == LDAP.SessionState.Opened)
+            {
+                Session.Unbind();
+            }
             _sendTask.GetAwaiter().GetResult();
 
             // Once both tasks are complete dispose of the stream and connection.

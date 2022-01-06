@@ -4,6 +4,21 @@ using System.IO.Pipelines;
 
 namespace PSOpenAD.LDAP
 {
+    internal enum SessionState
+    {
+        /// <summary>Connection has not been opened, bind still needs to be done.</summary>
+        BeforeOpen,
+
+        /// <summary>Bind request submitted and waiting for a response.</summary>
+        Binding,
+
+        /// <summary>Connection has been opened and is available for subsequent requests.</summary>
+        Opened,
+
+        /// <summary>Connection has been closed (unbound) and not further operations can be submitted.</summary>
+        Closed,
+    }
+
     internal class LDAPSession
     {
         private readonly Pipe _outgoing = new();
@@ -14,6 +29,8 @@ namespace PSOpenAD.LDAP
 
         public PipeReader Outgoing => _outgoing.Reader;
 
+        public SessionState State { get; internal set; } = SessionState.BeforeOpen;
+
         public LDAPSession(int version = 3)
         {
             Version = version;
@@ -21,6 +38,7 @@ namespace PSOpenAD.LDAP
 
         public int Bind(string dn, string password, LDAPControl[]? controls = null)
         {
+            State = SessionState.Binding;
             BindRequestSimple request = new(NextMessageId(), controls, Version, dn, password);
             PutRequest(request);
 
@@ -29,6 +47,7 @@ namespace PSOpenAD.LDAP
 
         public int SaslBind(string dn, string mechanism, byte[] cred, LDAPControl[]? controls = null)
         {
+            State = SessionState.Binding;
             BindRequestSasl request = new(NextMessageId(), controls, Version, dn, mechanism, cred);
             PutRequest(request);
 
@@ -56,6 +75,7 @@ namespace PSOpenAD.LDAP
 
         public int Unbind()
         {
+            State = SessionState.Closed;
             UnbindRequest request = new(NextMessageId(), null);
             PutRequest(request);
 
@@ -74,8 +94,13 @@ namespace PSOpenAD.LDAP
             AsnDecoder.ReadSequence(data, ruleSet, out var sequenceOffset, out var sequenceLength,
                 out bytesConsumed);
 
-            return LDAPMessage.FromBytes(data.Slice(sequenceOffset, sequenceLength), out var _,
+            LDAPMessage? msg = LDAPMessage.FromBytes(data.Slice(sequenceOffset, sequenceLength), out var _,
                 ruleSet: ruleSet);
+
+            if (msg is BindResponse bindResp && bindResp.Result.ResultCode == LDAPResultCode.Success)
+                State = SessionState.Opened;
+
+            return msg;
         }
 
         private void PutRequest(LDAPMessage message)

@@ -7,30 +7,52 @@ namespace PSOpenAD
 {
     public enum AuthenticationMethod
     {
+        /// <summary>Selects the best auth mechanism available.</summary>
         Default,
+
+        /// <summary>No authentication.</summary>
         Anonymous,
+
+        /// <summary>
+        /// Simple auth with a plaintext username and password, should only be used with LDAPS or StartTLS.
+        /// </summary>
         Simple,
+
+        /// <summary>Used with certificate auth over LDAPS or StartTLS for authentication with an external channel.</summary>
+        External,
+
+        /// <summary>GSSAPI/SSPI Negotiate (SASL GSS-SPNEGO) authentication.</summary>
         Negotiate,
+
+        /// <summary>GSSAPI/SSPI Kerberos (SASL GSSAPI) authentication</summary>
         Kerberos,
     }
 
+    /// <summary>Details on an authentication mechanism for the local client.</summary>
     public sealed class AuthenticationProvider
     {
+        /// <summary>The authentication mechanism this represents.</summary>
         public AuthenticationMethod Method { get; }
-        public string NativeId { get; }
+
+        /// <summary>The SASL mechanism identifier for this provider.</summary>
+        public string SaslId { get; }
+
+        /// <summary>Whether the client can use this provider.</summary>
         public bool Available { get; }
+
+        /// <summary>Whether this authentication mechanism can sign/encrypt data over a non-TLS connection.</summary>
         public bool CanSign { get; }
-        public bool SupportsCB { get; }
+
+        /// <summary>Further details on why the mechanism is not available.</summary>
         public string Details { get; }
 
-        public AuthenticationProvider(AuthenticationMethod method, string nativeId, bool available, bool canSign,
-            bool supportsCB, string details)
+        public AuthenticationProvider(AuthenticationMethod method, string saslId, bool available, bool canSign,
+            string details)
         {
             Method = method;
-            NativeId = nativeId;
+            SaslId = saslId;
             Available = available;
             CanSign = canSign;
-            SupportsCB = supportsCB;
             Details = details;
         }
     }
@@ -107,8 +129,11 @@ namespace PSOpenAD
             }
             else if (!integrity && !confidentiality)
             {
-                // Kerberos always sets INTEG | CONF unless this flag is set. When operating over TLS Windows will
-                // reject any auth with these flags so this needs to be set to disable that behaviour.
+                // GSSAPI always sets INTEG | CONF unless this flag is set. When using GSS-SPNEGO over TLS Windows
+                // will reject the auth as you cannot nested wrapping within TLS. By setting this flag GSSAPI will no
+                // longer add the integrity of conf flags to the auth mechanism allowing it to work with Windows.
+                // Note: This does not apply to Kerberos (SASL GSSAPI) as there are futher token exchanges after the
+                // auth to negotiate the integrity/conf options.
                 GSSAPI.SetCredOption(_credential, GSSAPI.GSS_KRB5_CRED_NO_CI_FLAGS_X);
             }
 
