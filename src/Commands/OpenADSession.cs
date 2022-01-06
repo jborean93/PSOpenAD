@@ -69,8 +69,8 @@ namespace PSOpenAD.Commands
             {
                 try
                 {
-                    OpenADSession session = OpenADSessionFactory.CreateAsync(Uri, Credential, AuthType, StartTLS,
-                        SessionOption, CurrentCancelToken.Token).GetAwaiter().GetResult();
+                    OpenADSession session = OpenADSessionFactory.Create(Uri, Credential, AuthType, StartTLS,
+                        SessionOption, CurrentCancelToken.Token, cmdlet: this);
                     GlobalState.AddSession(Uri.ToString(), session);
                     WriteObject(session);
                 }

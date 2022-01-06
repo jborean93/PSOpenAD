@@ -5,6 +5,7 @@
     <AssemblyName>PSOpenAD</AssemblyName>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>10.0</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

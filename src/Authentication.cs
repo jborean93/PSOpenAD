@@ -51,8 +51,8 @@ namespace PSOpenAD
         public bool ConfidentialityAvailable { get; internal set; }
 
         public abstract byte[] Step(byte[]? inputToken = null);
-        public abstract byte[] Wrap(byte[] data, bool encrypt);
-        public abstract byte[] Unwrap(byte[] data);
+        public abstract byte[] Wrap(ReadOnlySpan<byte> data, bool encrypt);
+        public abstract byte[] Unwrap(ReadOnlySpan<byte> data);
 
         public abstract UInt32 MaxWrapSize(UInt32 outputSize, bool confReq);
 
@@ -144,7 +144,7 @@ namespace PSOpenAD
             return res.OutputToken ?? Array.Empty<byte>();
         }
 
-        public override byte[] Wrap(byte[] data, bool encrypt)
+        public override byte[] Wrap(ReadOnlySpan<byte> data, bool encrypt)
         {
             if (_context == null || !Complete)
                 throw new InvalidOperationException("Cannot wrap without a completed context");
@@ -153,7 +153,7 @@ namespace PSOpenAD
             return wrappedData;
         }
 
-        public override byte[] Unwrap(byte[] data)
+        public override byte[] Unwrap(ReadOnlySpan<byte> data)
         {
             if (_context == null || !Complete)
                 throw new InvalidOperationException("Cannot unwrap without a completed context");

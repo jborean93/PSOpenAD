@@ -409,7 +409,7 @@ namespace PSOpenAD.Native
                 throw new GSSAPIException(majorStatus, minorStatus, "gss_set_cred_option");
         }
 
-        public static (byte[], bool, int) Unwrap(SafeGssapiSecContext context, byte[] inputMessage)
+        public static (byte[], bool, int) Unwrap(SafeGssapiSecContext context, ReadOnlySpan<byte> inputMessage)
         {
             Helpers.gss_buffer_desc outputBuffer = new Helpers.gss_buffer_desc();
             int confState;
@@ -445,7 +445,7 @@ namespace PSOpenAD.Native
         }
 
         public static (byte[], bool) Wrap(SafeGssapiSecContext context, bool confRequired, int qopReq,
-            byte[] inputMessage)
+            ReadOnlySpan<byte> inputMessage)
         {
             Helpers.gss_buffer_desc outputBuffer = new Helpers.gss_buffer_desc();
             int confState;

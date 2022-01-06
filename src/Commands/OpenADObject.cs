@@ -124,29 +124,28 @@ namespace PSOpenAD.Commands
                     ldapUri = new Uri($"ldap://{Server}:389/");
                 }
 
-                Session = OpenADSessionFactory.CreateOrUseDefaultAsync(ldapUri, Credential, AuthType,
-                    StartTLS, SessionOption).GetAwaiter().GetResult();
+                Session = OpenADSessionFactory.CreateOrUseDefault(ldapUri, Credential, AuthType,
+                    StartTLS, SessionOption, cmdlet: this);
             }
 
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
 
             LDAPFilter filter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
-            Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0, false, filter,
-                requestedProperties.ToArray(), serverControls?.ToArray());
+            int searchId = Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0, false,
+                filter, requestedProperties.ToArray(), serverControls?.ToArray());
 
-            Session.Connection.WriteAsync(Session.Ldap.DataToSend()).GetAwaiter().GetResult();
             while (true)
             {
-                LDAPMessage response = Session.Connection.ReadAsync(Session.Ldap).GetAwaiter().GetResult();
+                LDAPMessage response = Session.Connection.WaitForMessage(searchId);
                 if (response is ExtendedResponse failResp)
                     throw new LDAPException(failResp.Result);
                 else if (response is SearchResultDone)
                     break;
                 else if (response is SearchResultReference)
-                    continue; // FIXME
+                    continue; // FUTURE: look up these values
 
                 SearchResultEntry entry = (SearchResultEntry)response;
-                Dictionary<string, object?> props = new Dictionary<string, object?>();
+                Dictionary<string, object?> props = new();
                 foreach (PartialAttribute attribute in entry.Attributes)
                 {
                     byte[][] rawValues = attribute.Values;
@@ -167,6 +166,7 @@ namespace PSOpenAD.Commands
                 // FIXME: Fail if -Identity is used and either 0 or multiple objects found.
                 WriteObject(adObj);
             }
+            Session.Connection.RemoveMessageQueue(searchId);
         }
     }
 
