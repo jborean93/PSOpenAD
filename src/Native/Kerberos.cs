@@ -35,6 +35,10 @@ namespace PSOpenAD
         public static extern int krb5_init_context(
             out SafeKrb5Context context);
 
+        [DllImport(LIB_KRB5)]
+        public static extern void krb5_xfree(
+            IntPtr ptr);
+
         /// <summary>Get the default realm of the Kerberos context.</summary>
         /// <remarks>
         /// The API first tries to lookup the default realm configured in the krb5.conf file of the environment. If
@@ -114,7 +118,16 @@ namespace PSOpenAD
 
         protected override bool ReleaseHandle()
         {
-            Kerberos.krb5_free_default_realm(Context, handle);
+            // Heimdal does not include krb5_free_default_realm and instead uses krb5_xfree.
+            if (GlobalState.GssapiIsHeimdal)
+            {
+                Kerberos.krb5_xfree(handle);
+            }
+            else
+            {
+                Kerberos.krb5_free_default_realm(Context, handle);
+            }
+
             return true;
         }
     }

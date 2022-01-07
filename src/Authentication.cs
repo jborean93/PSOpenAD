@@ -104,7 +104,16 @@ namespace PSOpenAD
             _mech = method == AuthenticationMethod.Negotiate ? GSSAPI.SPNEGO : GSSAPI.KERBEROS;
             _targetSpn = GSSAPI.ImportName(target, GSSAPI.GSS_C_NT_HOSTBASED_SERVICE);
 
-            List<byte[]> mechList = new List<byte[]>() { _mech };
+            // FIXME: Determine the rules for Heimdal, should I also specify NTLM.
+            List<byte[]> mechList;
+            if (GlobalState.GssapiIsHeimdal)
+            {
+                mechList = new List<byte[]>() { GSSAPI.KERBEROS };
+            }
+            else
+            {
+                mechList = new List<byte[]>() { _mech };
+            }
             if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
             {
                 using SafeGssapiName name = GSSAPI.ImportName(username, GSSAPI.GSS_C_NT_USER_NAME);
@@ -145,7 +154,7 @@ namespace PSOpenAD
 
         public override byte[] Step(byte[]? inputToken = null)
         {
-            var res = GSSAPI.InitSetContext(_credential, _context, _targetSpn, _mech, _flags, 0, _bindingData,
+            var res = GSSAPI.InitSecContext(_credential, _context, _targetSpn, _mech, _flags, 0, _bindingData,
                 inputToken);
             _context = res.Context;
 

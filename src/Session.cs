@@ -791,6 +791,8 @@ namespace PSOpenAD
 
         public static Dictionary<string, OpenADSession> ImplicitSessions = new(StringComparer.OrdinalIgnoreCase);
 
+        public static bool GssapiIsHeimdal;
+
         public static void AddSession(string id, OpenADSession session)
         {
             if (ImplicitSessions.ContainsKey(id))

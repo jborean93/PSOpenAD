@@ -7,6 +7,8 @@ namespace PSOpenAD.Native
 {
     internal static class Helpers
     {
+        // FIXME: macOS seems to require Pack = 2 on all structs to work
+        // https://github.com/apple-oss-distributions/Heimdal/blob/5a776844a50fc09d714ba82ff7a88973c035b42b/lib/gssapi/gssapi/gssapi.h#L64-L67
         [StructLayout(LayoutKind.Sequential)]
         public struct gss_channel_bindings_struct
         {
@@ -418,7 +420,7 @@ namespace PSOpenAD.Native
         /// <param name="inputToken">Optional token received from the acceptor or null for <c>GSS_C_NO_BUFFER</c>.</param>
         /// <returns>A handle to the retrieved GSSAPI security context.</returns>
         /// <exception cref="GSSAPIException">Failed to initiate/step the security context.</exception>
-        public static GssapiSecContext InitSetContext(SafeGssapiCred? cred, SafeGssapiSecContext? context,
+        public static GssapiSecContext InitSecContext(SafeGssapiCred? cred, SafeGssapiSecContext? context,
             SafeGssapiName targetName, byte[]? mechType, GssapiContextFlags reqFlags, int ttl,
             ChannelBindings? chanBindings, byte[]? inputToken)
         {

@@ -38,7 +38,7 @@ namespace PSOpenAD
             AssemblyLoadContext.Default.ResolvingUnmanagedDll += ImportResolver;
         }
 
-        public bool CacheLibrary(string id, string path)
+        public LibraryInfo? CacheLibrary(string id, string path)
         {
             string? envOverride = Environment.GetEnvironmentVariable(id.ToUpperInvariant().Replace(".", "_"));
             if (!String.IsNullOrWhiteSpace(envOverride))
@@ -47,12 +47,11 @@ namespace PSOpenAD
             try
             {
                 NativeHandles[id] = new LibraryInfo(id, path);
-                return true;
+                return NativeHandles[id];
             }
-            catch (DllNotFoundException)
-            {
-                return false;
-            }
+            catch (DllNotFoundException) {}
+
+            return null;
         }
 
         private IntPtr ImportResolver(Assembly assembly, string libraryName)
@@ -84,11 +83,12 @@ namespace PSOpenAD
 
             // GSSAPI is needed for Negotiate or Kerberos auth while Krb5 is used on non-Windows to locate the default
             // realm when setting up an implicit connection.
-            bool hasGssapi, hasKrb5;
+            LibraryInfo? gssapiLib, krb5Lib;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "GSS.framework");
-                hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "Heimdal.framework");
+                gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "/System/Library/Frameworks/GSS.framework/GSS");
+                krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5,
+                    "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal");
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -96,8 +96,8 @@ namespace PSOpenAD
             }
             else
             {
-                hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
-                hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
+                gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
+                krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
             }
 
             // While channel binding isn't technically done by both these methods an Active Directory implementation
@@ -118,7 +118,7 @@ namespace PSOpenAD
                 bool canSign = false;
                 string details = "";
 
-                if (hasGssapi)
+                if (gssapiLib != null)
                 {
                     present = canSign = true;
                 }
@@ -131,8 +131,11 @@ namespace PSOpenAD
             }
 
             // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
-            if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && hasKrb5)
+            if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
             {
+                if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
+                    GlobalState.GssapiIsHeimdal = true;
+
                 using SafeKrb5Context ctx = Kerberos.InitContext();
                 try
                 {
