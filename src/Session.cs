@@ -23,7 +23,6 @@ namespace PSOpenAD
         public bool NoSigning { get; set; }
         public bool NoChannelBinding { get; set; }
         public bool SkipCertificateCheck { get; set; }
-        public X509Certificate? Certificate { get; set; }
     }
 
     public sealed class OpenADSession
@@ -102,7 +101,7 @@ namespace PSOpenAD
             try
             {
                 bool transportIsTls = false;
-                byte[]? channelBindings = null;
+                ChannelBindings? channelBindings = null;
                 if (startTls || uri.Scheme.Equals("ldaps", StringComparison.InvariantCultureIgnoreCase))
                 {
                     transportIsTls = true;
@@ -145,8 +144,8 @@ namespace PSOpenAD
         /// <param name="sessionOptions">More session options to control the TLS behaviour.</param>
         /// <param name="cancelToken">Cancellation token for any network requests.</param>
         /// <param name="cmdlet">PSCmdlet to write verbose records to.</param>
-        /// <returns>The channel binding application data used with SASL authentication if available.</returns>
-        private static byte[]? ProcessTlsOptions(OpenADConnection connection, Uri uri, bool startTls,
+        /// <returns>The channel binding data used with SASL authentication if available.</returns>
+        private static ChannelBindings? ProcessTlsOptions(OpenADConnection connection, Uri uri, bool startTls,
             OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
         {
             if (sessionOptions.NoEncryption || sessionOptions.NoSigning)
@@ -176,7 +175,7 @@ namespace PSOpenAD
             };
             SslStream tls = connection.SetTlsStream(authOptions, cancelToken);
 
-            byte[]? cbt = null;
+            ChannelBindings? cbt = null;
             if (!sessionOptions.NoChannelBinding)
                 cbt = GetTlsChannelBindings(tls);
 
@@ -190,8 +189,8 @@ namespace PSOpenAD
         /// achieve the same result.
         /// </remarks>
         /// <param name="tls">The SslStream that has been authenticated.</param>
-        /// <returns>The channel binding application data if available.</returns>
-        private static byte[]? GetTlsChannelBindings(SslStream tls)
+        /// <returns>The channel binding data if available.</returns>
+        private static ChannelBindings? GetTlsChannelBindings(SslStream tls)
         {
             using X509Certificate2 cert = new(tls.RemoteCertificate);
 
@@ -224,7 +223,10 @@ namespace PSOpenAD
             Array.Copy(prefix, 0, finalCB, 0, prefix.Length);
             Array.Copy(certHash, 0, finalCB, prefix.Length, certHash.Length);
 
-            return finalCB;
+            return new ChannelBindings()
+            {
+                ApplicationData = finalCB,
+            };
         }
 
         /// <summary>Authenticates with the LDAP server.</summary>
@@ -233,12 +235,12 @@ namespace PSOpenAD
         /// <param name="auth">The authentication mechanism to use.</param>
         /// <param name="credential">The explicit username and password to authenticate with.</param>
         /// <param name="channelBindings">TLS channel bindings to use with GSSAPI authentication.</param>
-        /// <param name="transprotIsTls">Whether the underlying transport is protected with TLS.</param>
+        /// <param name="transportIsTls">Whether the underlying transport is protected with TLS.</param>
         /// <param name="sessionOptions">More session options to control the auth behaviour.</param>
         /// <param name="cancelToken">Cancellation token for any network requests.</param>
         /// <param name="cmdlet">PSCmdlet to write verbose records to.</param>
         private static void Authenticate(OpenADConnection connection, Uri uri, AuthenticationMethod auth,
-            PSCredential? credential, byte[]? channelBindings, bool transportIsTls,
+            PSCredential? credential, ChannelBindings? channelBindings, bool transportIsTls,
             OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
         {
             if (auth == AuthenticationMethod.Default)
@@ -253,10 +255,6 @@ namespace PSOpenAD
                 else if (credential != null && transportIsTls)
                 {
                     auth = AuthenticationMethod.Simple;
-                }
-                else if (sessionOptions.Certificate != null && transportIsTls)
-                {
-                    auth = AuthenticationMethod.External;
                 }
                 else
                 {
@@ -278,12 +276,7 @@ namespace PSOpenAD
             string username = credential?.UserName ?? "";
             string password = credential?.GetNetworkCredential().Password ?? "";
 
-            if (auth == AuthenticationMethod.External)
-            {
-                // FIXME
-                throw new NotImplementedException();
-            }
-            else if (auth == AuthenticationMethod.Kerberos || auth == AuthenticationMethod.Negotiate)
+            if (auth == AuthenticationMethod.Kerberos || auth == AuthenticationMethod.Negotiate)
             {
                 string targetSpn = $"ldap@{uri.DnsSafeHost}";
                 bool integrity = !(transportIsTls || sessionOptions.NoSigning);
@@ -442,7 +435,7 @@ namespace PSOpenAD
         /// <param name="searchBase">The search base of the query.</param>
         /// <param name="scope">The scope of the query.</param>
         /// <param name="filter">The LDAP filter to use for the query.</param>
-        /// <param name="attribute">The attributes to retrieve.</param>
+        /// <param name="attributes">The attributes to retrieve.</param>
         /// <param name="cancelToken">Token to cancel any network IO waits</param>
         /// <returns>A dictionary of each attribute and their values as a string.</returns>
         private static Dictionary<string, string[]> LdapQuery(OpenADConnection connection, string searchBase,
@@ -777,11 +770,7 @@ namespace PSOpenAD
             _recvTask.GetAwaiter().GetResult();
 
             // The unbind response also marks the LDAP outgoing reader as done
-            // FIXME: find a way to mark the reader as done here.
-            if (Session.State == LDAP.SessionState.Opened)
-            {
-                Session.Unbind();
-            }
+            Session.Unbind();
             _sendTask.GetAwaiter().GetResult();
 
             // Once both tasks are complete dispose of the stream and connection.

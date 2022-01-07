@@ -1,7 +1,6 @@
 using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
 namespace PSOpenAD
 {
@@ -17,9 +16,6 @@ namespace PSOpenAD
         /// Simple auth with a plaintext username and password, should only be used with LDAPS or StartTLS.
         /// </summary>
         Simple,
-
-        /// <summary>Used with certificate auth over LDAPS or StartTLS for authentication with an external channel.</summary>
-        External,
 
         /// <summary>GSSAPI/SSPI Negotiate (SASL GSS-SPNEGO) authentication.</summary>
         Negotiate,
@@ -66,6 +62,15 @@ namespace PSOpenAD
         Confidentiality = 4,
     }
 
+    internal class ChannelBindings
+    {
+        public int InitiatorAddrType { get; set; }
+        public byte[]? InitiatorAddr { get; set; }
+        public int AcceptorAddrType { get; set; }
+        public byte[]? AcceptorAddr { get; set; }
+        public byte[]? ApplicationData { get; set; }
+    }
+
     internal abstract class SecurityContext : IDisposable
     {
         public bool Complete { get; internal set; }
@@ -86,16 +91,16 @@ namespace PSOpenAD
     {
         private readonly SafeGssapiCred _credential;
         private readonly SafeGssapiName _targetSpn;
+        private readonly ChannelBindings? _bindingData;
         private readonly byte[] _mech;
-        private readonly SafeMemoryBuffer? _bindingData;
         private readonly GssapiContextFlags _flags = GssapiContextFlags.GSS_C_MUTUAL_FLAG |
             GssapiContextFlags.GSS_C_SEQUENCE_FLAG;
         private SafeGssapiSecContext? _context;
-        private Helpers.gss_channel_bindings_struct? _bindings;
 
         public GssapiContext(string? username, string? password, AuthenticationMethod method, string target,
-            byte[]? channelBindings, bool integrity, bool confidentiality)
+            ChannelBindings? channelBindings, bool integrity, bool confidentiality)
         {
+            _bindingData = channelBindings;
             _mech = method == AuthenticationMethod.Negotiate ? GSSAPI.SPNEGO : GSSAPI.KERBEROS;
             _targetSpn = GSSAPI.ImportName(target, GSSAPI.GSS_C_NT_HOSTBASED_SERVICE);
 
@@ -136,26 +141,11 @@ namespace PSOpenAD
                 // auth to negotiate the integrity/conf options.
                 GSSAPI.SetCredOption(_credential, GSSAPI.GSS_KRB5_CRED_NO_CI_FLAGS_X);
             }
-
-            if (channelBindings != null)
-            {
-                _bindingData = new SafeMemoryBuffer(channelBindings.Length);
-                Marshal.Copy(channelBindings, 0, _bindingData.DangerousGetHandle(), channelBindings.Length);
-
-                _bindings = new Helpers.gss_channel_bindings_struct()
-                {
-                    application_data = new Helpers.gss_buffer_desc()
-                    {
-                        length = new IntPtr(channelBindings.Length),
-                        value = _bindingData.DangerousGetHandle(),
-                    },
-                };
-            }
         }
 
         public override byte[] Step(byte[]? inputToken = null)
         {
-            var res = GSSAPI.InitSetContext(_credential, _context, _targetSpn, _mech, _flags, 0, _bindings,
+            var res = GSSAPI.InitSetContext(_credential, _context, _targetSpn, _mech, _flags, 0, _bindingData,
                 inputToken);
             _context = res.Context;
 
@@ -200,7 +190,6 @@ namespace PSOpenAD
             _credential.Dispose();
             _context?.Dispose();
             _targetSpn?.Dispose();
-            _bindingData?.Dispose();
         }
     }
 }

@@ -82,11 +82,23 @@ namespace PSOpenAD
         {
             Resolver = new NativeResolver();
 
-            // This is needed for Negotiate or Kerberos auth.
-            bool hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
-
-            // This is used to lookup the default realm value used for implicit sessions.
-            bool hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
+            // GSSAPI is needed for Negotiate or Kerberos auth while Krb5 is used on non-Windows to locate the default
+            // realm when setting up an implicit connection.
+            bool hasGssapi, hasKrb5;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "GSS.framework");
+                hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "Heimdal.framework");
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                throw new NotImplementedException(); // FIXME
+            }
+            else
+            {
+                hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
+                hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
+            }
 
             // While channel binding isn't technically done by both these methods an Active Directory implementation
             // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
@@ -95,8 +107,6 @@ namespace PSOpenAD
                 true, false, "");
             GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
                 false, "");
-            GlobalState.Providers[AuthenticationMethod.External] = new(AuthenticationMethod.External, "EXTERNAL",
-                true, false, "");
 
             foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
             {
