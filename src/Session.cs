@@ -288,6 +288,9 @@ namespace PSOpenAD
                     && !sessionOptions.NoSigning)
                 {
                     cmdlet?.WriteWarning("-AuthType Negotiate cannot disable encryption without disabling signing");
+                    // Will be set to false above, need to ensure that it is true unless TLS is used as the packets
+                    // must be encrypted for Negotiate unless both integrity is disabled.
+                    confidentiality = !transportIsTls;
                 }
                 else if (sessionOptions.NoSigning && !sessionOptions.NoEncryption)
                 {
@@ -595,8 +598,21 @@ namespace PSOpenAD
                     if (BitConverter.IsLittleEndian)
                         Array.Reverse(lengthData);
 
-                    await IOStream.WriteAsync(lengthData, 0, lengthData.Length);
-                    await IOStream.WriteAsync(wrappedData, 0, wrappedData.Length);
+                    // FIXME: Check if the below can work to save allocating a new arrya and copying.
+                    // await IOStream.WriteAsync(lengthData, 0, lengthData.Length);
+                    // await IOStream.WriteAsync(wrappedData, 0, wrappedData.Length);
+                    ArrayPool<byte> shared = ArrayPool<byte>.Shared;
+                    byte[] rentedArray = shared.Rent(wrappedData.Length + 4);
+                    try
+                    {
+                        Buffer.BlockCopy(lengthData, 0, rentedArray, 0, lengthData.Length);
+                        Buffer.BlockCopy(wrappedData, 0, rentedArray, lengthData.Length, wrappedData.Length);
+                        await IOStream.WriteAsync(rentedArray, 0, lengthData.Length + wrappedData.Length);
+                    }
+                    finally
+                    {
+                        shared.Return(rentedArray);
+                    }
                 }
                 else
                 {
@@ -618,11 +634,13 @@ namespace PSOpenAD
 
         private async Task Recv()
         {
-            Pipe pipe = new(new PipeOptions(pauseWriterThreshold: 0));
+            Pipe socket = new();
+            Pipe unwrapper = new();
 
-            Task socketReader = RecvSocket(pipe.Writer);
-            Task messageProcessor = RecvProcess(pipe.Reader);
-            await Task.WhenAll(socketReader, messageProcessor);
+            Task socketReader = RecvSocket(socket.Writer);
+            Task encryptionProcessor = RecvWrapped(socket.Reader, unwrapper.Writer);
+            Task messageProcessor = RecvProcess(unwrapper.Reader);
+            await Task.WhenAll(socketReader, encryptionProcessor, messageProcessor);
         }
 
         private async Task RecvSocket(PipeWriter writer)
@@ -661,6 +679,40 @@ namespace PSOpenAD
             await writer.CompleteAsync();
         }
 
+        private async Task RecvWrapped(PipeReader reader, PipeWriter writer)
+        {
+            while (true)
+            {
+                ReadResult result = await reader.ReadAsync();
+                ReadOnlySequence<byte> buffer = result.Buffer;
+
+                long consumed;
+                if (buffer.Length == 0)
+                {
+                    consumed = 0;
+                }
+                else if (SecurityContext != null && Sign)
+                {
+                    consumed = await ProcessSealedMessage(SecurityContext, buffer, writer);
+                }
+                else
+                {
+                    foreach (ReadOnlyMemory<byte> segment in buffer)
+                    {
+                        await writer.WriteAsync(segment);
+                    }
+                    consumed = buffer.Length;
+                }
+
+                reader.AdvanceTo(buffer.Slice(0, consumed).End, buffer.End);
+                if (result.IsCompleted)
+                    break;
+            }
+
+            await reader.CompleteAsync();
+            await writer.CompleteAsync();
+        }
+
         private async Task RecvProcess(PipeReader reader)
         {
             while (true)
@@ -672,10 +724,6 @@ namespace PSOpenAD
                 if (buffer.Length == 0)
                 {
                     consumed = 0;
-                }
-                else if (SecurityContext != null && Sign)
-                {
-                    consumed = TryReadSealedMessage(SecurityContext, buffer);
                 }
                 else if (buffer.IsSingleSegment)
                 {
@@ -696,49 +744,43 @@ namespace PSOpenAD
             await reader.CompleteAsync();
         }
 
-        private int TryReadSealedMessage(SecurityContext context, ReadOnlySequence<byte> data)
+        private async Task<long> ProcessSealedMessage(SecurityContext context, ReadOnlySequence<byte> data, PipeWriter writer)
         {
-            if (data.Length < 4)
-                return 0;
+            long consumed = 0;
+            while (data.Length > 4)
+            {
+                int length = ReadWrappedLength(data);
+                if (data.Length < 4 + length)
+                    break;
 
-            ReadOnlySequence<byte> lengthSequence = data.Slice(0, 4);
+                ReadOnlySequence<byte> dataSequence = data.Slice(4, length);
+                byte[] unwrappedData;
+                if (dataSequence.IsSingleSegment)
+                {
+                    unwrappedData = context.Unwrap(dataSequence.FirstSpan);
+                }
+                else
+                {
+                    ReadOnlyMemory<byte> wrappedData = dataSequence.ToArray();
+                    unwrappedData = context.Unwrap(wrappedData.Span);
+                }
+                await writer.WriteAsync(unwrappedData);
+
+                data = data.Slice(4 + length);
+                consumed += 4 + length;
+            }
+
+            return consumed;
+        }
+
+        private int ReadWrappedLength(ReadOnlySequence<byte> data)
+        {
             Span<byte> rawLength = stackalloc byte[4];
-            lengthSequence.CopyTo(rawLength);
+            data.Slice(0, 4).CopyTo(rawLength);
             if (BitConverter.IsLittleEndian)
                 rawLength.Reverse();
 
-            int length = BitConverter.ToInt32(rawLength);
-            if (data.Length < 4 + length)
-                return 0;
-
-            ReadOnlySequence<byte> dataSequence = data.Slice(4, length);
-            byte[] unwrappedData;
-            if (dataSequence.IsSingleSegment)
-            {
-                unwrappedData = context.Unwrap(dataSequence.FirstSpan);
-            }
-            else
-            {
-                ReadOnlyMemory<byte> wrappedData = dataSequence.ToArray();
-                unwrappedData = context.Unwrap(wrappedData.Span);
-            }
-
-            ReadOnlySpan<byte> unwrappedSpan = unwrappedData.AsSpan();
-            while (true)
-            {
-                int msgConsumed = TryReadMessage(unwrappedSpan);
-                if (msgConsumed == 0)
-                {
-                    if (unwrappedSpan.Length > 0)
-                        throw new Exception("TODO Verify whether this can happen");
-
-                    break;
-                }
-
-                unwrappedSpan = unwrappedSpan[msgConsumed..];
-            }
-
-            return 4 + length;
+            return BitConverter.ToInt32(rawLength);
         }
 
         private int TryReadMessage(ReadOnlySpan<byte> data)

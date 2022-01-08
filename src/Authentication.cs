@@ -89,7 +89,7 @@ namespace PSOpenAD
 
     internal class GssapiContext : SecurityContext
     {
-        private readonly SafeGssapiCred _credential;
+        private readonly SafeGssapiCred? _credential;
         private readonly SafeGssapiName _targetSpn;
         private readonly ChannelBindings? _bindingData;
         private readonly byte[] _mech;
@@ -196,7 +196,7 @@ namespace PSOpenAD
 
         public override void Dispose()
         {
-            _credential.Dispose();
+            _credential?.Dispose();
             _context?.Dispose();
             _targetSpn?.Dispose();
         }

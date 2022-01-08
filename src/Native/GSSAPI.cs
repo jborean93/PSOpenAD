@@ -7,8 +7,6 @@ namespace PSOpenAD.Native
 {
     internal static class Helpers
     {
-        // FIXME: macOS seems to require Pack = 2 on all structs to work
-        // https://github.com/apple-oss-distributions/Heimdal/blob/5a776844a50fc09d714ba82ff7a88973c035b42b/lib/gssapi/gssapi/gssapi.h#L64-L67
         [StructLayout(LayoutKind.Sequential)]
         public struct gss_channel_bindings_struct
         {
@@ -19,8 +17,30 @@ namespace PSOpenAD.Native
             public gss_buffer_desc application_data;
         }
 
+        // GSS.framework on x86_64 macOS is defined with pack(2) which complicates things a bit more. This is the only
+        // struct that would be affected by this so needs special runtime handling when creating the struct. Note this
+        // does not apply to the arm64 macOS, the define only applies to PowerPC (no longer relevant) and x86_64.
+        // https://github.com/apple-oss-distributions/Heimdal/blob/5a776844a50fc09d714ba82ff7a88973c035b42b/lib/gssapi/gssapi/gssapi.h#L64-L67
+        [StructLayout(LayoutKind.Sequential, Pack = 2)]
+        public struct gss_channel_bindings_struct_macos
+        {
+            public int initiator_addrtype;
+            public gss_buffer_desc initiator_address;
+            public int acceptor_addrtype;
+            public gss_buffer_desc acceptor_address;
+            public gss_buffer_desc application_data;
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         public struct gss_OID_desc
+        {
+            public UInt32 length;
+            public IntPtr elements;
+        }
+
+        // See above for why macOS needs this pack value.
+        [StructLayout(LayoutKind.Sequential, Pack = 2)]
+        public struct gss_OID_desc_macos
         {
             public UInt32 length;
             public IntPtr elements;
@@ -59,11 +79,23 @@ namespace PSOpenAD.Native
                     Helpers.gss_OID_set_desc* set = (Helpers.gss_OID_set_desc*)mechanisms.DangerousGetHandle();
                     Mechanisms = new List<byte[]>((int)set->count);
 
-                    Span<Helpers.gss_OID_desc> oids = new(set->elements.ToPointer(), (int)set->count);
-                    foreach (Helpers.gss_OID_desc memers in oids)
+                    if (GSSAPI.MACOS_PACKED_STRUCT)
                     {
-                        byte[] oid = new Span<byte>(memers.elements.ToPointer(), (int)memers.length).ToArray();
-                        Mechanisms.Add(oid);
+                        Span<Helpers.gss_OID_desc_macos> oids = new(set->elements.ToPointer(), (int)set->count);
+                        foreach (Helpers.gss_OID_desc_macos memers in oids)
+                        {
+                            byte[] oid = new Span<byte>(memers.elements.ToPointer(), (int)memers.length).ToArray();
+                            Mechanisms.Add(oid);
+                        }
+                    }
+                    else
+                    {
+                        Span<Helpers.gss_OID_desc> oids = new(set->elements.ToPointer(), (int)set->count);
+                        foreach (Helpers.gss_OID_desc memers in oids)
+                        {
+                            byte[] oid = new Span<byte>(memers.elements.ToPointer(), (int)memers.length).ToArray();
+                            Mechanisms.Add(oid);
+                        }
                     }
                 }
             }
@@ -118,10 +150,20 @@ namespace PSOpenAD.Native
             0x2A, 0x85, 0x70, 0x2B, 0x0D, 0x1D
         }; // 1.2.752.43.13.29
 
+        // macOS on x86_64 need to use a specially packed structure, this just simplifies the check.
+        public static bool MACOS_PACKED_STRUCT = (
+            RuntimeInformation.IsOSPlatform(OSPlatform.OSX) &&
+            (
+                // Doesn't apply to arm64 runtimes.
+                RuntimeInformation.ProcessArchitecture == Architecture.X86 ||
+                RuntimeInformation.ProcessArchitecture == Architecture.X64
+            )
+        );
+
         [DllImport(LIB_GSSAPI)]
         public static unsafe extern int gss_add_oid_set_member(
             out int min_stat,
-            ref Helpers.gss_OID_desc member,
+            SafeHandle member,
             ref Helpers.gss_OID_set_desc* target_set);
 
         [DllImport(LIB_GSSAPI)]
@@ -159,11 +201,11 @@ namespace PSOpenAD.Native
             IntPtr output_token);
 
         [DllImport(LIB_GSSAPI)]
-        public static unsafe extern int gss_display_status(
+        public static extern int gss_display_status(
             out int min_status,
             int status_value,
             int status_type,
-            Helpers.gss_OID_desc* mech_type,
+            SafeHandle mech_type,
             ref int message_context,
             ref Helpers.gss_buffer_desc status_string);
 
@@ -171,7 +213,7 @@ namespace PSOpenAD.Native
         public static extern int gss_import_name(
             out int min_stat,
             ref Helpers.gss_buffer_desc input_buffer,
-            ref Helpers.gss_OID_desc name_type,
+            SafeHandle name_type,
             out SafeGssapiName output_name);
 
         [DllImport(LIB_GSSAPI)]
@@ -180,10 +222,10 @@ namespace PSOpenAD.Native
             SafeGssapiCred cred_handle,
             ref SafeGssapiSecContext context_handle,
             SafeHandle target_name,
-            Helpers.gss_buffer_desc* mech_type,
+            SafeHandle mech_type,
             GssapiContextFlags req_flags,
             int time_req,
-            Helpers.gss_channel_bindings_struct* input_chan_bindings,
+            SafeHandle input_chan_bindings,
             Helpers.gss_buffer_desc* input_token,
             ref IntPtr actual_mech_type,
             ref Helpers.gss_buffer_desc output_token,
@@ -213,8 +255,8 @@ namespace PSOpenAD.Native
         [DllImport(LIB_GSSAPI)]
         public static extern int gss_set_cred_option(
             out int min_status,
-            SafeGssapiCred cred,
-            ref Helpers.gss_OID_desc desired_object,
+            ref SafeGssapiCred cred,
+            SafeHandle desired_object,
             ref Helpers.gss_buffer_desc value);
 
         [DllImport(LIB_GSSAPI)]
@@ -332,16 +374,7 @@ namespace PSOpenAD.Native
             {
                 fixed (byte* mechPtr = mech)
                 {
-                    Helpers.gss_OID_desc* mechBuffer = null;
-                    if (mech != null)
-                    {
-                        Helpers.gss_OID_desc mechStruct = new()
-                        {
-                            length = (uint)mech.Length,
-                            elements = (IntPtr)mechPtr,
-                        };
-                        mechBuffer = &mechStruct;
-                    }
+                    SafeHandle mechBuffer = CreateOIDBuffer(mechPtr, mech?.Length ?? 0);
 
                     List<string> lines = new();
                     while (true)
@@ -388,13 +421,8 @@ namespace PSOpenAD.Native
                         value = (IntPtr)namePtr,
                     };
 
-                    Helpers.gss_OID_desc nameTypeBuffer = new()
-                    {
-                        length = (uint)nameType.Length,
-                        elements = (IntPtr)nameTypePtr,
-                    };
-
-                    int majorStatus = gss_import_name(out var minorStatus, ref nameBuffer, ref nameTypeBuffer,
+                    using SafeHandle nameTypeBuffer = CreateOIDBuffer(nameTypePtr, nameType.Length);
+                    int majorStatus = gss_import_name(out var minorStatus, ref nameBuffer, nameTypeBuffer,
                         out var outputName);
                     if (majorStatus != 0)
                         throw new GSSAPIException(majorStatus, minorStatus, "gss_import_name");
@@ -440,42 +468,9 @@ namespace PSOpenAD.Native
                     appData = chanBindings?.ApplicationData,
                     inputTokenPtr = inputToken)
                 {
-                    Helpers.gss_buffer_desc* mechTypeStruct = null;
-                    if (mechType != null)
-                    {
-                        Helpers.gss_buffer_desc mechTypeBuffer = new()
-                        {
-                            length = new IntPtr(mechType.Length),
-                            value = (IntPtr)mechTypePtr,
-                        };
-                        mechTypeStruct = &mechTypeBuffer;
-                    }
-
-                    Helpers.gss_channel_bindings_struct* cbStruct = null;
-                    if (chanBindings != null)
-                    {
-                        Helpers.gss_channel_bindings_struct cbValue = new()
-                        {
-                            initiator_addrtype = chanBindings.InitiatorAddrType,
-                            initiator_address = new Helpers.gss_buffer_desc()
-                            {
-                                length = new IntPtr(chanBindings.InitiatorAddr?.Length ?? 0),
-                                value = (IntPtr)initiatorAddr,
-                            },
-                            acceptor_addrtype = chanBindings.AcceptorAddrType,
-                            acceptor_address = new Helpers.gss_buffer_desc()
-                            {
-                                length = new IntPtr(chanBindings.InitiatorAddr?.Length ?? 0),
-                                value = (IntPtr)acceptorAddr,
-                            },
-                            application_data = new Helpers.gss_buffer_desc()
-                            {
-                                length = new IntPtr(chanBindings.ApplicationData?.Length ?? 0),
-                                value = (IntPtr)appData,
-                            },
-                        };
-                        cbStruct = &cbValue;
-                    }
+                    SafeHandle mechBuffer = CreateOIDBuffer(mechTypePtr, mechType?.Length ?? 0);
+                    SafeHandle chanBindingBuffer = CreateChanBindingBuffer(chanBindings, initiatorAddr, acceptorAddr,
+                        appData);
 
                     Helpers.gss_buffer_desc* inputStruct = null;
                     if (inputToken != null)
@@ -488,8 +483,8 @@ namespace PSOpenAD.Native
                         inputStruct = &inputBuffer;
                     }
 
-                    int majorStatus = gss_init_sec_context(out var minorStatus, cred, ref context, targetName, mechTypeStruct,
-                        reqFlags, ttl, cbStruct, inputStruct, ref actualMechBuffer, ref outputTokenBuffer,
+                    int majorStatus = gss_init_sec_context(out var minorStatus, cred, ref context, targetName, mechBuffer,
+                        reqFlags, ttl, chanBindingBuffer, inputStruct, ref actualMechBuffer, ref outputTokenBuffer,
                         out actualFlags, out actualTTL);
 
                     if (majorStatus != 0 && majorStatus != 1)
@@ -510,9 +505,18 @@ namespace PSOpenAD.Native
                 {
                     unsafe
                     {
-                        var actualMech = (Helpers.gss_OID_desc*)actualMechBuffer.ToPointer();
-                        actualMechType = new byte[actualMech->length];
-                        Marshal.Copy(actualMech->elements, actualMechType, 0, actualMechType.Length);
+                        if (MACOS_PACKED_STRUCT)
+                        {
+                            var actualMech = (Helpers.gss_OID_desc_macos*)actualMechBuffer.ToPointer();
+                            actualMechType = new byte[actualMech->length];
+                            Marshal.Copy(actualMech->elements, actualMechType, 0, actualMechType.Length);
+                        }
+                        else
+                        {
+                            var actualMech = (Helpers.gss_OID_desc*)actualMechBuffer.ToPointer();
+                            actualMechType = new byte[actualMech->length];
+                            Marshal.Copy(actualMech->elements, actualMechType, 0, actualMechType.Length);
+                        }
                     }
                 }
 
@@ -546,14 +550,10 @@ namespace PSOpenAD.Native
             {
                 fixed (byte* oidPtr = oid)
                 {
-                    Helpers.gss_OID_desc oidBuffer = new()
-                    {
-                        length = (uint)oid.Length,
-                        elements = (IntPtr)oidPtr,
-                    };
+                    SafeHandle oidBuffer = CreateOIDBuffer(oidPtr, oid.Length);
                     Helpers.gss_buffer_desc valueBuffer = new();
 
-                    int majorStatus = gss_set_cred_option(out var minorStatus, cred, ref oidBuffer, ref valueBuffer);
+                    int majorStatus = gss_set_cred_option(out var minorStatus, ref cred, oidBuffer, ref valueBuffer);
                     if (majorStatus != 0)
                         throw new GSSAPIException(majorStatus, minorStatus, "gss_set_cred_option");
                 }
@@ -668,6 +668,74 @@ namespace PSOpenAD.Native
             return maxSize;
         }
 
+        private static unsafe SafeHandle CreateChanBindingBuffer(ChannelBindings? bindings, byte* initiatorAddr,
+            byte* acceptorAddr, byte* applicationData)
+        {
+            if (bindings == null)
+                return new SafeMemoryBuffer();
+
+            if (MACOS_PACKED_STRUCT)
+            {
+                // Need the pack 2 structure to properly set this up.
+                SafeMemoryBuffer buffer = new SafeMemoryBuffer(
+                    Marshal.SizeOf<Helpers.gss_channel_bindings_struct_macos>());
+
+                var cb = (Helpers.gss_channel_bindings_struct_macos*)buffer.DangerousGetHandle().ToPointer();
+                cb->initiator_addrtype = bindings.InitiatorAddrType;
+                cb->initiator_address.length = new IntPtr(bindings.InitiatorAddr?.Length ?? 0);
+                cb->initiator_address.value = (IntPtr)initiatorAddr;
+                cb->acceptor_addrtype = bindings.AcceptorAddrType;
+                cb->acceptor_address.length = new IntPtr(bindings.AcceptorAddr?.Length ?? 0);
+                cb->acceptor_address.value = (IntPtr)acceptorAddr;
+                cb->application_data.length = new IntPtr(bindings.ApplicationData?.Length ?? 0);
+                cb->application_data.value = (IntPtr)applicationData;
+
+                return buffer;
+            }
+            else
+            {
+                SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.gss_channel_bindings_struct>());
+
+                var cb = (Helpers.gss_channel_bindings_struct*)buffer.DangerousGetHandle().ToPointer();
+                cb->initiator_addrtype = bindings.InitiatorAddrType;
+                cb->initiator_address.length = new IntPtr(bindings.InitiatorAddr?.Length ?? 0);
+                cb->initiator_address.value = (IntPtr)initiatorAddr;
+                cb->acceptor_addrtype = bindings.AcceptorAddrType;
+                cb->acceptor_address.length = new IntPtr(bindings.AcceptorAddr?.Length ?? 0);
+                cb->acceptor_address.value = (IntPtr)acceptorAddr;
+                cb->application_data.length = new IntPtr(bindings.ApplicationData?.Length ?? 0);
+                cb->application_data.value = (IntPtr)applicationData;
+
+                return buffer;
+            }
+        }
+
+        private static unsafe SafeHandle CreateOIDBuffer(byte* oid, int length)
+        {
+            if (oid == null)
+                return new SafeMemoryBuffer();
+
+            if (MACOS_PACKED_STRUCT)
+            {
+                // Need the pack 2 structure to properly set this up.
+                SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.gss_OID_desc_macos>());
+                var oidBuffer = (Helpers.gss_OID_desc_macos*)buffer.DangerousGetHandle().ToPointer();
+                oidBuffer->length = (uint)length;
+                oidBuffer->elements = (IntPtr)oid;
+
+                return buffer;
+            }
+            else
+            {
+                SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.gss_OID_desc>());
+                var oidBuffer = (Helpers.gss_OID_desc*)buffer.DangerousGetHandle().ToPointer();
+                oidBuffer->length = (uint)length;
+                oidBuffer->elements = (IntPtr)oid;
+
+                return buffer;
+            }
+        }
+
         private static unsafe Helpers.gss_OID_set_desc* CreateOIDSet(IList<byte[]>? oids)
         {
             if (oids == null)
@@ -683,13 +751,8 @@ namespace PSOpenAD.Native
                 {
                     fixed (byte* oidPtr = oid)
                     {
-                        Helpers.gss_OID_desc oidBuffer = new()
-                        {
-                            length = (uint)oid.Length,
-                            elements = (IntPtr)oidPtr,
-                        };
-
-                        majorStatus = gss_add_oid_set_member(out minorStatus, ref oidBuffer, ref setBuffer);
+                        SafeHandle oidBuffer = CreateOIDBuffer(oidPtr, oid.Length);
+                        majorStatus = gss_add_oid_set_member(out minorStatus, oidBuffer, ref setBuffer);
                         if (majorStatus != 0)
                             throw new GSSAPIException(majorStatus, minorStatus, "gss_add_oid_set_member");
                     }
@@ -809,6 +872,34 @@ namespace PSOpenAD.Native
         protected override bool ReleaseHandle()
         {
             return GSSAPI.gss_delete_sec_context(out var _, ref handle, IntPtr.Zero) == 0;
+        }
+    }
+
+    internal class SafeMemoryBuffer : SafeHandle
+    {
+        public int Length { get; } = 0;
+
+        internal SafeMemoryBuffer() : base(IntPtr.Zero, true) { }
+
+        internal SafeMemoryBuffer(int size) : base(Marshal.AllocHGlobal(size), true) => Length = size;
+
+        internal SafeMemoryBuffer(string value) : base(IntPtr.Zero, true)
+        {
+            byte[] data = Encoding.UTF8.GetBytes(value);
+            Length = data.Length;
+
+            handle = Marshal.AllocHGlobal(Length);
+            Marshal.Copy(data, 0, handle, Length);
+        }
+
+        internal SafeMemoryBuffer(IntPtr buffer, bool ownsHandle) : base(buffer, ownsHandle) { }
+
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
+        protected override bool ReleaseHandle()
+        {
+            Marshal.FreeHGlobal(handle);
+            return true;
         }
     }
 }
