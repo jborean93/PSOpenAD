@@ -83,18 +83,15 @@ namespace PSOpenAD
 
             // GSSAPI is needed for Negotiate or Kerberos auth while Krb5 is used on non-Windows to locate the default
             // realm when setting up an implicit connection.
-            LibraryInfo? gssapiLib, krb5Lib;
+            LibraryInfo? gssapiLib = null;
+            LibraryInfo? krb5Lib = null;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "/System/Library/Frameworks/GSS.framework/GSS");
                 krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5,
                     "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal");
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                throw new NotImplementedException(); // FIXME
-            }
-            else
+            else if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
                 krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
@@ -108,40 +105,52 @@ namespace PSOpenAD
             GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
                 false, "");
 
-            foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                { AuthenticationMethod.Kerberos, "GSSAPI" },
-                { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
-            })
-            {
-                bool present = false;
-                bool canSign = false;
-                string details = "";
+                GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
+                    true, true, "");
+                GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+                    "GSS-SPNEGO", true, true, "");
 
-                if (gssapiLib != null)
-                {
-                    present = canSign = true;
-                }
-                else
-                {
-                    details = "GSSAPI library not found";
-                }
-
-                GlobalState.Providers[kvp.Key] = new(kvp.Key, kvp.Value, present, canSign, details);
+                // FUTURE: Add ad lookup.
             }
-
-            // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
-            if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
+            else
             {
-                if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
-                    GlobalState.GssapiIsHeimdal = true;
-
-                using SafeKrb5Context ctx = Kerberos.InitContext();
-                try
+                foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
                 {
-                    GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
+                    { AuthenticationMethod.Kerberos, "GSSAPI" },
+                    { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
+                })
+                {
+                    bool present = false;
+                    bool canSign = false;
+                    string details = "";
+
+                    if (gssapiLib != null)
+                    {
+                        present = canSign = true;
+                    }
+                    else
+                    {
+                        details = "GSSAPI library not found";
+                    }
+
+                    GlobalState.Providers[kvp.Key] = new(kvp.Key, kvp.Value, present, canSign, details);
                 }
-                catch (KerberosException) { }
+
+                // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
+                if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
+                {
+                    if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
+                        GlobalState.GssapiIsHeimdal = true;
+
+                    using SafeKrb5Context ctx = Kerberos.InitContext();
+                    try
+                    {
+                        GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
+                    }
+                    catch (KerberosException) { }
+                }
             }
         }
 

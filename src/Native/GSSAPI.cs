@@ -5,7 +5,7 @@ using System.Text;
 
 namespace PSOpenAD.Native
 {
-    internal static class Helpers
+    internal static partial class Helpers
     {
         [StructLayout(LayoutKind.Sequential)]
         public struct gss_channel_bindings_struct

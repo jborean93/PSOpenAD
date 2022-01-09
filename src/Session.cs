@@ -9,6 +9,7 @@ using System.Linq;
 using System.Management.Automation;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -278,7 +279,6 @@ namespace PSOpenAD
 
             if (auth == AuthenticationMethod.Kerberos || auth == AuthenticationMethod.Negotiate)
             {
-                string targetSpn = $"ldap@{uri.DnsSafeHost}";
                 bool integrity = !(transportIsTls || sessionOptions.NoSigning);
                 bool confidentiality = !(transportIsTls || sessionOptions.NoEncryption);
 
@@ -297,8 +297,19 @@ namespace PSOpenAD
                     cmdlet?.WriteWarning("Cannot disable signatures and not encryption");
                 }
 
-                GssapiContext context = new(username, password, auth, targetSpn, channelBindings,
-                    integrity, confidentiality);
+                SecurityContext context;
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    string targetSpn = $"LDAP/{uri.DnsSafeHost}";
+                    context = new SspiContext(username, password, auth, targetSpn, channelBindings, integrity,
+                        confidentiality);
+                }
+                else
+                {
+                    string targetSpn = $"ldap@{uri.DnsSafeHost}";
+                    context = new GssapiContext(username, password, auth, targetSpn, channelBindings, integrity,
+                        confidentiality);
+                }
                 SaslAuth(connection, context, selectedAuth.SaslId, integrity, confidentiality,
                     cancelToken);
 
