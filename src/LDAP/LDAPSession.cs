@@ -36,8 +36,24 @@ namespace PSOpenAD.LDAP
             Version = version;
         }
 
+        public void Close()
+        {
+            if (State != SessionState.Binding && State != SessionState.Opened)
+                throw new InvalidOperationException("Cannot close LDAP session unless it is already opened");
+
+            State = SessionState.Closed;
+            _outgoing.Writer.Complete();
+            _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
+        }
+
         public int Bind(string dn, string password, LDAPControl[]? controls = null)
         {
+            if (State != SessionState.BeforeOpen)
+            {
+                throw new InvalidOperationException(
+                    "Cannot bind LDAP session on a connection that has already been opened");
+            }
+
             State = SessionState.Binding;
             BindRequestSimple request = new(NextMessageId(), controls, Version, dn, password);
             PutRequest(request);
@@ -47,6 +63,12 @@ namespace PSOpenAD.LDAP
 
         public int SaslBind(string dn, string mechanism, byte[] cred, LDAPControl[]? controls = null)
         {
+            if (State != SessionState.BeforeOpen && State != SessionState.Binding)
+            {
+                throw new InvalidOperationException(
+                    "Cannot bind LDAP session on a connection that has already been opened");
+            }
+
             State = SessionState.Binding;
             BindRequestSasl request = new(NextMessageId(), controls, Version, dn, mechanism, cred);
             PutRequest(request);
@@ -56,6 +78,12 @@ namespace PSOpenAD.LDAP
 
         public int ExtendedRequest(string name, byte[]? value = null, LDAPControl[]? controls = null)
         {
+            if (State == SessionState.Closed)
+            {
+                throw new InvalidOperationException(
+                    "Cannot perform an ExtendedRequest on a closed connection");
+            }
+
             ExtendedRequest request = new(NextMessageId(), controls, name, value);
             PutRequest(request);
 
@@ -66,6 +94,12 @@ namespace PSOpenAD.LDAP
             int sizeLimit, int timeLimit, bool typesOnly, LDAPFilter filter, string[] attributeSelection,
             LDAPControl[]? controls = null)
         {
+            if (State != SessionState.Opened)
+            {
+                throw new InvalidOperationException(
+                    "Cannot perform a SearchRequest until the connection is openned");
+            }
+
             SearchRequest request = new(NextMessageId(), controls, baseObject, scope, derefAliases,
                 sizeLimit, timeLimit, typesOnly, filter, attributeSelection);
             PutRequest(request);
@@ -75,9 +109,12 @@ namespace PSOpenAD.LDAP
 
         public int Unbind()
         {
-            State = SessionState.Closed;
+            if (State != SessionState.Opened)
+                throw new InvalidOperationException("Cannot perform an Unbind until the connection is openned");
+
             UnbindRequest request = new(NextMessageId(), null);
             PutRequest(request);
+            Close();
 
             return request.MessageId;
         }
@@ -117,8 +154,6 @@ namespace PSOpenAD.LDAP
             int written = writer.Encode(buffer.Span);
             _outgoing.Writer.Advance(written);
 
-            if (message is UnbindRequest)
-                _outgoing.Writer.Complete();
 
             _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
         }

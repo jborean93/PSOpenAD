@@ -141,7 +141,8 @@ namespace PSOpenAD.Commands
 
                 while (true)
                 {
-                    LDAPMessage response = Session.Connection.WaitForMessage(searchId, CurrentCancelToken.Token);
+                    LDAPMessage response = Session.Connection.WaitForMessage(searchId,
+                        cancelToken: CurrentCancelToken.Token);
                     if (response is ExtendedResponse failResp)
                         throw new LDAPException(failResp.Result);
                     else if (response is SearchResultDone)

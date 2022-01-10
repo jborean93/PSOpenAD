@@ -1,10 +1,7 @@
 using PSOpenAD.LDAP;
 using System;
 using System.Buffers;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
-using System.IO.Pipelines;
 using System.Linq;
 using System.Management.Automation;
 using System.Net.Security;
@@ -24,6 +21,8 @@ namespace PSOpenAD
         public bool NoSigning { get; set; }
         public bool NoChannelBinding { get; set; }
         public bool SkipCertificateCheck { get; set; }
+        public Int32 ConnectTimeout { get; set; } = 180000; // 3 Minutes
+        public Int32 OperationTimeout { get; set; } = -1; // FIXME: Set sane default here
     }
 
     public sealed class OpenADSession
@@ -38,7 +37,7 @@ namespace PSOpenAD
 
         public string DefaultNamingContext { get; internal set; }
 
-        public bool IsClosed { get; internal set; }
+        public bool IsClosed => Connection.IsClosed;
 
         internal OpenADConnection Connection { get; }
 
@@ -56,14 +55,11 @@ namespace PSOpenAD
             IsEncrypted = isEncrypted;
             DefaultNamingContext = defaultNamingContext;
             AttributeTransformer = transformer;
-            IsClosed = false;
         }
 
         internal void Close()
         {
-            if (!IsClosed)
-                Connection.Dispose();
-            IsClosed = true;
+            Connection.Dispose();
         }
     }
 
@@ -73,7 +69,24 @@ namespace PSOpenAD
             bool startTls, OpenADSessionOptions sessionOptions, CancellationToken cancelToken = default,
             PSCmdlet? cmdlet = null)
         {
-            if (GlobalState.ImplicitSessions.TryGetValue(uri.ToString(), out var session) && !session.IsClosed)
+            // Use this as an opportunity to prune connections that have been closed unexpectantly.
+            OpenADSession? session = null;
+            foreach (string connectionUri in GlobalState.ImplicitSessions.Keys)
+            {
+                OpenADSession currentSession = GlobalState.ImplicitSessions[connectionUri];
+
+                if (currentSession.IsClosed)
+                {
+                    currentSession.Close();
+                    GlobalState.ImplicitSessions.Remove(connectionUri);
+                    continue;
+                }
+
+                if (connectionUri == uri.ToString())
+                    session = currentSession;
+            }
+
+            if (session != null)
             {
                 cmdlet?.WriteVerbose("Using cached OpenADSession");
                 return session;
@@ -94,11 +107,12 @@ namespace PSOpenAD
             cmdlet?.WriteVerbose($"Connecting to {uri}");
             TcpClient client = new();
             Task connectTask = client.ConnectAsync(uri.DnsSafeHost, uri.Port);
-            if (!connectTask.Wait(10000, cancelToken))
+            if (!connectTask.Wait(sessionOptions.ConnectTimeout, cancelToken))
                 throw new TimeoutException();
             connectTask.GetAwaiter().GetResult();
 
-            OpenADConnection connection = new(client, client.GetStream(), new LDAPSession());
+            OpenADConnection connection = new(client, client.GetStream(), new LDAPSession(),
+                sessionOptions.OperationTimeout);
             try
             {
                 bool transportIsTls = false;
@@ -109,7 +123,7 @@ namespace PSOpenAD
                     channelBindings = ProcessTlsOptions(connection, uri, startTls, sessionOptions, cancelToken, cmdlet);
                 }
 
-                Authenticate(connection, uri, auth, credential, channelBindings, transportIsTls, sessionOptions,
+                auth = Authenticate(connection, uri, auth, credential, channelBindings, transportIsTls, sessionOptions,
                     cancelToken, cmdlet);
 
                 // Attempt to get the default naming context.
@@ -161,7 +175,8 @@ namespace PSOpenAD
                 cmdlet?.WriteVerbose("Sending StartTLS request to the server");
                 int startTlsId = connection.Session.ExtendedRequest("1.3.6.1.4.1.1466.20037");
 
-                ExtendedResponse extResp = (ExtendedResponse)connection.WaitForMessage(startTlsId, cancelToken);
+                ExtendedResponse extResp = (ExtendedResponse)connection.WaitForMessage(startTlsId,
+                    cancelToken: cancelToken);
                 connection.RemoveMessageQueue(startTlsId);
                 if (extResp.Result.ResultCode != LDAPResultCode.Success)
                     throw new LDAPException(extResp.Result);
@@ -240,9 +255,10 @@ namespace PSOpenAD
         /// <param name="sessionOptions">More session options to control the auth behaviour.</param>
         /// <param name="cancelToken">Cancellation token for any network requests.</param>
         /// <param name="cmdlet">PSCmdlet to write verbose records to.</param>
-        private static void Authenticate(OpenADConnection connection, Uri uri, AuthenticationMethod auth,
-            PSCredential? credential, ChannelBindings? channelBindings, bool transportIsTls,
-            OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
+        /// <returns>The authentication method used</returns>
+        private static AuthenticationMethod Authenticate(OpenADConnection connection, Uri uri,
+            AuthenticationMethod auth, PSCredential? credential, ChannelBindings? channelBindings,
+            bool transportIsTls, OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
         {
             if (auth == AuthenticationMethod.Default)
             {
@@ -268,7 +284,7 @@ namespace PSOpenAD
             AuthenticationProvider selectedAuth = GlobalState.Providers[auth];
             if (!selectedAuth.Available)
             {
-                string msg = $"";
+                string msg = $"Authentication {selectedAuth.Method} is not available";
                 if (!string.IsNullOrWhiteSpace(selectedAuth.Details))
                     msg += $" - ${selectedAuth.Details}";
                 throw new ArgumentException(msg);
@@ -325,6 +341,8 @@ namespace PSOpenAD
             {
                 SimpleAuth(connection, username, password, cancelToken);
             }
+
+            return selectedAuth.Method;
         }
 
         /// <summary>Performs a SIMPLE bind to the LDAP server</summary>
@@ -337,7 +355,7 @@ namespace PSOpenAD
         {
             int bindId = connection.Session.Bind(username ?? "", password ?? "");
 
-            BindResponse response = (BindResponse)connection.WaitForMessage(bindId, cancelToken);
+            BindResponse response = (BindResponse)connection.WaitForMessage(bindId, cancelToken: cancelToken);
             connection.RemoveMessageQueue(bindId);
             if (response.Result.ResultCode != LDAPResultCode.Success)
             {
@@ -367,7 +385,7 @@ namespace PSOpenAD
 
                 saslId = connection.Session.SaslBind("", saslMech, outputToken);
 
-                response = (BindResponse)connection.WaitForMessage(saslId, cancelToken);
+                response = (BindResponse)connection.WaitForMessage(saslId, cancelToken: cancelToken);
                 connection.RemoveMessageQueue(saslId);
                 if (response.Result.ResultCode != LDAPResultCode.Success &&
                     response.Result.ResultCode != LDAPResultCode.SaslBindInProgress)
@@ -391,7 +409,7 @@ namespace PSOpenAD
                 return;
 
             saslId = connection.Session.SaslBind("", saslMech, Array.Empty<byte>());
-            response = (BindResponse)connection.WaitForMessage(saslId, cancelToken);
+            response = (BindResponse)connection.WaitForMessage(saslId, cancelToken: cancelToken);
             connection.RemoveMessageQueue(saslId);
             if (response.Result.ResultCode != LDAPResultCode.Success &&
                 response.Result.ResultCode != LDAPResultCode.SaslBindInProgress)
@@ -442,7 +460,7 @@ namespace PSOpenAD
             byte[] wrappedResp = context.Wrap(clientContextInfo, false);
 
             saslId = connection.Session.SaslBind("", saslMech, wrappedResp);
-            response = (BindResponse)connection.WaitForMessage(saslId, cancelToken);
+            response = (BindResponse)connection.WaitForMessage(saslId, cancelToken: cancelToken);
             connection.RemoveMessageQueue(saslId);
             if (response.Result.ResultCode != LDAPResultCode.Success &&
                 response.Result.ResultCode != LDAPResultCode.SaslBindInProgress)
@@ -468,7 +486,7 @@ namespace PSOpenAD
             Dictionary<string, string[]> result = new();
             while (true)
             {
-                LDAPMessage searchRes = connection.WaitForMessage(searchId, cancelToken);
+                LDAPMessage searchRes = connection.WaitForMessage(searchId, cancelToken: cancelToken);
                 if (searchRes is SearchResultDone)
                     break;
                 else if (searchRes is SearchResultReference)
@@ -531,315 +549,8 @@ namespace PSOpenAD
         private static bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain,
             SslPolicyErrors sslPolicyErrors)
         {
-            return true;
+            return true; // FIXME: only blindly accept if in session options.
         }
-    }
-
-    internal class OpenADConnection : IDisposable
-    {
-        private readonly Task _recvTask;
-        private readonly Task _sendTask;
-        private readonly ConcurrentDictionary<int, BlockingCollection<LDAPMessage>> _messages = new();
-        private readonly ManualResetEventSlim _tlsReplaceEvent = new(true);
-        private CancellationTokenSource _recvCancel = new();
-
-        public TcpClient Connection { get; internal set; }
-        public Stream IOStream { get; internal set; }
-        public LDAPSession Session { get; set; }
-        public SecurityContext? SecurityContext { get; set; }
-
-        public bool Sign { get; set; }
-        public bool Encrypt { get; set; }
-
-        public OpenADConnection(TcpClient connection, Stream stream, LDAPSession session)
-        {
-            Connection = connection;
-            IOStream = stream;
-            Session = session;
-
-            _recvTask = Task.Run(Recv);
-            _sendTask = Task.Run(Send);
-        }
-
-        public LDAPMessage WaitForMessage(int messageId, CancellationToken cancelToken = default)
-        {
-            BlockingCollection<LDAPMessage> queue = _messages.GetOrAdd(messageId,
-                new BlockingCollection<LDAPMessage>(new ConcurrentQueue<LDAPMessage>()));
-            return queue.Take(cancelToken);
-        }
-
-        public void RemoveMessageQueue(int messageId)
-        {
-            _messages.TryRemove(messageId, out var _);
-        }
-
-        public SslStream SetTlsStream(SslClientAuthenticationOptions authOptions, CancellationToken cancelToken = default)
-        {
-            // Mark this event as unset and cancel the Recv task. This task will wait until the event is set again
-            // before continuing with the replace IOStream which is the SSL context that was created.
-            _tlsReplaceEvent.Reset();
-            _recvCancel.Cancel();
-
-            SslStream tls = new(IOStream, false);
-            tls.AuthenticateAsClientAsync(authOptions, cancelToken).GetAwaiter().GetResult();
-            IOStream = tls;
-
-            _recvCancel = new CancellationTokenSource();
-            _tlsReplaceEvent.Set();
-
-            return tls;
-        }
-
-        private async Task Send()
-        {
-            PipeReader reader = Session.Outgoing;
-
-            while (true)
-            {
-                ReadResult result = await reader.ReadAsync();
-                ReadOnlySequence<byte> buffer = result.Buffer;
-
-                if (SecurityContext != null && Sign)
-                {
-                    byte[] wrappedData;
-                    if (buffer.IsSingleSegment)
-                    {
-                        wrappedData = SecurityContext.Wrap(buffer.FirstSpan, Encrypt);
-                    }
-                    else
-                    {
-                        ReadOnlyMemory<byte> toWrap = buffer.ToArray();
-                        wrappedData = SecurityContext.Wrap(toWrap.Span, Encrypt);
-                    }
-
-                    byte[] lengthData = BitConverter.GetBytes(wrappedData.Length);
-                    if (BitConverter.IsLittleEndian)
-                        Array.Reverse(lengthData);
-
-                    // FIXME: Check if the below can work to save allocating a new arrya and copying.
-                    // await IOStream.WriteAsync(lengthData, 0, lengthData.Length);
-                    // await IOStream.WriteAsync(wrappedData, 0, wrappedData.Length);
-                    ArrayPool<byte> shared = ArrayPool<byte>.Shared;
-                    byte[] rentedArray = shared.Rent(wrappedData.Length + 4);
-                    try
-                    {
-                        Buffer.BlockCopy(lengthData, 0, rentedArray, 0, lengthData.Length);
-                        Buffer.BlockCopy(wrappedData, 0, rentedArray, lengthData.Length, wrappedData.Length);
-                        await IOStream.WriteAsync(rentedArray, 0, lengthData.Length + wrappedData.Length);
-                    }
-                    finally
-                    {
-                        shared.Return(rentedArray);
-                    }
-                }
-                else
-                {
-                    // Most likely inefficient but unsure on how to do this properly.
-                    ReadOnlyMemory<byte> data = buffer.ToArray();
-                    await IOStream.WriteAsync(data);
-                }
-
-                await IOStream.FlushAsync();
-
-                reader.AdvanceTo(buffer.End);
-
-                if (result.IsCompleted)
-                    break;
-            }
-
-            await reader.CompleteAsync();
-        }
-
-        private async Task Recv()
-        {
-            Pipe socket = new();
-            Pipe unwrapper = new();
-
-            Task socketReader = RecvSocket(socket.Writer);
-            Task encryptionProcessor = RecvWrapped(socket.Reader, unwrapper.Writer);
-            Task messageProcessor = RecvProcess(unwrapper.Reader);
-            await Task.WhenAll(socketReader, encryptionProcessor, messageProcessor);
-        }
-
-        private async Task RecvSocket(PipeWriter writer)
-        {
-            while (true)
-            {
-                Memory<byte> memory = writer.GetMemory(Connection.ReceiveBufferSize);
-                try
-                {
-                    int bytesRead = await IOStream.ReadAsync(memory, _recvCancel.Token);
-                    if (bytesRead == 0)
-                        break;
-
-                    writer.Advance(bytesRead);
-                }
-                catch (OperationCanceledException)
-                {
-                    if (!_tlsReplaceEvent.IsSet)
-                    {
-                        // SetTlsStream has cancelled the recv while it replaces the stream wtih an SslStream for
-                        // StartTLS/LDAPS. Wait until the event has been fired before trying again with the new stream.
-                        _tlsReplaceEvent.Wait();
-                        continue;
-                    }
-                    else
-                    {
-                        // Cancelled in Dispose, end the task
-                        break;
-                    }
-                }
-
-                FlushResult result = await writer.FlushAsync();
-                if (result.IsCompleted)
-                    break;
-            }
-            await writer.CompleteAsync();
-        }
-
-        private async Task RecvWrapped(PipeReader reader, PipeWriter writer)
-        {
-            while (true)
-            {
-                ReadResult result = await reader.ReadAsync();
-                ReadOnlySequence<byte> buffer = result.Buffer;
-
-                long consumed;
-                if (buffer.Length == 0)
-                {
-                    consumed = 0;
-                }
-                else if (SecurityContext != null && Sign)
-                {
-                    consumed = await ProcessSealedMessage(SecurityContext, buffer, writer);
-                }
-                else
-                {
-                    foreach (ReadOnlyMemory<byte> segment in buffer)
-                    {
-                        await writer.WriteAsync(segment);
-                    }
-                    consumed = buffer.Length;
-                }
-
-                reader.AdvanceTo(buffer.Slice(0, consumed).End, buffer.End);
-                if (result.IsCompleted)
-                    break;
-            }
-
-            await reader.CompleteAsync();
-            await writer.CompleteAsync();
-        }
-
-        private async Task RecvProcess(PipeReader reader)
-        {
-            while (true)
-            {
-                ReadResult result = await reader.ReadAsync();
-                ReadOnlySequence<byte> buffer = result.Buffer;
-
-                int consumed;
-                if (buffer.Length == 0)
-                {
-                    consumed = 0;
-                }
-                else if (buffer.IsSingleSegment)
-                {
-                    consumed = TryReadMessage(buffer.FirstSpan);
-                }
-                else
-                {
-                    // Most likely inefficient but unsure on how to do this properly.
-                    ReadOnlyMemory<byte> data = buffer.ToArray();
-                    consumed = TryReadMessage(data.Span);
-                }
-
-                reader.AdvanceTo(buffer.Slice(0, consumed).End, buffer.End);
-                if (result.IsCompleted)
-                    break;
-            }
-
-            await reader.CompleteAsync();
-        }
-
-        private async Task<long> ProcessSealedMessage(SecurityContext context, ReadOnlySequence<byte> data, PipeWriter writer)
-        {
-            long consumed = 0;
-            while (data.Length > 4)
-            {
-                int length = ReadWrappedLength(data);
-                if (data.Length < 4 + length)
-                    break;
-
-                ReadOnlySequence<byte> dataSequence = data.Slice(4, length);
-                byte[] unwrappedData;
-                if (dataSequence.IsSingleSegment)
-                {
-                    unwrappedData = context.Unwrap(dataSequence.FirstSpan);
-                }
-                else
-                {
-                    ReadOnlyMemory<byte> wrappedData = dataSequence.ToArray();
-                    unwrappedData = context.Unwrap(wrappedData.Span);
-                }
-                await writer.WriteAsync(unwrappedData);
-
-                data = data.Slice(4 + length);
-                consumed += 4 + length;
-            }
-
-            return consumed;
-        }
-
-        private int ReadWrappedLength(ReadOnlySequence<byte> data)
-        {
-            Span<byte> rawLength = stackalloc byte[4];
-            data.Slice(0, 4).CopyTo(rawLength);
-            if (BitConverter.IsLittleEndian)
-                rawLength.Reverse();
-
-            return BitConverter.ToInt32(rawLength);
-        }
-
-        private int TryReadMessage(ReadOnlySpan<byte> data)
-        {
-            int totalConsumed = 0;
-            while (data.Length > 0)
-            {
-                LDAPMessage? message = Session.ReceiveData(data, out var consumed);
-                if (message == null)
-                    break;
-
-                data = data[consumed..];
-                totalConsumed += consumed;
-
-                // TODO: Handle messageId == 0 and ExtendedResponse with notice of disconnection.
-
-                BlockingCollection<LDAPMessage> queue = _messages.GetOrAdd(message.MessageId,
-                    new BlockingCollection<LDAPMessage>(new ConcurrentQueue<LDAPMessage>()));
-                queue.Add(message);
-            }
-
-            return totalConsumed;
-        }
-
-        public void Dispose()
-        {
-            // Cancel the recv so it doesn't fail with connection reset by peer
-            _recvCancel.Cancel();
-            _recvTask.GetAwaiter().GetResult();
-
-            // The unbind response also marks the LDAP outgoing reader as done
-            Session.Unbind();
-            _sendTask.GetAwaiter().GetResult();
-
-            // Once both tasks are complete dispose of the stream and connection.
-            IOStream.Dispose();
-            Connection.Dispose();
-
-            GC.SuppressFinalize(this);
-        }
-        ~OpenADConnection() { Dispose(); }
     }
 
     internal static class GlobalState
