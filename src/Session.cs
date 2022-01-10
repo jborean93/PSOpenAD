@@ -282,9 +282,11 @@ namespace PSOpenAD
                 bool integrity = !(transportIsTls || sessionOptions.NoSigning);
                 bool confidentiality = !(transportIsTls || sessionOptions.NoEncryption);
 
-                // GSS-SPNEGO cannot disable confidentiality without also disabling integrity so warn the caller if
-                // this set of session options have been set.
-                if (auth == AuthenticationMethod.Negotiate && sessionOptions.NoEncryption
+                // GSS-SPNEGO on non-Windows cannot disable confidentiality without also disabling integrity so warn
+                // the caller if this set of session options have been set. Technically NTLM on Windows also applies
+                // here but we cannot know what SPNEGO will choose until after the auth is done so just ignore that.
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+                    auth == AuthenticationMethod.Negotiate && sessionOptions.NoEncryption
                     && !sessionOptions.NoSigning)
                 {
                     cmdlet?.WriteWarning("-AuthType Negotiate cannot disable encryption without disabling signing");
@@ -292,7 +294,7 @@ namespace PSOpenAD
                     // must be encrypted for Negotiate unless both integrity is disabled.
                     confidentiality = !transportIsTls;
                 }
-                else if (sessionOptions.NoSigning && !sessionOptions.NoEncryption)
+                if (sessionOptions.NoSigning && !sessionOptions.NoEncryption)
                 {
                     cmdlet?.WriteWarning("Cannot disable signatures and not encryption");
                 }
@@ -300,7 +302,7 @@ namespace PSOpenAD
                 SecurityContext context;
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    string targetSpn = $"LDAP/{uri.DnsSafeHost}";
+                    string targetSpn = $"ldap/{uri.DnsSafeHost}";
                     context = new SspiContext(username, password, auth, targetSpn, channelBindings, integrity,
                         confidentiality);
                 }
@@ -357,10 +359,10 @@ namespace PSOpenAD
             int saslId;
 
             BindResponse response;
-            while (true)
+            while (inputToken == null || inputToken.Length > 0)
             {
                 byte[] outputToken = context.Step(inputToken: inputToken);
-                if (context.Complete)
+                if (outputToken.Length == 0 && context.Complete)
                     break;
 
                 saslId = connection.Session.SaslBind("", saslMech, outputToken);
@@ -407,11 +409,11 @@ namespace PSOpenAD
             if (contextInfo.Length != 4)
                 throw new Exception("Expecting input to contain 4 bytes");
 
-            SASLSecurityFlags serverFlags = (SASLSecurityFlags)inputToken[0];
-            inputToken[0] = 0;
+            SASLSecurityFlags serverFlags = (SASLSecurityFlags)contextInfo[0];
+            contextInfo[0] = 0;
             if (BitConverter.IsLittleEndian)
-                Array.Reverse(inputToken);
-            uint maxServerMessageLength = BitConverter.ToUInt32(inputToken);
+                Array.Reverse(contextInfo);
+            uint maxServerMessageLength = BitConverter.ToUInt32(contextInfo);
 
             if (serverFlags == SASLSecurityFlags.NoSecurity && maxServerMessageLength != 0)
                 throw new Exception("Max size must be 0 with no security");
@@ -425,7 +427,12 @@ namespace PSOpenAD
 
             uint maxClientMessageLength = 0;
             if (clientFlags != SASLSecurityFlags.NoSecurity)
-                maxClientMessageLength = context.MaxWrapSize(maxServerMessageLength, confidentiality);
+            {
+                // Windows doesn't have a max wrap size func, just send back the server value.
+                maxClientMessageLength = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? maxServerMessageLength
+                    : context.MaxWrapSize(maxServerMessageLength, confidentiality);
+            }
 
             byte[] clientContextInfo = BitConverter.GetBytes(maxClientMessageLength);
             if (BitConverter.IsLittleEndian)

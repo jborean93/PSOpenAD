@@ -8,6 +8,19 @@ namespace PSOpenAD.Native
 {
     internal static partial class Helpers
     {
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SEC_CHANNEL_BINDINGS
+        {
+            public UInt32 dwInitiatorAddrType;
+            public UInt32 cbInitiatorLength;
+            public UInt32 dwInitiatorOffset;
+            public UInt32 dwAcceptorAddrType;
+            public UInt32 cbAcceptorLength;
+            public UInt32 dwAcceptorOffset;
+            public UInt32 cbApplicationDataLength;
+            public UInt32 dwApplicationDataOffset;
+        }
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct SEC_WINNT_AUTH_IDENTITY_W
         {
@@ -46,8 +59,8 @@ namespace PSOpenAD.Native
         [StructLayout(LayoutKind.Sequential)]
         public struct SecHandle
         {
-            UIntPtr dwLower;
-            UIntPtr dwUpper;
+            public UIntPtr dwLower;
+            public UIntPtr dwUpper;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -58,54 +71,48 @@ namespace PSOpenAD.Native
             public UInt32 cbBlockSize;
             public UInt32 cbSecurityTrailer;
         }
+
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SecPkgContext_StreamSizes
+        {
+            public UInt32 cbHeader;
+            public UInt32 cbTrailer;
+            public UInt32 cbMaximumMessage;
+            public UInt32 cBuffers;
+            public UInt32 cbBlockSize;
+        }
     }
 
-    internal class SspiCredential : IDisposable
+    internal class SspiCredential
     {
-        private Helpers.SecHandle _creds;
-
-        public Helpers.SecHandle Creds => _creds;
+        public SafeSspiCredentialHandle Creds { get; }
         public UInt64 Expiry { get; }
 
-        public SspiCredential(Helpers.SecHandle creds, UInt64 expiry)
+        public SspiCredential(SafeSspiCredentialHandle creds, UInt64 expiry)
         {
-            _creds = creds;
+            Creds = creds;
             Expiry = expiry;
         }
-
-        public void Dispose()
-        {
-            SSPI.FreeCredentialsHandle(ref _creds);
-            GC.SuppressFinalize(this);
-        }
-        ~SspiCredential() { Dispose(); }
     }
 
-    internal class SspiSecContext : IDisposable
+    internal class SspiSecContext
     {
-        private Helpers.SecHandle _context;
-        public Helpers.SecHandle Context => _context;
+        public SafeSspiContextHandle Context { get; }
         public byte[][] OutputBuffers { get; }
         public UInt64 Expiry { get; }
         public InitiatorContextReturnFlags Flags { get; }
         public bool MoreNeeded { get; }
 
-        public SspiSecContext(Helpers.SecHandle context, byte[][] outputBuffers, UInt64 expiry,
+        public SspiSecContext(SafeSspiContextHandle context, byte[][] outputBuffers, UInt64 expiry,
             InitiatorContextReturnFlags flags, bool moreNeeded)
         {
-            _context = context;
+            Context = context;
             OutputBuffers = outputBuffers;
             Expiry = expiry;
             Flags = flags;
             MoreNeeded = moreNeeded;
         }
-
-        public void Dispose()
-        {
-            SSPI.DeleteSecurityContext(ref _context);
-            GC.SuppressFinalize(this);
-        }
-        ~SspiSecContext() { Dispose(); }
     }
 
     internal static class SSPI
@@ -121,23 +128,23 @@ namespace PSOpenAD.Native
             Helpers.SEC_WINNT_AUTH_IDENTITY_W* pAuthData,
             IntPtr pGetKeyFn,
             IntPtr pvGetKeyArgument,
-            out Helpers.SecHandle phCredential,
+            SafeSspiCredentialHandle phCredential,
             out Helpers.SECURITY_INTEGER ptsExpiry);
 
         [DllImport("Secur32.dll", EntryPoint = "DecryptMessage")]
         private static extern Int32 DecryptMessageNative(
-            ref Helpers.SecHandle phContext,
+            SafeSspiContextHandle phContext,
             ref Helpers.SecBufferDesc pMessage,
             UInt32 MessageSeqNo,
             out UInt32 pfQOP);
 
         [DllImport("Secur32.dll")]
         public static extern Int32 DeleteSecurityContext(
-            ref Helpers.SecHandle phContext);
+            IntPtr phContext);
 
         [DllImport("Secur32.dll", EntryPoint = "EncryptMessage")]
         private static extern Int32 EncryptMessageNative(
-            ref Helpers.SecHandle phContext,
+            SafeSspiContextHandle phContext,
             UInt32 fQOP,
             ref Helpers.SecBufferDesc pMessage,
             UInt32 MessageSeqNo);
@@ -148,26 +155,26 @@ namespace PSOpenAD.Native
 
         [DllImport("Secur32.dll")]
         public static extern Int32 FreeCredentialsHandle(
-            ref Helpers.SecHandle phCredential);
+            IntPtr phCredential);
 
         [DllImport("Secur32.dll", CharSet = CharSet.Unicode)]
         private static unsafe extern Int32 InitializeSecurityContextW(
-            ref Helpers.SecHandle phCredential,
-            Helpers.SecHandle* phContext,
+            SafeSspiCredentialHandle phCredential,
+            SafeSspiContextHandle phContext,
             [MarshalAs(UnmanagedType.LPWStr)] string pszTargetName,
             InitiatorContextRequestFlags fContextReq,
             UInt32 Reserved1,
             TargetDataRep TargetDataRep,
             Helpers.SecBufferDesc* pInput,
             UInt32 Reserved2,
-            out Helpers.SecHandle phNewContext,
+            SafeSspiContextHandle phNewContext,
             Helpers.SecBufferDesc* pOutput,
             out InitiatorContextReturnFlags pfContextAttr,
             out Helpers.SECURITY_INTEGER ptsExpiry);
 
         [DllImport("Secur32.dll", EntryPoint = "QueryContextAttributes")]
         private static extern Int32 QueryContextAttributesNative(
-            ref Helpers.SecHandle phContext,
+            SafeSspiContextHandle phContext,
             SecPkgAttribute ulAttribute,
             IntPtr pBuffer);
 
@@ -200,8 +207,9 @@ namespace PSOpenAD.Native
                         authData->PasswordLength = (UInt16)(identity.Password?.Length ?? 0);
                     }
 
+                    SafeSspiCredentialHandle cred = new();
                     int res = AcquireCredentialsHandleW(principal, package, usage, IntPtr.Zero, authData, IntPtr.Zero,
-                        IntPtr.Zero, out var cred, out var expiryStruct);
+                        IntPtr.Zero, cred, out var expiryStruct);
 
                     if (res != 0)
                         throw new Win32Exception(res);
@@ -212,10 +220,8 @@ namespace PSOpenAD.Native
             }
         }
 
-        public static UInt32 DecryptMessage(SspiSecContext context, Span<Helpers.SecBuffer> message, UInt32 seqNo)
+        public static UInt32 DecryptMessage(SafeSspiContextHandle context, Span<Helpers.SecBuffer> message, UInt32 seqNo)
         {
-            Helpers.SecHandle secHandle = context.Context;
-
             unsafe
             {
                 fixed (Helpers.SecBuffer* messagePtr = message)
@@ -227,7 +233,7 @@ namespace PSOpenAD.Native
                         pBuffers = (IntPtr)messagePtr,
                     };
 
-                    int res = DecryptMessageNative(ref secHandle, ref bufferDesc, seqNo, out var qop);
+                    int res = DecryptMessageNative(context, ref bufferDesc, seqNo, out var qop);
                     if (res != 0)
                         throw new Win32Exception(res);
 
@@ -236,11 +242,9 @@ namespace PSOpenAD.Native
             }
         }
 
-        public static void EncryptMessage(SspiSecContext context, UInt32 qop, Span<Helpers.SecBuffer> message,
+        public static void EncryptMessage(SafeSspiContextHandle context, UInt32 qop, Span<Helpers.SecBuffer> message,
             UInt32 seqNo)
         {
-            Helpers.SecHandle secHandle = context.Context;
-
             unsafe
             {
                 fixed (Helpers.SecBuffer* messagePtr = message)
@@ -252,18 +256,17 @@ namespace PSOpenAD.Native
                         pBuffers = (IntPtr)messagePtr,
                     };
 
-                    int res = EncryptMessageNative(ref secHandle, qop, ref bufferDesc, seqNo);
+                    int res = EncryptMessageNative(context, qop, ref bufferDesc, seqNo);
                     if (res != 0)
                         throw new Win32Exception(res);
                 }
             }
         }
 
-        public static SspiSecContext InitializeSecurityContext(SspiCredential cred, SspiSecContext? context,
-            string targetName, InitiatorContextRequestFlags contextReq, TargetDataRep dataRep,
-            ReadOnlySpan<Helpers.SecBuffer> input, IList<SecBufferType> outputBufferTypes)
+        public static SspiSecContext InitializeSecurityContext(SafeSspiCredentialHandle cred,
+            SafeSspiContextHandle? context, string targetName, InitiatorContextRequestFlags contextReq,
+            TargetDataRep dataRep, ReadOnlySpan<Helpers.SecBuffer> input, IList<SecBufferType> outputBufferTypes)
         {
-            Helpers.SecHandle credential = cred.Creds;
             contextReq |= InitiatorContextRequestFlags.ISC_REQ_ALLOCATE_MEMORY;
 
             Span<Helpers.SecBuffer> output = stackalloc Helpers.SecBuffer[outputBufferTypes.Count];
@@ -274,12 +277,17 @@ namespace PSOpenAD.Native
             {
                 fixed (Helpers.SecBuffer* inputBuffers = input, outputBuffers = output)
                 {
-                    Helpers.SecHandle inputContext;
-                    Helpers.SecHandle* inputContextPtr = null;
-                    if (context != null)
+                    SafeSspiContextHandle inputContext;
+                    SafeSspiContextHandle outputContext;
+                    if (context == null)
                     {
-                        inputContext = context.Context;
-                        inputContextPtr = &inputContext;
+                        inputContext = SafeSspiContextHandle.NULL_CONTEXT;
+                        outputContext = new SafeSspiContextHandle();
+                    }
+                    else
+                    {
+                        inputContext = context;
+                        outputContext = context;
                     }
 
                     Helpers.SecBufferDesc inputBuffer = new();
@@ -302,9 +310,8 @@ namespace PSOpenAD.Native
                         outputPtr = &outputBuffer;
                     }
 
-                    int res = InitializeSecurityContextW(ref credential, inputContextPtr, targetName, contextReq, 0,
-                        dataRep, inputPtr, 0, out var newContext, outputPtr, out var contextattr,
-                        out var expiryStruct);
+                    int res = InitializeSecurityContextW(cred, inputContext, targetName, contextReq, 0, dataRep,
+                        inputPtr, 0, outputContext, outputPtr, out var contextattr, out var expiryStruct);
 
                     if (res != 0 && res != SEC_I_CONTINUE_NEEDED)
                         throw new Win32Exception(res);
@@ -324,7 +331,7 @@ namespace PSOpenAD.Native
                             outputTokens.Add(data);
                         }
 
-                        return new SspiSecContext(newContext, outputTokens.ToArray(), expiry, contextattr,
+                        return new SspiSecContext(outputContext, outputTokens.ToArray(), expiry, contextattr,
                             moreNeeded);
                     }
                     finally
@@ -339,10 +346,9 @@ namespace PSOpenAD.Native
             }
         }
 
-        public static void QueryContextAttributes(SspiSecContext context, SecPkgAttribute attribute, IntPtr buffer)
+        public static void QueryContextAttributes(SafeSspiContextHandle context, SecPkgAttribute attribute, IntPtr buffer)
         {
-            Helpers.SecHandle contextHandle = context.Context;
-            int res = QueryContextAttributesNative(ref contextHandle, attribute, buffer);
+            int res = QueryContextAttributesNative(context, attribute, buffer);
             if (res != 0)
                 throw new Win32Exception(res);
         }
@@ -524,15 +530,36 @@ namespace PSOpenAD.Native
         SEC_WINNT_AUTH_IDENTITY_UNICODE = 2,
     }
 
-    internal class SafeSspiBuffer : SafeHandle
+    internal class SafeSspiCredentialHandle : SafeHandle
     {
-        internal SafeSspiBuffer() : base(IntPtr.Zero, true) { }
+        internal SafeSspiCredentialHandle() : base(Marshal.AllocHGlobal(Marshal.SizeOf<Helpers.SecHandle>()), true) { }
 
         public override bool IsInvalid => handle == IntPtr.Zero;
 
         protected override bool ReleaseHandle()
         {
-            return SSPI.FreeContextBuffer(handle) == 0;
+            SSPI.FreeCredentialsHandle(handle);
+            Marshal.FreeHGlobal(handle);
+
+            return true;
+        }
+    }
+
+    internal class SafeSspiContextHandle : SafeHandle
+    {
+        public static readonly SafeSspiContextHandle NULL_CONTEXT = new(IntPtr.Zero, false);
+
+        internal SafeSspiContextHandle() : base(Marshal.AllocHGlobal(Marshal.SizeOf<Helpers.SecHandle>()), true) { }
+        internal SafeSspiContextHandle(IntPtr handle, bool ownsHandle) : base(handle, ownsHandle) { }
+
+        public override bool IsInvalid => handle == IntPtr.Zero;
+
+        protected override bool ReleaseHandle()
+        {
+            SSPI.DeleteSecurityContext(handle);
+            Marshal.FreeHGlobal(handle);
+
+            return true;
         }
     }
 }

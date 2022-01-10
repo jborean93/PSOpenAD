@@ -206,19 +206,19 @@ namespace PSOpenAD
 
     internal class SspiContext : SecurityContext
     {
-        private readonly SspiCredential _credential;
-        private readonly ChannelBindings? _bindingData;
+        private readonly SafeSspiCredentialHandle _credential;
+        private readonly byte[]? _bindingData;
         private readonly string _targetSpn;
-        private readonly InitiatorContextRequestFlags _flags = InitiatorContextRequestFlags.ISC_REQ_MUTUAL_AUTH |
-            InitiatorContextRequestFlags.ISC_REQ_SEQUENCE_DETECT;
-        private SspiSecContext? _context;
+        private readonly InitiatorContextRequestFlags _flags = InitiatorContextRequestFlags.ISC_REQ_MUTUAL_AUTH;
+        private SafeSspiContextHandle? _context;
         private UInt32 _blockSize = 0;
         private UInt32 _trailerSize = 0;
+        private UInt32 _seqNo = 0;
 
         public SspiContext(string? username, string? password, AuthenticationMethod method, string target,
             ChannelBindings? channelBindings, bool integrity, bool confidentiality)
         {
-            _bindingData = channelBindings;
+            _bindingData = CreateChannelBindings(channelBindings);
             _targetSpn = target;
 
             string package = method == AuthenticationMethod.Kerberos ? "Kerberos" : "Negotiate";
@@ -236,15 +236,28 @@ namespace PSOpenAD
                 identity = new WinNTAuthIdentity(username, domain, password);
             }
             _credential = SSPI.AcquireCredentialsHandle(null, package, CredentialUse.SECPKG_CRED_OUTBOUND,
-                identity);
+                identity).Creds;
+
+            const InitiatorContextRequestFlags integrityFlags = InitiatorContextRequestFlags.ISC_REQ_INTEGRITY |
+                InitiatorContextRequestFlags.ISC_REQ_SEQUENCE_DETECT;
 
             if (integrity)
-                _flags |= InitiatorContextRequestFlags.ISC_REQ_INTEGRITY;
+                _flags |= integrityFlags;
 
             if (confidentiality)
-                _flags |= InitiatorContextRequestFlags.ISC_REQ_INTEGRITY |
-                    InitiatorContextRequestFlags.ISC_REQ_CONFIDENTIALITY;
+                _flags |= integrityFlags | InitiatorContextRequestFlags.ISC_REQ_CONFIDENTIALITY;
 
+            if (method == AuthenticationMethod.Kerberos)
+            {
+                // Kerberos uses a special SASL wrapping mechanism and always requires integrity
+                _flags |= integrityFlags;
+            }
+            else if (!integrity && !confidentiality)
+            {
+                // GSS-SPNEGO uses the context flags to determine the protection applied and Kerberos always sets
+                // INTEG by default. By setting this flag we unset INTEG allowing it to be used without any protection.
+                _flags |= InitiatorContextRequestFlags.ISC_REQ_NO_INTEGRITY;
+            }
         }
 
         public override byte[] Step(byte[]? inputToken = null)
@@ -258,32 +271,37 @@ namespace PSOpenAD
 
             unsafe
             {
-                fixed (byte * input = inputToken)
+                fixed (byte* input = inputToken, cbBuffer = _bindingData)
                 {
                     Span<Helpers.SecBuffer> inputBuffers = stackalloc Helpers.SecBuffer[bufferCount];
+                    int idx = 0;
 
                     if (inputToken != null)
                     {
-                        inputBuffers[0].cbBuffer = (UInt32)inputToken.Length;
-                        inputBuffers[0].BufferType = (UInt32)SecBufferType.SECBUFFER_TOKEN;
-                        inputBuffers[0].pvBuffer = (IntPtr)input;
+                        inputBuffers[idx].cbBuffer = (UInt32)inputToken.Length;
+                        inputBuffers[idx].BufferType = (UInt32)SecBufferType.SECBUFFER_TOKEN;
+                        inputBuffers[idx].pvBuffer = (IntPtr)input;
+                        idx++;
                     }
 
                     if (_bindingData != null)
                     {
-                        throw new NotImplementedException();
+                        inputBuffers[idx].cbBuffer = (UInt32)_bindingData.Length;;
+                        inputBuffers[idx].BufferType = (UInt32)SecBufferType.SECBUFFER_CHANNEL_BINDINGS;
+                        inputBuffers[idx].pvBuffer = (IntPtr)cbBuffer;
                     }
 
-                    _context = SSPI.InitializeSecurityContext(_credential, _context, _targetSpn, _flags,
+                    SspiSecContext context = SSPI.InitializeSecurityContext(_credential, _context, _targetSpn, _flags,
                         TargetDataRep.SECURITY_NATIVE_DREP, inputBuffers, new[] { SecBufferType.SECBUFFER_TOKEN, });
+                    _context = context.Context;
 
-                    if (!_context.MoreNeeded)
+                    if (!context.MoreNeeded)
                     {
                         Complete = true;
                         IntegrityAvailable =
-                            (_context.Flags & InitiatorContextReturnFlags.ISC_RET_INTEGRITY) != 0;
+                            (context.Flags & InitiatorContextReturnFlags.ISC_RET_INTEGRITY) != 0;
                         ConfidentialityAvailable =
-                            (_context.Flags & InitiatorContextReturnFlags.ISC_RET_CONFIDENTIALITY) != 0;
+                            (context.Flags & InitiatorContextReturnFlags.ISC_RET_CONFIDENTIALITY) != 0;
 
                         Span<Helpers.SecPkgContext_Sizes> sizes = stackalloc Helpers.SecPkgContext_Sizes[1];
                         fixed (Helpers.SecPkgContext_Sizes* sizesPtr = sizes)
@@ -296,11 +314,9 @@ namespace PSOpenAD
                         }
                     }
 
-                    return _context.OutputBuffers.Length > 0 ? _context.OutputBuffers[0] : Array.Empty<byte>();
+                    return context.OutputBuffers.Length > 0 ? context.OutputBuffers[0] : Array.Empty<byte>();
                 }
             }
-
-            throw new NotImplementedException("step");
         }
 
         public override byte[] Wrap(ReadOnlySpan<byte> data, bool encrypt)
@@ -331,7 +347,8 @@ namespace PSOpenAD
                         buffers[2].cbBuffer = _blockSize;
                         buffers[2].pvBuffer = (IntPtr)paddingPtr;
 
-                        SSPI.EncryptMessage(_context, 0, buffers, 0);
+                        UInt32 qop = encrypt ? 0 : 0x80000001; // SECQOP_WRAP_NO_ENCRYPT
+                        SSPI.EncryptMessage(_context, qop, buffers, NextSeqNo());
 
                         byte[] wrapped = new byte[buffers[0].cbBuffer + buffers[1].cbBuffer + buffers[2].cbBuffer];
                         int offset = 0;
@@ -379,7 +396,7 @@ namespace PSOpenAD
                     buffers[1].cbBuffer = 0;
                     buffers[1].pvBuffer = IntPtr.Zero;
 
-                    SSPI.DecryptMessage(_context, buffers, 0);
+                    SSPI.DecryptMessage(_context, buffers, NextSeqNo());
 
                     byte[] unwrapped = new byte[buffers[1].cbBuffer];
                     Marshal.Copy(buffers[1].pvBuffer, unwrapped, 0, unwrapped.Length);
@@ -391,10 +408,65 @@ namespace PSOpenAD
 
         public override UInt32 MaxWrapSize(UInt32 outputSize, bool confReq)
         {
-            if (_context == null || !Complete)
-                throw new InvalidOperationException("Cannot wrap without a completed context");
+            throw new NotImplementedException(); // Not used in SSPI.
+        }
 
-            throw new NotImplementedException();
+        private byte[]? CreateChannelBindings(ChannelBindings? bindings)
+        {
+            if (bindings == null)
+                return null;
+
+            int structOffset = Marshal.SizeOf<Helpers.SEC_CHANNEL_BINDINGS>();
+            int binaryLength = bindings.InitiatorAddr?.Length ?? 0 + bindings.AcceptorAddr?.Length ?? 0 +
+                bindings.ApplicationData?.Length ?? 0;
+            byte[] bindingData = new byte[structOffset + binaryLength];
+            unsafe
+            {
+                fixed (byte* bindingPtr = bindingData)
+                {
+                    Helpers.SEC_CHANNEL_BINDINGS* bindingStruct = (Helpers.SEC_CHANNEL_BINDINGS*)bindingPtr;
+
+                    bindingStruct->dwInitiatorAddrType = (UInt32)bindings.InitiatorAddrType;
+                    if (bindings.InitiatorAddr != null)
+                    {
+                        bindingStruct->cbInitiatorLength = (UInt32)bindings.InitiatorAddr.Length;
+                        bindingStruct->dwInitiatorOffset = (UInt32)structOffset;
+                        Buffer.BlockCopy(bindings.InitiatorAddr, 0, bindingData, structOffset,
+                            bindings.InitiatorAddr.Length);
+
+                        structOffset += bindings.InitiatorAddr.Length;
+                    }
+
+                    bindingStruct->dwAcceptorAddrType = (UInt32)bindings.AcceptorAddrType;
+                    if (bindings.AcceptorAddr != null)
+                    {
+                        bindingStruct->cbAcceptorLength = (UInt32)bindings.AcceptorAddr.Length;
+                        bindingStruct->dwAcceptorOffset = (UInt32)structOffset;
+                        Buffer.BlockCopy(bindings.AcceptorAddr, 0, bindingData, structOffset,
+                            bindings.AcceptorAddr.Length);
+
+                        structOffset += bindings.AcceptorAddr.Length;
+                    }
+
+                    if (bindings.ApplicationData != null)
+                    {
+                        bindingStruct->cbApplicationDataLength = (UInt32)bindings.ApplicationData.Length;
+                        bindingStruct->dwApplicationDataOffset = (UInt32)structOffset;
+                        Buffer.BlockCopy(bindings.ApplicationData, 0, bindingData, structOffset,
+                            bindings.ApplicationData.Length);
+                    }
+                }
+            }
+
+            return bindingData;
+        }
+
+        private UInt32 NextSeqNo()
+        {
+            UInt32 seqNo = _seqNo;
+            _seqNo++;
+
+            return seqNo;
         }
 
         public override void Dispose()
