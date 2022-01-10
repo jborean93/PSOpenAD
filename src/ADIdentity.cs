@@ -1,3 +1,4 @@
+using PSOpenAD.LDAP;
 using System;
 using System.Text.RegularExpressions;
 
@@ -5,9 +6,9 @@ namespace PSOpenAD
 {
     public class ADObjectIdentity
     {
-        public string LDAPFilter { get; internal set; }
+        internal LDAPFilter LDAPFilter { get; set; }
 
-        internal ADObjectIdentity() => LDAPFilter = "";
+        internal ADObjectIdentity() => LDAPFilter = new FilterPresent("objectClass");
 
         public ADObjectIdentity(string value)
         {
@@ -23,9 +24,9 @@ namespace PSOpenAD
 
         public ADObjectIdentity(Guid objectGuid) => LDAPFilter = ObjectGUIDFilter(objectGuid);
 
-        internal bool TryParseGuid(string value, out string filter)
+        internal bool TryParseGuid(string value, out LDAPFilter filter)
         {
-            filter = "";
+            filter = new FilterPresent("");
 
             if (Guid.TryParse(value, out var guid))
             {
@@ -38,13 +39,13 @@ namespace PSOpenAD
             }
         }
 
-        internal bool TryParseDN(string value, out string filter)
+        internal bool TryParseDN(string value, out LDAPFilter filter)
         {
-            filter = "";
+            filter = new FilterPresent("");
 
             if (Regex.Match(value, "^((CN=([^,]*)),)?((((?:CN|OU)=[^,]+,?)+),)?((DC=[^,]+,?)+)$").Success)
             {
-                filter = $"(distinguishedName={value})";
+                filter = new FilterEquality("distinguishedName", LDAPFilter.ParseFilterValue(value));
                 return true;
             }
             else
@@ -53,12 +54,9 @@ namespace PSOpenAD
             }
         }
 
-        internal string ObjectGUIDFilter(Guid objectGuid)
+        internal LDAPFilter ObjectGUIDFilter(Guid objectGuid)
         {
-            byte[] guidBytes = objectGuid.ToByteArray();
-            string escapedHex = BitConverter.ToString(guidBytes).Replace("-", "\\");
-
-            return String.Format("(objectGUID=\\{0})", escapedHex);
+            return new FilterEquality("objectGUID", objectGuid.ToByteArray());
         }
     }
 
@@ -86,13 +84,13 @@ namespace PSOpenAD
 
         public ADPrincipalIdentity(Guid objectGuid) : base(objectGuid) { }
 
-        internal bool TryParseUPN(string value, out string filter)
+        internal bool TryParseUPN(string value, out LDAPFilter filter)
         {
-            filter = "";
+            filter = new FilterPresent("");
 
             if (Regex.Match(value, @"^.*\@.*\..*$").Success)
             {
-                filter = $"(userPrincipalName={value})";
+                filter = new FilterEquality("userPrincipalName", LDAPFilter.ParseFilterValue(value));
                 return true;
             }
             else
@@ -101,15 +99,15 @@ namespace PSOpenAD
             }
         }
 
-        internal bool TryParseSamAccountName(string value, out string filter)
+        internal bool TryParseSamAccountName(string value, out LDAPFilter filter)
         {
-            filter = "";
+            filter = new FilterPresent("");
 
             Match m = Regex.Match(value, @"^(?:[^:*?""<>|\/\\]+\\)?(?<username>[^;:""<>|?,=\*\+\\\(\)]{1,20})$");
             if (m.Success)
             {
                 string username = m.Groups["username"].Value;
-                filter = $"(sAMAccountName={username})";
+                filter = new FilterEquality("sAMAccountName", LDAPFilter.ParseFilterValue(username));
                 return true;
             }
             else
@@ -118,9 +116,9 @@ namespace PSOpenAD
             }
         }
 
-        internal bool TryParseSecurityIdentifier(string value, out string filter)
+        internal bool TryParseSecurityIdentifier(string value, out LDAPFilter filter)
         {
-            filter = "";
+            filter = new FilterPresent("");
 
             try
             {
@@ -133,13 +131,11 @@ namespace PSOpenAD
             return false;
         }
 
-        internal string ObjectSidFilter(SecurityIdentifier sid)
+        internal LDAPFilter ObjectSidFilter(SecurityIdentifier sid)
         {
             byte[] sidBytes = new byte[sid.BinaryLength];
             sid.GetBinaryForm(sidBytes, 0);
-            string escapedHex = BitConverter.ToString(sidBytes).Replace("-", "\\");
-
-            return String.Format("(objectSid=\\{0})", escapedHex);
+            return new FilterEquality("objectSid", sidBytes);
         }
     }
 }

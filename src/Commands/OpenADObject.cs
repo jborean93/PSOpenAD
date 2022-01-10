@@ -10,7 +10,7 @@ namespace PSOpenAD.Commands
 {
     public abstract class GetOpenADOperation : PSCmdlet
     {
-        internal string _ldapFilter = "";
+        internal LDAPFilter? _ldapFilter;
         internal bool _includeDeleted = false;
 
         private CancellationTokenSource? CurrentCancelToken { get; set; }
@@ -31,6 +31,7 @@ namespace PSOpenAD.Commands
         )]
         public OpenADSession Session { get; set; } = null!;
 
+        // FIXME: auto complete with existing server cache
         [Parameter(ParameterSetName = "ServerIdentity")]
         [Parameter(ParameterSetName = "ServerLDAPFilter")]
         public string Server { get; set; } = "";
@@ -65,7 +66,7 @@ namespace PSOpenAD.Commands
             ValueFromPipelineByPropertyName = true,
             ParameterSetName = "SessionLDAPFilter"
         )]
-        public string LDAPFilter { get => _ldapFilter; set => _ldapFilter = value; }
+        public string LDAPFilter { get; set; } = "";
 
         [Parameter(ParameterSetName = "ServerLDAPFilter")]
         [Parameter(ParameterSetName = "SessionLDAPFilter")]
@@ -135,9 +136,12 @@ namespace PSOpenAD.Commands
 
                 string searchBase = SearchBase ?? Session.DefaultNamingContext;
 
-                LDAPFilter filter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
+                if (_ldapFilter == null)
+                {
+                    _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
+                }
                 int searchId = Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0,
-                    false, filter, requestedProperties.ToArray(), serverControls?.ToArray());
+                    false, _ldapFilter, requestedProperties.ToArray(), serverControls?.ToArray());
 
                 while (true)
                 {

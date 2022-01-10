@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace PSOpenAD.LDAP
 {
-    public class InvalidLDAPFilterException: FormatException
+    public class InvalidLDAPFilterException : FormatException
     {
         public InvalidLDAPFilterException() { }
 
@@ -65,7 +65,7 @@ namespace PSOpenAD.LDAP
                 }
 
                 if (parsedFilter != null)
-                        throw new InvalidLDAPFilterException("Extra data found in filter");
+                    throw new InvalidLDAPFilterException("Extra data found in filter");
 
                 if (c == '(')
                 {
@@ -181,25 +181,25 @@ namespace PSOpenAD.LDAP
                 if (!Regex.Match(attribute, attributePattern, RegexOptions.Compiled).Success)
                     throw new InvalidLDAPFilterException("invalid ldap attribute value");
 
-                // FIXME: escape the value
-                string value = filterSpan[(equalsIdx + 1)..].ToString();
+                ReadOnlySpan<char> value = filterSpan[(equalsIdx + 1)..];
+                Memory<byte> rawValue = ParseFilterValue(value);
                 if (filterType == '<')
-                    return new FilterGreaterOrEqual(attribute, value);
+                    return new FilterGreaterOrEqual(attribute, rawValue);
 
                 else if (filterType == '>')
-                    return new FilterGreaterOrEqual(attribute, value);
+                    return new FilterGreaterOrEqual(attribute, rawValue);
 
                 else if (filterType == '~')
-                    return new FilterApproxMatch(attribute, value);
+                    return new FilterApproxMatch(attribute, rawValue);
 
                 else if (value == "*")
                     return new FilterPresent(attribute);
 
-                else if (value.Contains("*"))
+                else if (value.Contains('*')) // FIXME: Ignore \*
                     throw new NotImplementedException(); // substrings
 
                 else
-                    return new FilterEquality(attribute, value);
+                    return new FilterEquality(attribute, rawValue);
             }
 
             throw new NotImplementedException();
@@ -227,6 +227,49 @@ namespace PSOpenAD.LDAP
             }
 
             return -1;
+        }
+
+        internal static Memory<byte> ParseFilterValue(ReadOnlySpan<char> value)
+        {
+            // Due to escaping taking more chars than the raw value we can safely use that to build the initial
+            // memory block. Escaping is simply \00 where the following 2 values are the hex representation of the raw
+            // bytes it represents.
+            Memory<byte> encodedValue = new(new byte[Encoding.UTF8.GetByteCount(value)]);
+            Span<byte> encodedSpan = encodedValue.Span;
+
+            int count = 0;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+
+                if (c == '\\')
+                {
+                    if (i + 2 < value.Length)
+                    {
+                        string escapedHex = value.Slice(i + 1, 2).ToString();
+                        if (Regex.Match(escapedHex, "[a-fA-F0-9]{2}", RegexOptions.Compiled).Success)
+                        {
+                            encodedSpan[count] = Convert.ToByte(escapedHex, 16);
+                            i += 2;
+                            count++;
+                        }
+                        else
+                        {
+                            throw new InvalidLDAPFilterException($"Invalid hex characters following \\ {escapedHex}");
+                        }
+                    }
+                    else
+                    {
+                        throw new InvalidLDAPFilterException("Not enough escape characters");
+                    }
+                }
+                else
+                {
+                    count += Encoding.UTF8.GetBytes(value.Slice(i, 1), encodedSpan[i..]);
+                }
+            }
+
+            return encodedValue[..count];
         }
     }
 
@@ -269,9 +312,9 @@ namespace PSOpenAD.LDAP
     internal class FilterEquality : LDAPFilter
     {
         public string Attribute { get; internal set; }
-        public string Value { get; internal set; }
+        public Memory<byte> Value { get; internal set; }
 
-        public FilterEquality(string attribute, string value)
+        public FilterEquality(string attribute, Memory<byte> value)
         {
             Attribute = attribute;
             Value = value;
@@ -281,7 +324,7 @@ namespace PSOpenAD.LDAP
         {
             using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 3, true));
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Value));
+            writer.WriteOctetString(Value.Span);
         }
     }
 
@@ -305,9 +348,9 @@ namespace PSOpenAD.LDAP
     internal class FilterGreaterOrEqual : LDAPFilter
     {
         public string Attribute { get; internal set; }
-        public string Value { get; internal set; }
+        public Memory<byte> Value { get; internal set; }
 
-        public FilterGreaterOrEqual(string attribute, string value)
+        public FilterGreaterOrEqual(string attribute, Memory<byte> value)
         {
             Attribute = attribute;
             Value = value;
@@ -317,16 +360,16 @@ namespace PSOpenAD.LDAP
         {
             using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 5, true));
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Value));
+            writer.WriteOctetString(Value.Span);
         }
     }
 
     internal class FilterLessOrEqual : LDAPFilter
     {
         public string Attribute { get; internal set; }
-        public string Value { get; internal set; }
+        public Memory<byte> Value { get; internal set; }
 
-        public FilterLessOrEqual(string attribute, string value)
+        public FilterLessOrEqual(string attribute, Memory<byte> value)
         {
             Attribute = attribute;
             Value = value;
@@ -336,7 +379,7 @@ namespace PSOpenAD.LDAP
         {
             using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 6, true));
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Value));
+            writer.WriteOctetString(Value.Span);
         }
     }
 
@@ -356,9 +399,9 @@ namespace PSOpenAD.LDAP
     internal class FilterApproxMatch : LDAPFilter
     {
         public string Attribute { get; internal set; }
-        public string Value { get; internal set; }
+        public Memory<byte> Value { get; internal set; }
 
-        public FilterApproxMatch(string attribute, string value)
+        public FilterApproxMatch(string attribute, Memory<byte> value)
         {
             Attribute = attribute;
             Value = value;
@@ -368,7 +411,7 @@ namespace PSOpenAD.LDAP
         {
             using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 8, true));
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Value));
+            writer.WriteOctetString(Value.Span);
         }
     }
 
