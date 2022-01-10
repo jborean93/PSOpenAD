@@ -76,6 +76,7 @@
         'Get-OpenADGroup'
         'Get-OpenADObject'
         'Get-OpenADUser'
+        'Get-OpenADWhoami'
         'New-OpenADSession'
         'New-OpenADSessionOption'
         'Remove-OpenADSession'

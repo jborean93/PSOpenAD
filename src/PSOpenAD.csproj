@@ -5,9 +5,12 @@
     <AssemblyName>PSOpenAD</AssemblyName>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>10.0</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Management.Automation" Version="7.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.Formats.Asn1" Version="6.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.IO.Pipelines" Version="6.0.1" />
   </ItemGroup>
 </Project>

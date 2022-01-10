@@ -223,13 +223,6 @@ namespace PSOpenAD
         public override string ToString() => $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities);
     }
 
-    public enum SearchScope
-    {
-        Base,
-        OneLevel,
-        Subtree,
-    }
-
     [Flags]
     public enum SupportedEncryptionTypes
     {

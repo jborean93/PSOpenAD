@@ -1,3 +1,4 @@
+using PSOpenAD.LDAP;
 using PSOpenAD.Native;
 using System;
 using System.Management.Automation;
@@ -69,7 +70,7 @@ namespace PSOpenAD.Commands
                 try
                 {
                     OpenADSession session = OpenADSessionFactory.Create(Uri, Credential, AuthType, StartTLS,
-                        SessionOption, this, CurrentCancelToken.Token);
+                        SessionOption, CurrentCancelToken.Token, cmdlet: this);
                     GlobalState.AddSession(Uri.ToString(), session);
                     WriteObject(session);
                 }

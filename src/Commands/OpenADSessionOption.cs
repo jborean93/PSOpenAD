@@ -1,3 +1,4 @@
+using System;
 using System.Management.Automation;
 
 namespace PSOpenAD.Commands
@@ -20,6 +21,12 @@ namespace PSOpenAD.Commands
         [Parameter()]
         public SwitchParameter SkipCertificateCheck { get; set; }
 
+        [Parameter()]
+        public Int32 ConnectTimeout { get; set; } = 180000;
+
+        [Parameter()]
+        public Int32 OperationTimeout { get; set; } = 0; // FIXME
+
         protected override void EndProcessing()
         {
             WriteObject(new OpenADSessionOptions()
@@ -28,6 +35,8 @@ namespace PSOpenAD.Commands
                 NoSigning = NoSigning,
                 NoChannelBinding = NoChannelBinding,
                 SkipCertificateCheck = SkipCertificateCheck,
+                ConnectTimeout = ConnectTimeout,
+                OperationTimeout = OperationTimeout,
             });
         }
     }

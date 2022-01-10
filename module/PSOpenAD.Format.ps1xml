@@ -18,9 +18,6 @@
             <Width>7</Width>
           </TableColumnHeader>
           <TableColumnHeader>
-            <Width>10</Width>
-          </TableColumnHeader>
-          <TableColumnHeader>
             <Width>43</Width>
           </TableColumnHeader>
         </TableHeaders>
@@ -35,9 +32,6 @@
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>CanSign</PropertyName>
-              </TableColumnItem>
-              <TableColumnItem>
-                <PropertyName>SupportsCB</PropertyName>
               </TableColumnItem>
               <TableColumnItem>
                 <PropertyName>Details</PropertyName>

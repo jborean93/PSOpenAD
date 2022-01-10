@@ -38,7 +38,7 @@ namespace PSOpenAD
             AssemblyLoadContext.Default.ResolvingUnmanagedDll += ImportResolver;
         }
 
-        public bool CacheLibrary(string id, string path, string purpose, bool optional = false)
+        public LibraryInfo? CacheLibrary(string id, string path)
         {
             string? envOverride = Environment.GetEnvironmentVariable(id.ToUpperInvariant().Replace(".", "_"));
             if (!String.IsNullOrWhiteSpace(envOverride))
@@ -47,15 +47,11 @@ namespace PSOpenAD
             try
             {
                 NativeHandles[id] = new LibraryInfo(id, path);
-                return true;
+                return NativeHandles[id];
             }
-            catch (DllNotFoundException e)
-            {
-                if (!optional)
-                    throw new DllNotFoundException($"Failed to load '{path}' for {purpose}", e);
+            catch (DllNotFoundException) {}
 
-                return false;
-            }
+            return null;
         }
 
         private IntPtr ImportResolver(Assembly assembly, string libraryName)
@@ -84,87 +80,77 @@ namespace PSOpenAD
         public void OnImport()
         {
             Resolver = new NativeResolver();
-            Resolver.CacheLibrary(OpenLDAP.LIB_LDAP, "libldap.so", "LDAP connections");
 
-            // The OpenLDAP may by linked with a custom path, the best we can do is search using the default name
-            // for capability inspection. It's up to OpenLDAP to talk to SASL during the auth stage and report what
-            // mechs are available.
-            bool hasSasl = Resolver.CacheLibrary(CyrusSASL.LIB_SASL, "libsasl2.so", "SASL authentication", true);
-
-            // While this is needed for Negotiate/Kerberos auth users can still use Simple auth so it's optional.
-            bool hasGssapi = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2", "GSSAPI authentication", true);
-
-            // This is only used to lookup the default realm which is used to determine the default server.
-            bool hasKrb5 = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so", "Kerberos authentication", true);
+            // GSSAPI is needed for Negotiate or Kerberos auth while Krb5 is used on non-Windows to locate the default
+            // realm when setting up an implicit connection.
+            LibraryInfo? gssapiLib = null;
+            LibraryInfo? krb5Lib = null;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "/System/Library/Frameworks/GSS.framework/GSS");
+                krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5,
+                    "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal");
+            }
+            else if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
+                krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
+            }
 
             // While channel binding isn't technically done by both these methods an Active Directory implementation
             // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
-            // server end.
-            GlobalState.Providers[AuthenticationMethod.Anonymous] = new AuthenticationProvider(
-                AuthenticationMethod.Anonymous, "Anonymous", true, false, true, "");
-            GlobalState.Providers[AuthenticationMethod.Simple] = new AuthenticationProvider(
-                AuthenticationMethod.Simple, "Simple", true, false, true, "");
+            // server end.true
+            GlobalState.Providers[AuthenticationMethod.Anonymous] = new(AuthenticationMethod.Anonymous, "ANONYMOUS",
+                true, false, "");
+            GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
+                false, "");
 
-            // Even if SASL wasn't found this uses the OpenLDAP lib to report the mechs available. If SASL is
-            // available we can get further details on the mechanism to provide a clearer picture of what it supports.
-            List<string> saslMechs = OpenLDAP.GetOptionSaslMechList(new SafeLdapHandle());
-            Dictionary<string, SaslClientMechanism> saslDetails = new Dictionary<string, SaslClientMechanism>();
-            if (hasSasl && saslMechs.Count > 0)
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                CyrusSASL.ClientInit();
-                CyrusSASL.ClientPluginInfo(String.Join(" ", saslMechs),
-                    (SaslCallbackStage _, SaslClientMechanism? mech) =>
+                GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
+                    true, true, "");
+                GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+                    "GSS-SPNEGO", true, true, "");
+
+                // FUTURE: Add ad lookup.
+            }
+            else
+            {
+                foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
+                {
+                    { AuthenticationMethod.Kerberos, "GSSAPI" },
+                    { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
+                })
+                {
+                    bool present = false;
+                    bool canSign = false;
+                    string details = "";
+
+                    if (gssapiLib != null)
                     {
-                        if (mech == null)
-                            return;
+                        present = canSign = true;
+                    }
+                    else
+                    {
+                        details = "GSSAPI library not found";
+                    }
 
-                        saslDetails[mech.Plugin.MechName] = mech;
-                    });
-            }
-
-            foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
-            {
-                { AuthenticationMethod.Kerberos, "GSSAPI" },
-                { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
-            })
-            {
-                bool present, canSign, supportsCB;
-                present = canSign = supportsCB = false;
-                string details = "";
-
-                if (hasGssapi && saslMechs.Contains(kvp.Value))
-                {
-                    present = canSign = true;
-
-                    SaslPluginFeatures? features = saslDetails.GetValueOrDefault(kvp.Value)?.Plugin.Features;
-                    supportsCB = ((features ?? 0) & SaslPluginFeatures.SASL_FEAT_CHANNEL_BINDING) != 0;
-
-                    if (!supportsCB)
-                        details = "Older SASL library without CB support";
-                }
-                else if (!hasGssapi)
-                {
-                    details = "GSSAPI library not found";
-                }
-                else
-                {
-                    details = "SASL library not detected by OpenLDAP";
-
+                    GlobalState.Providers[kvp.Key] = new(kvp.Key, kvp.Value, present, canSign, details);
                 }
 
-                GlobalState.Providers[kvp.Key] = new AuthenticationProvider(kvp.Key, kvp.Value, present, canSign,
-                    supportsCB, details);
-            }
-
-            // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
-            if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && hasKrb5)
-            {
-                using SafeKrb5Context ctx = Kerberos.InitContext();
-                try
+                // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
+                if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
                 {
-                    GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
+                    if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
+                        GlobalState.GssapiIsHeimdal = true;
+
+                    using SafeKrb5Context ctx = Kerberos.InitContext();
+                    try
+                    {
+                        GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
+                    }
+                    catch (KerberosException) { }
                 }
-                catch (KerberosException) { }
             }
         }
 

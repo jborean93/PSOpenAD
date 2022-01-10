@@ -1,9 +1,10 @@
-using PSOpenAD.Native;
+using PSOpenAD.LDAP;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading;
 
 namespace PSOpenAD.Commands
 {
@@ -11,6 +12,8 @@ namespace PSOpenAD.Commands
     {
         internal string _ldapFilter = "";
         internal bool _includeDeleted = false;
+
+        private CancellationTokenSource? CurrentCancelToken { get; set; }
 
         internal abstract (string, bool)[] DefaultProperties { get; }
 
@@ -85,78 +88,97 @@ namespace PSOpenAD.Commands
 
         protected override void ProcessRecord()
         {
-            StringComparer comparer = StringComparer.OrdinalIgnoreCase;
-            HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
-            string[] explicitProperties = Property ?? Array.Empty<string>();
-            bool showAll = false;
-            foreach (string prop in explicitProperties)
+            using (CurrentCancelToken = new CancellationTokenSource())
             {
-                if (prop == "*") { showAll = true; }
-                requestedProperties.Add(prop);
-            }
-
-            List<LDAPControl> serverControls = new List<LDAPControl>();
-            if (_includeDeleted)
-            {
-                serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DELETED_OID, null, false));
-                serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID, null, false));
-            }
-
-            if (ParameterSetName.StartsWith("Server"))
-            {
-                Uri ldapUri;
-                if (string.IsNullOrEmpty(Server))
+                StringComparer comparer = StringComparer.OrdinalIgnoreCase;
+                HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
+                string[] explicitProperties = Property ?? Array.Empty<string>();
+                bool showAll = false;
+                foreach (string prop in explicitProperties)
                 {
-                    if (string.IsNullOrEmpty(GlobalState.DefaultRealm))
+                    if (prop == "*") { showAll = true; }
+                    requestedProperties.Add(prop);
+                }
+
+                List<LDAPControl>? serverControls = null;
+                // if (_includeDeleted)
+                // {
+                //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DELETED_OID, null, false));
+                //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID, null, false));
+                // }
+
+                if (ParameterSetName.StartsWith("Server"))
+                {
+                    Uri ldapUri;
+                    if (string.IsNullOrEmpty(Server))
                     {
-                        return;
+                        if (string.IsNullOrEmpty(GlobalState.DefaultRealm))
+                        {
+                            return;
+                        }
+
+                        ldapUri = new Uri($"ldap://{GlobalState.DefaultRealm}:389/");
+                    }
+                    else if (Server.StartsWith("ldap://", true, CultureInfo.InvariantCulture) ||
+                        Server.StartsWith("ldaps://", true, CultureInfo.InvariantCulture))
+                    {
+                        ldapUri = new Uri(Server);
+                    }
+                    else
+                    {
+                        ldapUri = new Uri($"ldap://{Server}:389/");
                     }
 
-                    ldapUri = new Uri($"ldap://{GlobalState.DefaultRealm}:389/");
-                }
-                else if (Server.StartsWith("ldap://", true, CultureInfo.InvariantCulture) ||
-                    Server.StartsWith("ldaps://", true, CultureInfo.InvariantCulture))
-                {
-                    ldapUri = new Uri(Server);
-                }
-                else
-                {
-                    ldapUri = new Uri($"ldap://{Server}:389/");
+                    Session = OpenADSessionFactory.CreateOrUseDefault(ldapUri, Credential, AuthType,
+                        StartTLS, SessionOption, cancelToken: CurrentCancelToken.Token, cmdlet: this);
                 }
 
-                Session = OpenADSessionFactory.CreateOrUseDefault(ldapUri, Credential, AuthType,
-                    StartTLS, SessionOption, this);
+                string searchBase = SearchBase ?? Session.DefaultNamingContext;
+
+                LDAPFilter filter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
+                int searchId = Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0,
+                    false, filter, requestedProperties.ToArray(), serverControls?.ToArray());
+
+                while (true)
+                {
+                    LDAPMessage response = Session.Connection.WaitForMessage(searchId,
+                        cancelToken: CurrentCancelToken.Token);
+                    if (response is ExtendedResponse failResp)
+                        throw new LDAPException(failResp.Result);
+                    else if (response is SearchResultDone)
+                        break;
+                    else if (response is SearchResultReference)
+                        continue; // FUTURE: look up these values
+
+                    SearchResultEntry entry = (SearchResultEntry)response;
+                    Dictionary<string, object?> props = new();
+                    foreach (PartialAttribute attribute in entry.Attributes)
+                    {
+                        byte[][] rawValues = attribute.Values;
+                        props[attribute.Name] = Session.AttributeTransformer.Transform(attribute.Name, rawValues);
+                    }
+
+                    OpenADObject adObj = CreateADObject(props);
+
+                    // This adds a note property for each explicitly requested property, excluding the ones the object
+                    // naturally exposes.
+                    PSObject adPSObj = PSObject.AsPSObject(adObj);
+                    props.Keys
+                        .Where(v => (showAll || explicitProperties.Contains(v, comparer)) && !DefaultProperties.Contains((v, true)))
+                        .OrderBy(v => v)
+                        .ToList()
+                        .ForEach(v => adPSObj.Properties.Add(new PSNoteProperty(v, props[v])));
+
+                    // FIXME: Fail if -Identity is used and either 0 or multiple objects found.
+                    WriteObject(adObj);
+                }
+                Session.Connection.RemoveMessageQueue(searchId);
             }
+        }
 
-            string searchBase = SearchBase ?? Session.DefaultNamingContext;
-            LDAPSearchScope ldapScope = (LDAPSearchScope)SearchScope;
-
-            int msgid = OpenLDAP.SearchExt(Session.Handle, searchBase, ldapScope, _ldapFilter,
-                requestedProperties.ToArray(), false, serverControls: serverControls.ToArray());
-            SafeLdapMessage res = OpenLDAP.Result(Session.Handle, msgid, LDAPMessageCount.LDAP_MSG_ALL);
-            foreach (IntPtr entry in OpenLDAP.GetEntries(Session.Handle, res))
-            {
-                Dictionary<string, object?> props = new Dictionary<string, object?>();
-                foreach (string attribute in OpenLDAP.GetAttributes(Session.Handle, entry))
-                {
-                    byte[][] rawValues = OpenLDAP.GetValues(Session.Handle, entry, attribute).ToArray();
-                    props[attribute] = Session.AttributeTransformer.Transform(attribute, rawValues);
-                }
-
-                OpenADObject adObj = CreateADObject(props);
-
-                // This adds a note property for each explicitly requested property, excluding the ones the object
-                // naturally exposes.
-                PSObject adPSObj = PSObject.AsPSObject(adObj);
-                props.Keys
-                    .Where(v => (showAll || explicitProperties.Contains(v, comparer)) && !DefaultProperties.Contains((v, true)))
-                    .OrderBy(v => v)
-                    .ToList()
-                    .ForEach(v => adPSObj.Properties.Add(new PSNoteProperty(v, props[v])));
-
-                // FIXME: Fail if -Identity is used and either 0 or multiple objects found.
-                WriteObject(adObj);
-            }
+        protected override void StopProcessing()
+        {
+            CurrentCancelToken?.Cancel();
         }
     }
 
