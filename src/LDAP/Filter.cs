@@ -8,18 +8,25 @@ namespace PSOpenAD.LDAP
 {
     public class InvalidLDAPFilterException : FormatException
     {
+        public string Filter { get; } = "";
+        public int StartPosition { get; } = 0;
+        public int EndPosition { get; } = 0;
+
         public InvalidLDAPFilterException() { }
 
         public InvalidLDAPFilterException(string message) : base(message) { }
 
+        public InvalidLDAPFilterException(string message, string filter, int startPosition, int endPosition)
+            : base(message)
+        {
+            Filter = filter;
+            StartPosition = startPosition;
+            EndPosition = endPosition;
+        }
+
         public InvalidLDAPFilterException(string message, Exception innerException) :
             base(message, innerException)
         { }
-
-        internal static InvalidLDAPFilterException FromFilterSubset(string filter, int offset, int length)
-        {
-            return new InvalidLDAPFilterException("Invalid LDAP filter");
-        }
     }
 
     internal abstract class LDAPFilter
@@ -42,7 +49,13 @@ namespace PSOpenAD.LDAP
                 if (c == ')')
                 {
                     if (!inParens)
-                        throw new InvalidLDAPFilterException("closing ) without a starting (");
+                    {
+                        throw new InvalidLDAPFilterException(
+                            "Unbalanced closing ')' without a starting '('",
+                            filter,
+                            offset + read,
+                            offset + read + 1);
+                    }
 
                     inParens = false;
                     continue;
@@ -52,20 +65,38 @@ namespace PSOpenAD.LDAP
                     int subFilterRead;
 
                     if (c == '(')
-                        throw new InvalidLDAPFilterException("nested ( without condition");
+                    {
+                        throw new InvalidLDAPFilterException(
+                            "Nested '(' without filter condition",
+                            filter,
+                            offset + read,
+                            offset + read + 1);
+                    }
 
+                    int subFilterOffset = offset + read;
+                    int subFilterLength = length - read;
                     if (c == '&' || c == '|' || c == '!')
-                        parsedFilter = ParseComplexFilter(filter, read, filter.Length - read, out subFilterRead);
-
+                    {
+                        parsedFilter = ParseComplexFilter(filter, subFilterOffset, subFilterLength, out subFilterRead);
+                    }
                     else
-                        parsedFilter = ParseSimpleFilter(filter, read, filter.Length - read, out subFilterRead);
+                    {
+                        parsedFilter = ParseSimpleFilter(filter, subFilterOffset, subFilterLength, out subFilterRead);
+                    }
 
                     read += subFilterRead;
+                    inParens = false;
                     continue;
                 }
 
                 if (parsedFilter != null)
-                    throw new InvalidLDAPFilterException("Extra data found in filter");
+                {
+                    throw new InvalidLDAPFilterException(
+                        "Extra data found at filter end",
+                        filter,
+                        offset + read,
+                        offset + length);
+                }
 
                 if (c == '(')
                 {
@@ -79,7 +110,13 @@ namespace PSOpenAD.LDAP
             }
 
             if (parsedFilter == null)
-                throw new InvalidLDAPFilterException("No filter found");
+            {
+                throw new InvalidLDAPFilterException(
+                    "No filter found",
+                    filter,
+                    offset,
+                    offset + length);
+            }
 
             return parsedFilter;
         }
@@ -87,13 +124,9 @@ namespace PSOpenAD.LDAP
         internal static LDAPFilter ParseComplexFilter(string filter, int offset, int length, out int read)
         {
             ReadOnlySpan<char> filterSpan = filter.AsSpan().Slice(offset, length);
-
-            if (filterSpan.Length == 0)
-                throw new InvalidLDAPFilterException("Unexpected end");
-
             char complexType = filterSpan[0];
 
-            List<LDAPFilter> parsedFilters = new List<LDAPFilter>();
+            List<LDAPFilter> parsedFilters = new();
 
             for (read = 1; read < filterSpan.Length; read++)
             {
@@ -102,22 +135,46 @@ namespace PSOpenAD.LDAP
                 if (c == '(')
                 {
                     if (complexType == '!' && parsedFilters.Count == 1)
-                        throw new InvalidLDAPFilterException("Multiple filters found for not expression");
+                    {
+                        throw new InvalidLDAPFilterException(
+                            "Multiple filters found for not '!' expression",
+                            filter,
+                            offset + read,
+                            offset + length);
+                    }
 
                     int closingParen = FindClosingParen(filterSpan[read..]);
                     if (closingParen == -1)
-                        throw new InvalidLDAPFilterException("Failed to find closing parent for filter");
+                    {
+                        throw new InvalidLDAPFilterException(
+                            "Failed to find closing paren ')' for filter",
+                            filter,
+                            offset + read,
+                            offset + length);
+                    }
 
-                    parsedFilters.Add(ParseFilter(filter, offset + read, closingParen, out var filterRead));
+                    parsedFilters.Add(ParseFilter(filter, offset + read, closingParen + 1, out var filterRead));
                     read += filterRead;
                 }
                 else if (c == ')')
                 {
                     break;
                 }
+                else if (parsedFilters.Count > 0)
+                {
+                    throw new InvalidLDAPFilterException(
+                        "Expecting ')' to end complex filter expression",
+                        filter,
+                        offset,
+                        offset + length);
+                }
                 else
                 {
-                    throw new InvalidLDAPFilterException("Expecting ( or ) in complex expression");
+                    throw new InvalidLDAPFilterException(
+                        "Expecting '(' to start after qualifier in complex filter expression",
+                        filter,
+                        offset,
+                        offset + length);
                 }
             }
 
@@ -192,7 +249,7 @@ namespace PSOpenAD.LDAP
                 else if (filterType == '~')
                     return new FilterApproxMatch(attribute, rawValue);
 
-                else if (value == "*")
+                else if (value.ToString() == "*")
                     return new FilterPresent(attribute);
 
                 else if (value.Contains('*')) // FIXME: Ignore \*
@@ -273,6 +330,27 @@ namespace PSOpenAD.LDAP
         }
     }
 
+    internal abstract class FilterAttributeValue : LDAPFilter
+    {
+        public string Attribute { get; internal set; }
+        public Memory<byte> Value { get; internal set; }
+
+        public abstract int TagValue { get; }
+
+        internal FilterAttributeValue(string attribute, Memory<byte> value)
+        {
+            Attribute = attribute;
+            Value = value;
+        }
+
+        public override void ToBytes(AsnWriter writer)
+        {
+            using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, TagValue, true));
+            writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
+            writer.WriteOctetString(Value.Span);
+        }
+    }
+
     internal class FilterAnd : LDAPFilter
     {
         public LDAPFilter[] Filters { get; internal set; }
@@ -309,23 +387,11 @@ namespace PSOpenAD.LDAP
         }
     }
 
-    internal class FilterEquality : LDAPFilter
+    internal class FilterEquality : FilterAttributeValue
     {
-        public string Attribute { get; internal set; }
-        public Memory<byte> Value { get; internal set; }
+        public override int TagValue => 3;
 
-        public FilterEquality(string attribute, Memory<byte> value)
-        {
-            Attribute = attribute;
-            Value = value;
-        }
-
-        public override void ToBytes(AsnWriter writer)
-        {
-            using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 3, true));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Value.Span);
-        }
+        public FilterEquality(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
     internal class FilterSubstrings : LDAPFilter
@@ -345,42 +411,18 @@ namespace PSOpenAD.LDAP
         }
     }
 
-    internal class FilterGreaterOrEqual : LDAPFilter
+    internal class FilterGreaterOrEqual : FilterAttributeValue
     {
-        public string Attribute { get; internal set; }
-        public Memory<byte> Value { get; internal set; }
+        public override int TagValue => 5;
 
-        public FilterGreaterOrEqual(string attribute, Memory<byte> value)
-        {
-            Attribute = attribute;
-            Value = value;
-        }
-
-        public override void ToBytes(AsnWriter writer)
-        {
-            using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 5, true));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Value.Span);
-        }
+        public FilterGreaterOrEqual(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
-    internal class FilterLessOrEqual : LDAPFilter
+    internal class FilterLessOrEqual : FilterAttributeValue
     {
-        public string Attribute { get; internal set; }
-        public Memory<byte> Value { get; internal set; }
+        public override int TagValue => 6;
 
-        public FilterLessOrEqual(string attribute, Memory<byte> value)
-        {
-            Attribute = attribute;
-            Value = value;
-        }
-
-        public override void ToBytes(AsnWriter writer)
-        {
-            using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 6, true));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Value.Span);
-        }
+        public FilterLessOrEqual(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
     internal class FilterPresent : LDAPFilter
@@ -396,23 +438,11 @@ namespace PSOpenAD.LDAP
         }
     }
 
-    internal class FilterApproxMatch : LDAPFilter
+    internal class FilterApproxMatch : FilterAttributeValue
     {
-        public string Attribute { get; internal set; }
-        public Memory<byte> Value { get; internal set; }
+        public override int TagValue => 8;
 
-        public FilterApproxMatch(string attribute, Memory<byte> value)
-        {
-            Attribute = attribute;
-            Value = value;
-        }
-
-        public override void ToBytes(AsnWriter writer)
-        {
-            using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 8, true));
-            writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
-            writer.WriteOctetString(Value.Span);
-        }
+        public FilterApproxMatch(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
     internal class FilterExtensibleMatch : LDAPFilter

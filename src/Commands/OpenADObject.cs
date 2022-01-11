@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Management.Automation;
+using System.Management.Automation.Language;
+using System.Reflection;
 using System.Threading;
 
 namespace PSOpenAD.Commands
@@ -91,6 +93,41 @@ namespace PSOpenAD.Commands
         {
             using (CurrentCancelToken = new CancellationTokenSource())
             {
+                if (_ldapFilter == null)
+                {
+                    try
+                    {
+                        _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
+                    }
+                    catch (InvalidLDAPFilterException e)
+                    {
+                        ErrorRecord rec = new(
+                            e,
+                            "InvalidLDAPFilterException",
+                            ErrorCategory.ParserError,
+                            LDAPFilter);
+
+                        rec.ErrorDetails = new($"Failed to parse LDAP Filter: {e.Message}");
+
+                        // By setting the InvocationInfo we get a nice error description in PowerShell with positional
+                        // details. Unfortunately this is not publicly settable so we have to use reflection.
+                        if (!string.IsNullOrWhiteSpace(e.Filter))
+                        {
+                            ScriptPosition start = new("", 1, e.StartPosition + 1, e.Filter);
+                            ScriptPosition end = new("", 1, e.EndPosition + 1, e.Filter);
+                            InvocationInfo info = InvocationInfo.Create(
+                                MyInvocation.MyCommand,
+                                new ScriptExtent(start, end));
+                            rec.GetType().GetField(
+                                "_invocationInfo",
+                                BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(rec, info);
+                        }
+
+                        ThrowTerminatingError(rec);
+                        return; // Satisfies nullability checks
+                    }
+                }
+
                 StringComparer comparer = StringComparer.OrdinalIgnoreCase;
                 HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
                 string[] explicitProperties = Property ?? Array.Empty<string>();
@@ -135,11 +172,6 @@ namespace PSOpenAD.Commands
                 }
 
                 string searchBase = SearchBase ?? Session.DefaultNamingContext;
-
-                if (_ldapFilter == null)
-                {
-                    _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
-                }
                 int searchId = Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0,
                     false, _ldapFilter, requestedProperties.ToArray(), serverControls?.ToArray());
 
