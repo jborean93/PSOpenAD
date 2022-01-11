@@ -45,7 +45,7 @@ namespace PSOpenAD
 
             if (Regex.Match(value, "^((CN=([^,]*)),)?((((?:CN|OU)=[^,]+,?)+),)?((DC=[^,]+,?)+)$").Success)
             {
-                filter = new FilterEquality("distinguishedName", LDAPFilter.ParseFilterValue(value));
+                filter = new FilterEquality("distinguishedName", LDAPFilter.EncodeSimpleFilterValue(value));
                 return true;
             }
             else
@@ -90,7 +90,7 @@ namespace PSOpenAD
 
             if (Regex.Match(value, @"^.*\@.*\..*$").Success)
             {
-                filter = new FilterEquality("userPrincipalName", LDAPFilter.ParseFilterValue(value));
+                filter = new FilterEquality("userPrincipalName", LDAPFilter.EncodeSimpleFilterValue(value));
                 return true;
             }
             else
@@ -107,7 +107,7 @@ namespace PSOpenAD
             if (m.Success)
             {
                 string username = m.Groups["username"].Value;
-                filter = new FilterEquality("sAMAccountName", LDAPFilter.ParseFilterValue(username));
+                filter = new FilterEquality("sAMAccountName", LDAPFilter.EncodeSimpleFilterValue(username));
                 return true;
             }
             else

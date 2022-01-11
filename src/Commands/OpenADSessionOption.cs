@@ -25,7 +25,7 @@ namespace PSOpenAD.Commands
         public Int32 ConnectTimeout { get; set; } = 180000;
 
         [Parameter()]
-        public Int32 OperationTimeout { get; set; } = 0; // FIXME
+        public Int32 OperationTimeout { get; set; } = -1; // FIXME
 
         protected override void EndProcessing()
         {

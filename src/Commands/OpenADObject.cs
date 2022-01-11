@@ -97,7 +97,7 @@ namespace PSOpenAD.Commands
                 {
                     try
                     {
-                        _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
+                        _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter);
                     }
                     catch (InvalidLDAPFilterException e)
                     {
