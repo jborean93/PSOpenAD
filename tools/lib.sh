@@ -22,20 +22,14 @@ lib::setup::system_requirements() {
 lib::setup::system_requirements::el() {
     rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm
 
-    # cyrus-sasl - Provides the SASL library
-    # cyrus-sasl-gssapi - Provides the GSSAPI and GSS-SPNEGO SASL mech
     # krb5-libs - Provides the MIT GSSAPI/Krb5 Library
-    # openldap - Provides the OpenLDAP Library
     # krb5-workstation - Provides kinit for tests but not needed by PSOpenAD
     dnf install -y \
         --nogpgcheck \
         --disablerepo=\*modul\* \
-        cyrus-sasl \
-        cyrus-sasl-gssapi \
         krb5-libs \
         krb5-workstation \
-        dotnet-sdk-5.0 \
-        openldap \
+        dotnet-sdk-6.0 \
         powershell
 
     export PATH="~/.dotnet/tools:$PATH"

@@ -17,15 +17,15 @@ PASSWORD=${AD_PASSWORD:-Password01}
 NETWORK_NAME=psopenad-net-$( openssl rand -hex 5 )
 DC_CONTAINER_ID=""
 
-VOLUME_FLAGS=""
 if [ -x "$( command -v podman )" ]; then
     DOCKER_BIN=podman
 else
     DOCKER_BIN=docker
+fi
 
-    if [ -x "$( command -v getenforce )" ] && [ "$( getenforce | xargs )" == "Enforcing" ]; then
-        VOLUME_FLAGS=":z"
-    fi
+VOLUME_FLAGS=""
+if [ -x "$( command -v getenforce )" ] && [ "$( getenforce | xargs )" == "Enforcing" ]; then
+    VOLUME_FLAGS=":z"
 fi
 
 function cleanup()
