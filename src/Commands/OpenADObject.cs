@@ -4,18 +4,22 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Management.Automation;
+using System.Management.Automation.Language;
+using System.Reflection;
 using System.Threading;
 
 namespace PSOpenAD.Commands
 {
     public abstract class GetOpenADOperation : PSCmdlet
     {
-        internal string _ldapFilter = "";
+        internal LDAPFilter? _ldapFilter;
         internal bool _includeDeleted = false;
 
         private CancellationTokenSource? CurrentCancelToken { get; set; }
 
         internal abstract (string, bool)[] DefaultProperties { get; }
+
+        internal abstract LDAPFilter FilteredClass { get; }
 
         internal abstract OpenADObject CreateADObject(Dictionary<string, object?> attributes);
 
@@ -31,6 +35,7 @@ namespace PSOpenAD.Commands
         )]
         public OpenADSession Session { get; set; } = null!;
 
+        // FIXME: auto complete with existing server cache
         [Parameter(ParameterSetName = "ServerIdentity")]
         [Parameter(ParameterSetName = "ServerLDAPFilter")]
         public string Server { get; set; } = "";
@@ -65,7 +70,7 @@ namespace PSOpenAD.Commands
             ValueFromPipelineByPropertyName = true,
             ParameterSetName = "SessionLDAPFilter"
         )]
-        public string LDAPFilter { get => _ldapFilter; set => _ldapFilter = value; }
+        public string LDAPFilter { get; set; } = "";
 
         [Parameter(ParameterSetName = "ServerLDAPFilter")]
         [Parameter(ParameterSetName = "SessionLDAPFilter")]
@@ -90,6 +95,41 @@ namespace PSOpenAD.Commands
         {
             using (CurrentCancelToken = new CancellationTokenSource())
             {
+                if (_ldapFilter == null)
+                {
+                    try
+                    {
+                        _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter);
+                    }
+                    catch (InvalidLDAPFilterException e)
+                    {
+                        ErrorRecord rec = new(
+                            e,
+                            "InvalidLDAPFilterException",
+                            ErrorCategory.ParserError,
+                            LDAPFilter);
+
+                        rec.ErrorDetails = new($"Failed to parse LDAP Filter: {e.Message}");
+
+                        // By setting the InvocationInfo we get a nice error description in PowerShell with positional
+                        // details. Unfortunately this is not publicly settable so we have to use reflection.
+                        if (!string.IsNullOrWhiteSpace(e.Filter))
+                        {
+                            ScriptPosition start = new("", 1, e.StartPosition + 1, e.Filter);
+                            ScriptPosition end = new("", 1, e.EndPosition + 1, e.Filter);
+                            InvocationInfo info = InvocationInfo.Create(
+                                MyInvocation.MyCommand,
+                                new ScriptExtent(start, end));
+                            rec.GetType().GetField(
+                                "_invocationInfo",
+                                BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(rec, info);
+                        }
+
+                        ThrowTerminatingError(rec);
+                        return; // Satisfies nullability checks
+                    }
+                }
+
                 StringComparer comparer = StringComparer.OrdinalIgnoreCase;
                 HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
                 string[] explicitProperties = Property ?? Array.Empty<string>();
@@ -101,6 +141,7 @@ namespace PSOpenAD.Commands
                 }
 
                 List<LDAPControl>? serverControls = null;
+                // FIXME: implement this
                 // if (_includeDeleted)
                 // {
                 //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DELETED_OID, null, false));
@@ -134,10 +175,9 @@ namespace PSOpenAD.Commands
                 }
 
                 string searchBase = SearchBase ?? Session.DefaultNamingContext;
-
-                LDAPFilter filter = LDAP.LDAPFilter.ParseFilter(LDAPFilter, 0, LDAPFilter.Length, out var _);
+                LDAPFilter finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
                 int searchId = Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0,
-                    false, filter, requestedProperties.ToArray(), serverControls?.ToArray());
+                    false, finalFilter, requestedProperties.ToArray(), serverControls?.ToArray());
 
                 while (true)
                 {
@@ -210,9 +250,10 @@ namespace PSOpenAD.Commands
 
         internal override (string, bool)[] DefaultProperties => OpenADObject.DEFAULT_PROPERTIES;
 
-        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADObject(attributes);
-    }
+        internal override LDAPFilter FilteredClass => new FilterPresent("objectClass");
 
+        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new(attributes);
+    }
 
     [Cmdlet(
         VerbsCommon.Get, "OpenADComputer",
@@ -238,6 +279,9 @@ namespace PSOpenAD.Commands
         public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
 
         internal override (string, bool)[] DefaultProperties => OpenADComputer.DEFAULT_PROPERTIES;
+
+        internal override LDAPFilter FilteredClass
+            => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("computer"));
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADComputer(attributes);
     }
@@ -267,6 +311,9 @@ namespace PSOpenAD.Commands
 
         internal override (string, bool)[] DefaultProperties => OpenADUser.DEFAULT_PROPERTIES;
 
+        internal override LDAPFilter FilteredClass
+            => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("person"));
+
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADUser(attributes);
     }
 
@@ -294,6 +341,9 @@ namespace PSOpenAD.Commands
         public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
 
         internal override (string, bool)[] DefaultProperties => OpenADGroup.DEFAULT_PROPERTIES;
+
+        internal override LDAPFilter FilteredClass
+            => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("group"));
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADGroup(attributes);
     }

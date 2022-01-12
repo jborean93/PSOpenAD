@@ -3,7 +3,7 @@ using System.Formats.Asn1;
 
 namespace PSOpenAD
 {
-    internal class Asn1Helper
+    internal static class Asn1Helper
     {
         /// <summary>Check if there is enough data to decode the ASN.1 payload.</summary>
         /// <remarks>
@@ -14,12 +14,12 @@ namespace PSOpenAD
         public static bool HasEnoughData(ReadOnlySpan<byte> data)
         {
             Asn1Tag.Decode(data, out int tagLength);
-            data = data.Slice(tagLength);
+            data = data[tagLength..];
             if (data.Length == 0)
                 return false;
 
-            byte firstOctet = data.Slice(0, 1)[0];
-            data = data.Slice(1);
+            byte firstOctet = data[..1][0];
+            data = data[1..];
 
             if (firstOctet == 0x80)
             {
@@ -35,14 +35,14 @@ namespace PSOpenAD
                     else if (offset == -1)
                     {
                         offset = idx;
-                        data = data.Slice(idx + 1);
+                        data = data[(idx + 1)..];
                     }
                     else
                     {
                         if (idx == 0)
                             return true;
                         else
-                            data = data.Slice(idx + 1);
+                            data = data[(idx + 1)..];
                     }
                 }
             }

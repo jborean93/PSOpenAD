@@ -71,22 +71,15 @@ namespace PSOpenAD.Native
             public UInt32 cbBlockSize;
             public UInt32 cbSecurityTrailer;
         }
-
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct SecPkgContext_StreamSizes
-        {
-            public UInt32 cbHeader;
-            public UInt32 cbTrailer;
-            public UInt32 cbMaximumMessage;
-            public UInt32 cBuffers;
-            public UInt32 cbBlockSize;
-        }
     }
 
+    /// <summary>Result of <c>AcquireCredentialsHandle</c>.</summary>
     internal class SspiCredential
     {
+        /// <summary>The handle to the SSPI credential.</summary>
         public SafeSspiCredentialHandle Creds { get; }
+
+        /// <summary>The number of ticks (100s of nanoseconds) since 1601-01-01 until the credential expires.</summary>
         public UInt64 Expiry { get; }
 
         public SspiCredential(SafeSspiCredentialHandle creds, UInt64 expiry)
@@ -96,12 +89,22 @@ namespace PSOpenAD.Native
         }
     }
 
+    /// <summary>Result of <c>InitializeSecurityContext</c>.</summary>
     internal class SspiSecContext
     {
+        /// <summary>The handle to the SSPI security context.</summary>
         public SafeSspiContextHandle Context { get; }
+
+        /// <summary>The return buffer values from the SSPI call.</summary>
         public byte[][] OutputBuffers { get; }
+
+        /// <summary>The number of ticks (100s of nanoseconds) since 1601-01-01 until the context expires.</summary>
         public UInt64 Expiry { get; }
+
+        /// <summary>The attributes used to describe the functionality available on the context.</summary>
         public InitiatorContextReturnFlags Flags { get; }
+
+        /// <summary>Whether more data is needed from the acceptor to complete the context.</summary>
         public bool MoreNeeded { get; }
 
         public SspiSecContext(SafeSspiContextHandle context, byte[][] outputBuffers, UInt64 expiry,
@@ -178,6 +181,16 @@ namespace PSOpenAD.Native
             SecPkgAttribute ulAttribute,
             IntPtr pBuffer);
 
+        /// <summary>Acquire SSPI credential.</summary>
+        /// <param name="principal">The name of the principal whose credentials the handle will reference.</param>
+        /// <param name="package">The name of the SSPI security provide the credentials will be used for.</param>
+        /// <param name="usage">How the credentials will be used.</param>
+        /// <param name="identity">
+        /// The credential logon information or <c>null</c> to use the current user's credentials.
+        /// </param>
+        /// <returns>Credential information including the handle to the credential itself.</returns>
+        /// <exception href="Win32Exception">Error when retrieving the credential.</exception>
+        /// <see cref="https://docs.microsoft.com/en-us/windows/win32/secauthn/acquirecredentialshandle--general">AcquireCredentialsHandle</see>
         public static SspiCredential AcquireCredentialsHandle(string? principal, string package, CredentialUse usage,
             WinNTAuthIdentity? identity)
         {
@@ -220,6 +233,16 @@ namespace PSOpenAD.Native
             }
         }
 
+        /// <summary>Decrypts the input message.</summary>
+        /// <remarks>
+        /// The message is decrypted in place, use the input message buffers to retrieve the decrypted value.
+        /// </remarks>
+        /// <param name="context">The SSPI security context to decrypt the message.</param>
+        /// <param name="message">The security buffers to decrypt.</param>
+        /// <param name="seqNo">The expected sequence number of the encrypted message.</param>
+        /// <returns>The quality of protection that had applied to the encrypted message.</returns>
+        /// <exception cref="Win32Exception">Failure trying to decrypt the message.</exception>
+        /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/decryptmessage--general">DecryptMessage</see>
         public static UInt32 DecryptMessage(SafeSspiContextHandle context, Span<Helpers.SecBuffer> message, UInt32 seqNo)
         {
             unsafe
@@ -242,6 +265,16 @@ namespace PSOpenAD.Native
             }
         }
 
+        /// <summary>Encrypts the input message.</summary>
+        /// <remarks>
+        /// The message is encrypted in place, use the input message buffers to retrieve the encrypted value.
+        /// </remarks>
+        /// <param name="context">The SSPI security context to encrypt the message.</param>
+        /// <param name="qop">The quality of protection to apply to the message.</param>
+        /// <param name="message">The security buffers to encrypt.</param>
+        /// <param name="seqNo">The sequence number to apply to the encrypted message.</param>
+        /// <exception cref="Win32Exception">Failure trying to entry the message.</exception>
+        /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/encryptmessage--general">EncryptMessage</see>
         public static void EncryptMessage(SafeSspiContextHandle context, UInt32 qop, Span<Helpers.SecBuffer> message,
             UInt32 seqNo)
         {
@@ -263,6 +296,20 @@ namespace PSOpenAD.Native
             }
         }
 
+        /// <summary>Initiates a security context or processes a new token on an existing context.</summary>
+        /// <param name="cred">The credential to use for the security context.</param>
+        /// <param name="context">
+        /// The context handle for the operation. The first call should be set to <c>null</c> while subsequent calls
+        /// use the context returned from the first call.
+        /// </param>
+        /// <param name="targetName">The target name of the acceptor, for Kerberos this is the SPN.</param>
+        /// <param name="contextReq">Request flags to set.</param>
+        /// <param name="dataRep">The data representation on the target.</param>
+        /// <param name="input">Optional token received from the acceptor or null for the first call.</param>
+        /// <param name="outputBufferTypes">List of types expected in the output buffer that is returned.</param>
+        /// <returns>Context information including the handle to the context itself.</returns>
+        /// <exception cref="Win32Exception">Failure initiating/continuing the security context.</exception>
+        /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/initializesecuritycontext--general">InitializeSecurityContext</see>
         public static SspiSecContext InitializeSecurityContext(SafeSspiCredentialHandle cred,
             SafeSspiContextHandle? context, string targetName, InitiatorContextRequestFlags contextReq,
             TargetDataRep dataRep, ReadOnlySpan<Helpers.SecBuffer> input, IList<SecBufferType> outputBufferTypes)
@@ -346,6 +393,13 @@ namespace PSOpenAD.Native
             }
         }
 
+        /// <summary>Query the security context for a specific value.</summary>
+        /// <remarks>The buffer supplied must be large enough to fill the requested attribute value.</remarks>
+        /// <param name="context">The security context to query.</param>
+        /// <param name="attribute">The type of value to query.</param>
+        /// <param name="buffer">The buffer that will store the queried value.</param>
+        /// <exception cref="Win32Exception">Failure trying to query the requested value.</exception>
+        /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/querycontextattributes--general">QueryContextAttributes</see>
         public static void QueryContextAttributes(SafeSspiContextHandle context, SecPkgAttribute attribute, IntPtr buffer)
         {
             int res = QueryContextAttributesNative(context, attribute, buffer);
@@ -354,10 +408,16 @@ namespace PSOpenAD.Native
         }
     }
 
+    /// <summary>User identity information used to acquire a credential handle.</summary>
     internal class WinNTAuthIdentity
     {
+        /// <summary>The username of the identity.</summary>
         public string? Username { get; }
+
+        /// <summary>The domain of the identity.</summary>
         public string? Domain { get; }
+
+        /// <summary>The password of the identity.</summary>
         public string? Password { get; }
 
         public WinNTAuthIdentity(string? username, string? domain, string? password)

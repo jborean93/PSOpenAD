@@ -61,10 +61,16 @@ namespace PSOpenAD.Native
         }
     }
 
+    /// <summary>Result of <c>AcquireCred</c> or <c>AcquireCredWithPassword</c>.</summary>
     internal class GssapiCredential
     {
+        /// <summary>The handle to the GSSAPI credential.</summary>
         public SafeGssapiCred Creds { get; }
+
+        /// <summary>The number of seconds until the credential expires.</summary>
         public UInt32 TimeToLive { get; }
+
+        /// <summary>The GSSAPI mechanisms that the credential supports.</summary>
         public List<byte[]> Mechanisms { get; }
 
         public GssapiCredential(SafeGssapiCred creds, UInt32 ttl, SafeHandle mechanisms)
@@ -102,13 +108,25 @@ namespace PSOpenAD.Native
         }
     }
 
+    /// <summary>Result of <c>InitSecContext</c>.</summary>
     internal class GssapiSecContext
     {
+        /// <summary>The handle to the GSSAPI security context.</summary>
         public SafeGssapiSecContext Context { get; }
+
+        /// <summary>The GSSAPI mech the context used.</summary>
         public byte[] MechType { get; }
+
+        /// <summary>The return buffer from the GSSAPI call.</summary>
         public byte[] OutputToken { get; }
+
+        /// <summary>The attributes used to describe the functionality available on the context.</summary>
         public GssapiContextFlags Flags { get; }
+
+        /// <summary>The number of seconds until the context expires.</summary>
         public Int32 TimeToLive { get; }
+
+        /// <summary>Whether more data is neded from the acceptor to complete the context.</summary>
         public bool MoreNeeded { get; }
 
         public GssapiSecContext(SafeGssapiSecContext context, byte[] mechType, byte[] outputToken,
@@ -287,7 +305,7 @@ namespace PSOpenAD.Native
             UInt32 size_req,
             out UInt32 max_size);
 
-        /// <summary>Acquire GSSAPI credential</summary>
+        /// <summary>Acquire GSSAPI credential.</summary>
         /// <param name="name">The principal to get the cred for, if null the default principal is used.</param>
         /// <param name="ttl">The lifetime of the credential retrieved.</param>
         /// <param name="desiredMechs">A list of mechanisms the credential should work for.</param>
@@ -440,7 +458,7 @@ namespace PSOpenAD.Native
         /// The context handle for the operation. The first call should be set to <c>null</c> while subsequence calls
         /// use the context returned from the first call.
         /// </param>
-        /// <param name="targetName">The target name of the acceptor, for Kerberos this is typically the SPN.</param>
+        /// <param name="targetName">The target name of the acceptor, for Kerberos this is the SPN.</param>
         /// <param name="mechType">The desired security mechanism OID or null for <c>GSS_C_NO_OID</c>.</param>
         /// <param name="reqFlags">Request flags to set.</param>
         /// <param name="ttl">The lifetime of the context retrieved.</param>
@@ -677,8 +695,7 @@ namespace PSOpenAD.Native
             if (MACOS_PACKED_STRUCT)
             {
                 // Need the pack 2 structure to properly set this up.
-                SafeMemoryBuffer buffer = new SafeMemoryBuffer(
-                    Marshal.SizeOf<Helpers.gss_channel_bindings_struct_macos>());
+                SafeMemoryBuffer buffer = new(Marshal.SizeOf<Helpers.gss_channel_bindings_struct_macos>());
 
                 var cb = (Helpers.gss_channel_bindings_struct_macos*)buffer.DangerousGetHandle().ToPointer();
                 cb->initiator_addrtype = bindings.InitiatorAddrType;
@@ -694,7 +711,7 @@ namespace PSOpenAD.Native
             }
             else
             {
-                SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.gss_channel_bindings_struct>());
+                SafeMemoryBuffer buffer = new(Marshal.SizeOf<Helpers.gss_channel_bindings_struct>());
 
                 var cb = (Helpers.gss_channel_bindings_struct*)buffer.DangerousGetHandle().ToPointer();
                 cb->initiator_addrtype = bindings.InitiatorAddrType;
@@ -718,7 +735,7 @@ namespace PSOpenAD.Native
             if (MACOS_PACKED_STRUCT)
             {
                 // Need the pack 2 structure to properly set this up.
-                SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.gss_OID_desc_macos>());
+                SafeMemoryBuffer buffer = new(Marshal.SizeOf<Helpers.gss_OID_desc_macos>());
                 var oidBuffer = (Helpers.gss_OID_desc_macos*)buffer.DangerousGetHandle().ToPointer();
                 oidBuffer->length = (uint)length;
                 oidBuffer->elements = (IntPtr)oid;
@@ -727,7 +744,7 @@ namespace PSOpenAD.Native
             }
             else
             {
-                SafeMemoryBuffer buffer = new SafeMemoryBuffer(Marshal.SizeOf<Helpers.gss_OID_desc>());
+                SafeMemoryBuffer buffer = new(Marshal.SizeOf<Helpers.gss_OID_desc>());
                 var oidBuffer = (Helpers.gss_OID_desc*)buffer.DangerousGetHandle().ToPointer();
                 oidBuffer->length = (uint)length;
                 oidBuffer->elements = (IntPtr)oid;
