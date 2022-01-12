@@ -85,7 +85,7 @@ namespace PSOpenAD
 
     internal class SafeKrb5ErrorMessage : SafeHandle
     {
-        internal SafeKrb5Context Context = new SafeKrb5Context();
+        internal SafeKrb5Context Context = new();
 
         internal SafeKrb5ErrorMessage() : base(IntPtr.Zero, true) { }
 
@@ -105,7 +105,7 @@ namespace PSOpenAD
 
     internal class SafeKrb5Realm : SafeHandle
     {
-        internal SafeKrb5Context Context = new SafeKrb5Context();
+        internal SafeKrb5Context Context = new();
 
         internal SafeKrb5Realm() : base(IntPtr.Zero, true) { }
 

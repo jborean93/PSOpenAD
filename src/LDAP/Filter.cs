@@ -6,10 +6,16 @@ using System.Text.RegularExpressions;
 
 namespace PSOpenAD.LDAP
 {
+    /// <summary>Exception used when failing to parse an LDAP filter.</summary>
     public class InvalidLDAPFilterException : FormatException
     {
+        /// <summary>The full LDAP filter string that failed to parse.</c>
         public string Filter { get; } = "";
+
+        /// <summary>The offset in <paramref name="Filter"/> where the fault starts.</summary>
         public int StartPosition { get; } = 0;
+
+        /// <summary>The offset in <paramref name="Filter"/> where the fault ends.</summary>
         public int EndPosition { get; } = 0;
 
         public InvalidLDAPFilterException() { }
@@ -29,13 +35,36 @@ namespace PSOpenAD.LDAP
         { }
     }
 
+    /// <summary>Base class for all LDAP filter classes that control how they are serialized.</summary>
+    /// <remarks>
+    /// The ASN.1 structure is defined as
+    ///     Filter ::= CHOICE {
+    ///             and             [0] SET SIZE (1..MAX) OF filter Filter,
+    ///             or              [1] SET SIZE (1..MAX) OF filter Filter,
+    ///             not             [2] Filter,
+    ///             equalityMatch   [3] AttributeValueAssertion,
+    ///             substrings      [4] SubstringFilter,
+    ///             greaterOrEqual  [5] AttributeValueAssertion,
+    ///             lessOrEqual     [6] AttributeValueAssertion,
+    ///             present         [7] AttributeDescription,
+    ///             approxMatch     [8] AttributeValueAssertion,
+    ///             extensibleMatch [9] MatchingRuleAssertion,
+    ///             ...  }
+    /// </remarks>
     internal abstract class LDAPFilter
     {
+        // The attribute name can either be an alpha number name (+ '-') or an OID string.
+        private const string ATTRIBUTE_PATTERN =
+            @"^((?:[a-zA-Z][a-zA-Z0-9\-]*)|(?:[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*))((?:;[a-zA-Z0-9\-]+)*)$";
+
+        /// <summary>Encode the filter to the AsnWriter provided.</summary>
+        /// <param name="writer">The ASN.1 writer to encode the filter value to.</param>
         public abstract void ToBytes(AsnWriter writer);
 
         /// <summary>Reads an LDAP filter string and creates the parsed filter object.</summary>
         /// <param name="filter">The full LDAP filter that is being processed.</param>
         /// <returns>The LDAP filter that can be used with the LDAP API.</returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
         public static LDAPFilter ParseFilter(string filter)
         {
             filter = filter.Trim();
@@ -56,6 +85,7 @@ namespace PSOpenAD.LDAP
         /// <summary>Encodes the filter value into the raw bytes it represents.</summary>
         /// <param name="value">The value to encode.</param>
         /// <returns>The raw bytes of the encoded value.</returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
         public static Memory<byte> EncodeSimpleFilterValue(string value)
         {
             return ParseFilterValue(value.AsSpan(), 0, value.Length, out var _);
@@ -74,6 +104,7 @@ namespace PSOpenAD.LDAP
         /// Outputs the number of chars that were read from the offset until the end of the current filter value.
         /// </param>
         /// <returns>The LDAP filter that can be used with the LDAP API.</returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
         private static LDAPFilter ParseFilter(ReadOnlySpan<char> filter, int offset, int length, out int read)
         {
             ReadOnlySpan<char> filterSpan = filter.Slice(offset, length);
@@ -201,6 +232,7 @@ namespace PSOpenAD.LDAP
         /// Outputs the number of chars that were read from the offset until the end of the current filter value.
         /// </param>
         /// <returns>The LDAP filter that can be used with the LDAP API.</returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
         private static LDAPFilter ParseComplexFilter(ReadOnlySpan<char> filter, int offset, int length, out int read)
         {
             ReadOnlySpan<char> filterSpan = filter.Slice(offset, length);
@@ -269,13 +301,17 @@ namespace PSOpenAD.LDAP
             }
 
             if (complexType == '!')
+            {
                 return new FilterNot(parsedFilters[0]);
-
+            }
             else if (complexType == '&')
+            {
                 return new FilterAnd(parsedFilters.ToArray());
-
+            }
             else
+            {
                 return new FilterOr(parsedFilters.ToArray());
+            }
         }
 
         /// <summary>Reads the simple LDAP filter like <c>objectClass=user</c>.</summary>
@@ -291,18 +327,11 @@ namespace PSOpenAD.LDAP
         /// Outputs the number of chars that were read from the offset until the end of the current filter value.
         /// </param>
         /// <returns>The LDAP filter that can be used with the LDAP API.</returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
         private static LDAPFilter ParseSimpleFilter(ReadOnlySpan<char> filter, int offset, int length, out int read)
         {
             ReadOnlySpan<char> filterSpan = filter.Slice(offset, length);
             read = 0;
-
-            // int closingParen = FindClosingParen(filterSpan);
-            // if (closingParen == -1)
-            // {
-            //     throw new InvalidLDAPFilterException("Failed to find closing parent for filter");
-            // }
-            // filterSpan = filterSpan[..closingParen];
-            // read = closingParen;
 
             int equalsIdx = filterSpan.IndexOf('=');
             if (equalsIdx == 0)
@@ -333,17 +362,14 @@ namespace PSOpenAD.LDAP
                     offset + length);
             }
 
-            // The attribute name can either be an alpha number name (+ '-') or an OID string. This pattern will
-            // validate this is the case.
-            const string attributePattern =
-                @"^((?:[a-zA-Z][a-zA-Z0-9\-]*)|(?:[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*))((?:;[a-zA-Z0-9\-]+)*)$";
-
             char filterType = filterSpan[equalsIdx - 1];
             if (filterType == ':')
             {
                 // LDAP extensible filter - 'foo:=...'
-                // FIXME: implement
-                throw new NotImplementedException();
+                FilterExtensibleMatch parsedFilter = ParseFilterExtensibleMatch(filter, offset, length, out var filterRead);
+                read += filterRead;
+
+                return parsedFilter;
             }
             else
             {
@@ -352,7 +378,7 @@ namespace PSOpenAD.LDAP
                     attributeEnd--;
 
                 string attribute = filterSpan[..attributeEnd].ToString();
-                if (!Regex.Match(attribute, attributePattern, RegexOptions.Compiled).Success)
+                if (!Regex.Match(attribute, ATTRIBUTE_PATTERN, RegexOptions.Compiled).Success)
                 {
                     throw new InvalidLDAPFilterException(
                         "Invalid filter attribute value",
@@ -376,13 +402,17 @@ namespace PSOpenAD.LDAP
                     read += valueRead;
 
                     if (filterType == '<')
+                    {
                         return new FilterGreaterOrEqual(attribute, rawValue);
-
+                    }
                     else if (filterType == '>')
+                    {
                         return new FilterGreaterOrEqual(attribute, rawValue);
-
+                    }
                     else
+                    {
                         return new FilterApproxMatch(attribute, rawValue);
+                    }
                 }
                 else if (value.ToString() == "*")
                 {
@@ -391,29 +421,11 @@ namespace PSOpenAD.LDAP
                 }
                 else if (value.Contains('*'))
                 {
-                    // FIXME: determine if initial or end
-                    Memory<byte>? first = null;
-                    List<Memory<byte>> rawValues = new();
-                    Memory<byte>? last = null;
+                    (var initial, var any, var final) = ParseFilterSubstringsValue(filter, valueOffset, value.Length,
+                        out var substringRead);
+                    read += substringRead;
 
-                    while (value.Length > 0)
-                    {
-                        int idx = value.IndexOf('*');
-                        int endIncrement = 1;
-                        if (idx == -1)
-                        {
-                            idx = value.Length;
-                            endIncrement = 0;
-                        }
-
-                        Memory<byte> rawValue = ParseFilterValue(filter, offset + read, idx, out var valueRead);
-                        rawValues.Add(rawValue);
-                        read += valueRead + endIncrement;
-
-                        value = value[(valueRead + endIncrement)..];
-                    }
-
-                    return new FilterSubstrings(attribute, first, rawValues.ToArray(), last);
+                    return new FilterSubstrings(attribute, initial, any.ToArray(), final);
                 }
                 else
                 {
@@ -425,7 +437,211 @@ namespace PSOpenAD.LDAP
             }
         }
 
-        private static Memory<byte> ParseFilterValue(ReadOnlySpan<char> filter, int offset, int length, out int read)
+        /// <summary>Reads the extensible LDAP filter like <c>objectClass:=user</c>.</summary>
+        /// <remarks>
+        /// This will parse the extensible LDAP filter until it reaches the end of the filter slice or up to but not
+        /// including the <c>)</c> that closes the filter. The offset should correspond to the first character in the
+        /// filter to start the processing from.
+        /// </remarks>
+        /// <param name="filter">The full LDAP filter that is being processed.</param>
+        /// <param name="offset">The offset of the extensible filter to process.</param>
+        /// <param name="length">The length of the extensible filter from the offset to process.</param>
+        /// <param name="read">
+        /// Outputs the number of chars that were read from the offset until the end of the current filter value.
+        /// </param>
+        /// <returns>The LDAP filter that can be used with the LDAP API.</returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
+        private static FilterExtensibleMatch ParseFilterExtensibleMatch(ReadOnlySpan<char> filter, int offset,
+            int length, out int read)
+        {
+            ReadOnlySpan<char> filterSpan = filter.Slice(offset, length);
+            read = 0;
+
+            int equalsIdx = filterSpan.IndexOf('=');
+            if (equalsIdx == 1)
+            {
+                // LDAP filter - ':=value'
+                throw new InvalidLDAPFilterException(
+                    "Extensible filter must define an attribute name or rule before ':='",
+                    filter.ToString(),
+                    offset,
+                    offset + equalsIdx);
+            }
+
+            ReadOnlySpan<char> header = filterSpan[..(equalsIdx + 1)];
+            ReadOnlySpan<char> value = filterSpan[(equalsIdx + 1)..];
+
+            string? attribute = null;
+            int colonIdx = header.IndexOf(':');
+            if (colonIdx != 0)
+            {
+                attribute = header[..colonIdx].ToString();
+                if (!Regex.Match(attribute, ATTRIBUTE_PATTERN, RegexOptions.Compiled).Success)
+                {
+                    throw new InvalidLDAPFilterException(
+                        "Invalid extensible filter attribute value",
+                        filter.ToString(),
+                        offset,
+                        offset + colonIdx);
+                }
+
+                header = header[(colonIdx + 1)..];
+                read += colonIdx + 1;
+
+                colonIdx = header.IndexOf(':');
+            }
+            else
+            {
+                // If not attribute was given then the first : needs to be removed before continuing the scan.
+                header = header[1..];
+                read++;
+            }
+
+            colonIdx = header.IndexOf(':');
+            bool dnAttributes = false;
+            if (colonIdx == 2 && header[..2].ToString() == "dn")
+            {
+                dnAttributes = true;
+                header = header[(colonIdx + 1)..];
+                read += colonIdx + 1;
+
+                colonIdx = header.IndexOf(':');
+            }
+
+            string? rule = null;
+            if (colonIdx != -1 && colonIdx != 0)
+            {
+                rule = header[..colonIdx].ToString();
+                header = header[(colonIdx + 1)..];
+                read += colonIdx + 1;
+
+                colonIdx = header.IndexOf(':');
+            }
+
+            if (attribute == null && rule == null)
+            {
+                // LDAP filter - ':dn:=value'
+                throw new InvalidLDAPFilterException(
+                    "Extensible filter must define the attribute, rule or both",
+                    filter.ToString(),
+                    offset,
+                    offset + equalsIdx);
+            }
+
+            if (header.Length != 1 || (header.Length == 1 && header[0] != '='))
+            {
+                // LDAP filter - ':rule:extra-data:=value'
+                throw new InvalidLDAPFilterException(
+                    "Extra data found in extensible filter key",
+                    filter.ToString(),
+                    offset + read,
+                    offset + equalsIdx);
+            }
+            read++; // The = was already read
+
+            Memory<byte> rawValue = ParseFilterValue(filter, offset + read, length - read, out var valueRead);
+            read += valueRead;
+
+            return new FilterExtensibleMatch(rule, attribute, rawValue, dnAttributes);
+        }
+
+        /// <summary>Reads the simple LDAP substrings filter value and returns each component.</summary>
+        /// <remarks>
+        /// This will parse the simple LDAP substrings filter value like <c>user*name</c> and return the initial,
+        /// middle, and end components that comprise the value. The offset should correspond to the first character in
+        /// the filter value (after the <c>=</c>) to start the processing from. The length should be the length of the
+        /// value up to but not including the end <c>)</c> or the end of the filter if not more data is left.
+        /// </remarks>
+        /// <param name="filter">The full LDAP filter that is being processed.</param>
+        /// <param name="offset">The offset of the simple filter value to process.</param>
+        /// <param name="length">The length of the simple filter value from the offset to process.</param>
+        /// <param name="read">
+        /// Outputs the number of chars that were read from the offset until the end of the current filter value.
+        /// </param>
+        /// <returns>
+        /// A tuple comprised of:
+        ///     The initial entry before the first <c>*</c> or null if the value starts with <c>*</c>.
+        ///     All values after the first and before the last <c>*</c>.
+        ///     The final entry after the last <c>*</c> or null if the value ends with <c>*</c>.
+        /// </returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
+        private static (Memory<byte>?, List<Memory<byte>>, Memory<byte>?) ParseFilterSubstringsValue(
+            ReadOnlySpan<char> filter, int offset, int length, out int read)
+        {
+            read = 0;
+
+            Memory<byte>? initial = null;
+            List<Memory<byte>> any = new();
+            Memory<byte>? final = null;
+
+            while (read < length)
+            {
+                Memory<byte> value = ParseFilterValue(filter, offset + read, length - read,
+                    out var valueRead, endWithAsterisk: true);
+                read += valueRead;
+
+                if (value.Length == 0)
+                {
+                    if (read == length)
+                    {
+                        // Ends with '*' no final value set
+                        // LDAP filter - 'attr=foo*'
+                        break;
+                    }
+                    else if (read != valueRead)
+                    {
+                        // LDAPFilter - 'attr=test**value'
+                        throw new InvalidLDAPFilterException(
+                            "Cannot have 2 consecutive '*' in substring filter",
+                            filter.ToString(),
+                            offset + read,
+                            offset + read + 1);
+                    }
+
+                    // Else starts with initial '*' no initial value set.
+                    // LDAP filter - 'attr=*foo'
+                }
+                else if (read == valueRead)
+                {
+                    // Value before first '*' - 'attr=foo*...'
+                    initial = value;
+                }
+                else if (read == length)
+                {
+                    // Value until the end - 'attr=*foo'
+                    final = value;
+                    break;
+                }
+                else
+                {
+                    // After the first '*' and before the last '*'
+                    any.Add(value);
+                }
+
+                read++; // Include the asterisk in the count
+            }
+
+            return (initial, any, final);
+        }
+
+        /// <summary>Encodes the simple LDAP filter value to the bytes required..</summary>
+        /// <remarks>
+        /// This will parse the simple LDAP filter value string to the encoded byte format required. It will correctly
+        /// encode escaped sequences like <c>\00</c> where <c>00</c> is the hex string representing the bytes for that
+        /// value. It also validates that reserved characters like NULL, <c>(</c>, or <c>*</c> are in the value without
+        /// being first escaped. The offset should correspond to the first character in the value (after the <c>=</c>)
+        /// to start the processing from.
+        /// </remarks>
+        /// <param name="filter">The LDAP filter value that is being processed.</param>
+        /// <param name="offset">The offset of the simple filter value to process.</param>
+        /// <param name="length">The length of the simple filter value from the offset to process.</param>
+        /// <param name="read">
+        /// Outputs the number of chars that were read from the offset until the end of the current filter value.
+        /// </param>
+        /// <returns>The byte array that is the value encoded for network transmission.</returns>
+        /// <exception cref="InvalidLDAPFilterException">Invalid LDAP filter provided.</exception>
+        private static Memory<byte> ParseFilterValue(ReadOnlySpan<char> filter, int offset, int length, out int read,
+            bool endWithAsterisk = false)
         {
             ReadOnlySpan<char> value = filter.Slice(offset, length);
 
@@ -471,11 +687,12 @@ namespace PSOpenAD.LDAP
                             offset + length);
                     }
                 }
-                else if (c == ')')
+                else if (c == ')' || (c == '*' && endWithAsterisk))
                 {
                     // The filter ends when ')' is encountered or no more chars are left. This is the former case and
                     // the ')' should not be included in the final count as it's part of the parent filter that
-                    // contains the value.
+                    // contains the value. If endWithAsterisk we also consider that the end of the value and is used
+                    // to note the end of a substring filter component.
                     // read--;
                     break;
                 }
@@ -498,11 +715,16 @@ namespace PSOpenAD.LDAP
         }
     }
 
+    /// <summary>Used as a base class for filter that encode an attribute and value.</summary>
     internal abstract class FilterAttributeValue : LDAPFilter
     {
+        /// <summary>The LDAP attribute this rule is for.</summary>
         public string Attribute { get; internal set; }
+
+        /// <summary>The value for the attribute to filter by.</summary>
         public Memory<byte> Value { get; internal set; }
 
+        /// <summary>The ASN.1 tag value used when encoding the filter.</summary>
         public abstract int TagValue { get; }
 
         internal FilterAttributeValue(string attribute, Memory<byte> value)
@@ -519,14 +741,20 @@ namespace PSOpenAD.LDAP
         }
     }
 
+    /// <summary>Combines two filters together using an AND condition.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7">4.5.1.7. SearchRequest.filter</see>
     internal class FilterAnd : LDAPFilter
     {
+        /// <summary>The LDAP filters to AND together.</summary>
         public LDAPFilter[] Filters { get; internal set; }
 
         public FilterAnd(LDAPFilter[] filters) => Filters = filters;
 
         public override void ToBytes(AsnWriter writer)
         {
+            // Filter ::= CHOICE {
+            //     and [0] SET SIZE (1..MAX) OF filter Filter,
+            //     ... }
             using AsnWriter.Scope _ = writer.PushSetOf(new Asn1Tag(TagClass.ContextSpecific, 0, true));
             foreach (LDAPFilter filter in Filters)
             {
@@ -535,14 +763,20 @@ namespace PSOpenAD.LDAP
         }
     }
 
+    /// <summary>Combines two filters together using an OR condition.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7">4.5.1.7. SearchRequest.filter</see>
     internal class FilterOr : LDAPFilter
     {
+        /// <summary>The LDAP filters to OR together.</summary>
         public LDAPFilter[] Filters { get; internal set; }
 
         public FilterOr(LDAPFilter[] filters) => Filters = filters;
 
         public override void ToBytes(AsnWriter writer)
         {
+            // Filter ::= CHOICE {
+            //     or [1] SET SIZE (1..MAX) OF filter Filter,
+            //     ... }
             using AsnWriter.Scope _ = writer.PushSetOf(new Asn1Tag(TagClass.ContextSpecific, 1, true));
             foreach (LDAPFilter filter in Filters)
             {
@@ -551,19 +785,27 @@ namespace PSOpenAD.LDAP
         }
     }
 
+    /// <summary>A filter that checks whether the filter applied is not true.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7">4.5.1.7. SearchRequest.filter</see>
     internal class FilterNot : LDAPFilter
     {
+        /// <summary>The filter to check whether it is not equal.</summary>
         public LDAPFilter Filter { get; internal set; }
 
         public FilterNot(LDAPFilter filter) => Filter = filter;
 
         public override void ToBytes(AsnWriter writer)
         {
+            // Filter ::= CHOICE {
+            //     not [2] Filter,
+            //     ... }
             using AsnWriter.Scope _ = writer.PushSetOf(new Asn1Tag(TagClass.ContextSpecific, 2, true));
             Filter.ToBytes(writer);
         }
     }
 
+    /// <summary>A filter used to check if the attribute is equal to the value specified.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.1">4.5.1.7.1. SearchRequest.equalityMatch</see>
     internal class FilterEquality : FilterAttributeValue
     {
         public override int TagValue => 3;
@@ -571,11 +813,20 @@ namespace PSOpenAD.LDAP
         public FilterEquality(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
+    /// <summary>A filter used to check if the attribute value matches the substrings pattern specified.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.2">4.5.1.7.2. SearchRequest.substrings</see>
     internal class FilterSubstrings : LDAPFilter
     {
+        /// <summary>The attribute to check.</summary>
         public string Attribute { get; internal set; }
+
+        /// <summary>What the value must start with or <c>null</c> for any starting value.</summary>
         public Memory<byte>? Initial { get; internal set; }
+
+        /// <summary>Any matching components in order that the value must match with.</summary>
         public Memory<byte>[] Any { get; internal set; }
+
+        /// <summary>What the value must end with or <c>null</c> for any ending value.</summary>
         public Memory<byte>? Final { get; internal set; }
 
         public FilterSubstrings(string attribute, Memory<byte>? initial, Memory<byte>[] any, Memory<byte>? final)
@@ -588,15 +839,16 @@ namespace PSOpenAD.LDAP
 
         public override void ToBytes(AsnWriter writer)
         {
-            /*
-                    SubstringFilter ::= SEQUENCE {
-            type    AttributeDescription,
-            -- initial and final can occur at most once
-            substrings    SEQUENCE SIZE (1..MAX) OF substring CHOICE {
-             initial        [0] AssertionValue,
-             any            [1] AssertionValue,
-             final          [2] AssertionValue } }
-            */
+            // Filter ::= CHOICE {
+            //     substrings [4] SubstringFilter,
+            //     ... }
+            // SubstringFilter ::= SEQUENCE {
+            //         type           AttributeDescription,
+            //         substrings     SEQUENCE SIZE (1..MAX) OF substring CHOICE {
+            //             initial [0] AssertionValue,  -- can occur at most once
+            //             any     [1] AssertionValue,
+            //             final   [2] AssertionValue } -- can occur at most once
+            //         }
             using AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 4, true));
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
 
@@ -612,6 +864,8 @@ namespace PSOpenAD.LDAP
         }
     }
 
+    /// <summary>A filter used to check if the attribute is greater than or equal to the value specified.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.3">4.5.1.7.3. SearchRequest.greaterOrEqual</see>
     internal class FilterGreaterOrEqual : FilterAttributeValue
     {
         public override int TagValue => 5;
@@ -619,6 +873,8 @@ namespace PSOpenAD.LDAP
         public FilterGreaterOrEqual(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
+    /// <summary>A filter used to check if the attribute is less than or equal to the value specified.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.4">4.5.1.7.4. SearchRequest.lessOrEqual</see>
     internal class FilterLessOrEqual : FilterAttributeValue
     {
         public override int TagValue => 6;
@@ -626,19 +882,27 @@ namespace PSOpenAD.LDAP
         public FilterLessOrEqual(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
+    /// <summary>A filter used to check if the attribute exists on the entry scanned.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.5">4.5.1.7.5. SearchRequest.present</see>
     internal class FilterPresent : LDAPFilter
     {
+        /// <summary>The attribute that must exist on the entry.</summary>
         public string Attribute { get; internal set; }
 
         public FilterPresent(string attribute) => Attribute = attribute;
 
         public override void ToBytes(AsnWriter writer)
         {
+            // Filter ::= CHOICE {
+            //     present [7] AttributeDescription,
+            //     ... }
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute),
                 new Asn1Tag(TagClass.ContextSpecific, 7, false));
         }
     }
 
+    /// <summary>A filter used to check if the attribute has an approximate match to the value specified.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.6">4.5.1.7.6. SearchRequest.approxMatch</see>
     internal class FilterApproxMatch : FilterAttributeValue
     {
         public override int TagValue => 8;
@@ -646,14 +910,26 @@ namespace PSOpenAD.LDAP
         public FilterApproxMatch(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
 
+    /// <summary>A complex filter that provides extra control over how a value is matched on an attribute.</summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.7">4.5.1.7.7. SearchRequest.extensibleMatch</see>
     internal class FilterExtensibleMatch : LDAPFilter
     {
-        public string MatchingRule { get; internal set; }
-        public string Attribute { get; internal set; }
-        public string Value { get; internal set; }
+        /// <summary>
+        /// The rule used by the server to match the attribute values with the <paramref="Value"/> specified in the
+        /// rule. This and/or <paramref="Attribute"/> must be specified.
+        /// </summary>
+        public string? MatchingRule { get; internal set; }
+
+        /// <summary>The attribute to match with, this and/or <paramref="MatchingRule"/> must be specified.</summary>
+        public string? Attribute { get; internal set; }
+
+        /// <summary>The value to compare with.</summary>
+        public Memory<byte> Value { get; internal set; }
+
+        /// <summary>Include DistinguishedName attributes in the search criteria.</summary>
         public bool DNAttributes { get; internal set; }
 
-        public FilterExtensibleMatch(string matchingRule, string attribute, string value, bool dnAttributes)
+        public FilterExtensibleMatch(string? matchingRule, string? attribute, Memory<byte> value, bool dnAttributes)
         {
             MatchingRule = matchingRule;
             Attribute = attribute;
@@ -663,7 +939,26 @@ namespace PSOpenAD.LDAP
 
         public override void ToBytes(AsnWriter writer)
         {
-            throw new NotImplementedException();
+            // Filter ::= CHOICE {
+            //     extensibleMatch [9] MatchingRuleAssertion,
+            //     ... }
+            // MatchingRuleAssertion ::= SEQUENCE {
+            //         matchingRule    [1] MatchingRuleId OPTIONAL,
+            //         type            [2] AttributeDescription OPTIONAL,
+            //         matchValue      [3] AssertionValue,
+            //         dnAttributes    [4] BOOLEAN DEFAULT FALSE }
+            using AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 9, true));
+
+            if (MatchingRule != null)
+                writer.WriteOctetString(Encoding.UTF8.GetBytes(MatchingRule), new Asn1Tag(TagClass.ContextSpecific, 1, false));
+
+            if (Attribute != null)
+                writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute), new Asn1Tag(TagClass.ContextSpecific, 2, false));
+
+            writer.WriteOctetString(Value.Span, new Asn1Tag(TagClass.ContextSpecific, 3, false));
+
+            if (DNAttributes)
+                writer.WriteBoolean(DNAttributes, new Asn1Tag(TagClass.ContextSpecific, 4, false));
         }
     }
 }

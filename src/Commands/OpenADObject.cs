@@ -19,6 +19,8 @@ namespace PSOpenAD.Commands
 
         internal abstract (string, bool)[] DefaultProperties { get; }
 
+        internal abstract LDAPFilter FilteredClass { get; }
+
         internal abstract OpenADObject CreateADObject(Dictionary<string, object?> attributes);
 
         #region Connection Parameters
@@ -139,6 +141,7 @@ namespace PSOpenAD.Commands
                 }
 
                 List<LDAPControl>? serverControls = null;
+                // FIXME: implement this
                 // if (_includeDeleted)
                 // {
                 //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DELETED_OID, null, false));
@@ -172,8 +175,9 @@ namespace PSOpenAD.Commands
                 }
 
                 string searchBase = SearchBase ?? Session.DefaultNamingContext;
+                LDAPFilter finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
                 int searchId = Session.Ldap.SearchRequest(searchBase, SearchScope, DereferencingPolicy.Never, 0, 0,
-                    false, _ldapFilter, requestedProperties.ToArray(), serverControls?.ToArray());
+                    false, finalFilter, requestedProperties.ToArray(), serverControls?.ToArray());
 
                 while (true)
                 {
@@ -246,9 +250,10 @@ namespace PSOpenAD.Commands
 
         internal override (string, bool)[] DefaultProperties => OpenADObject.DEFAULT_PROPERTIES;
 
-        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADObject(attributes);
-    }
+        internal override LDAPFilter FilteredClass => new FilterPresent("objectClass");
 
+        internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new(attributes);
+    }
 
     [Cmdlet(
         VerbsCommon.Get, "OpenADComputer",
@@ -274,6 +279,9 @@ namespace PSOpenAD.Commands
         public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
 
         internal override (string, bool)[] DefaultProperties => OpenADComputer.DEFAULT_PROPERTIES;
+
+        internal override LDAPFilter FilteredClass
+            => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("computer"));
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADComputer(attributes);
     }
@@ -303,6 +311,9 @@ namespace PSOpenAD.Commands
 
         internal override (string, bool)[] DefaultProperties => OpenADUser.DEFAULT_PROPERTIES;
 
+        internal override LDAPFilter FilteredClass
+            => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("person"));
+
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADUser(attributes);
     }
 
@@ -330,6 +341,9 @@ namespace PSOpenAD.Commands
         public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
 
         internal override (string, bool)[] DefaultProperties => OpenADGroup.DEFAULT_PROPERTIES;
+
+        internal override LDAPFilter FilteredClass
+            => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("group"));
 
         internal override OpenADObject CreateADObject(Dictionary<string, object?> attributes) => new OpenADGroup(attributes);
     }
