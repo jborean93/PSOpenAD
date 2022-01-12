@@ -38,12 +38,12 @@ namespace PSOpenAD.LDAP
 
         public void Close()
         {
-            if (State != SessionState.Binding && State != SessionState.Opened)
-                throw new InvalidOperationException("Cannot close LDAP session unless it is already opened");
-
-            State = SessionState.Closed;
-            _outgoing.Writer.Complete();
-            _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
+            if (State != SessionState.Closed)
+            {
+                State = SessionState.Closed;
+                _outgoing.Writer.Complete();
+                _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
+            }
         }
 
         public int Bind(string dn, string password, LDAPControl[]? controls = null)

@@ -1,0 +1,113 @@
+name: Test PSOpenAD
+on:
+  push:
+    branches:
+    - main
+
+  pull_request:
+    branches:
+    - main
+
+  release:
+    types:
+    - published
+
+  schedule:
+  - cron: 0 9 * * *
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  POWERSHELL_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  BUILD_CONFIGURATION: ${{ fromJSON('["Debug", "Release"]')[startsWith(github.ref, 'refs/tags/v')] }}
+
+jobs:
+  test:
+    name: test
+    runs-on: ${{ matrix.info.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        info:
+        - name: Fedora 35
+          container: fedora:35
+          os: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Run Tests
+      shell: bash
+      run: ./tools/run-ci.sh '${{ matrix.info.container }}' "${BUILD_CONFIGURATION}"
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: Unit Test Results (${{ matrix.info.name }})
+        path: ./output/TestResults/Pester.xml
+
+    - name: Upload Coverage Results
+      if: always() && !startsWith(github.ref, 'refs/tags/v')
+      uses: actions/upload-artifact@v2
+      with:
+        name: Coverage Results (${{ matrix.info.name }})
+        path: ./output/TestResults/Coverage.xml
+
+    - name: Upload Coverage to codecov
+      if: always() && !startsWith(github.ref, 'refs/tags/v')
+      uses: codecov/codecov-action@v1
+      with:
+        files: ./output/TestResults/Coverage.xml
+        flags: ${{ matrix.info.name }}
+
+  # Would like to build for testing but it break coverage, need to reinvestigate if this gets fixed.
+  # https://github.com/coverlet-coverage/coverlet/issues/1271
+  build:
+    name: build
+    needs:
+    - test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v2
+
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v1.9.0
+      with:
+        dotnet-version: 6.0.x
+
+    - name: Build module
+      shell: pwsh
+      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
+
+    - name: Capture PowerShell Module
+      uses: actions/upload-artifact@v2
+      with:
+        name: PSModule
+        path: output/*.nupkg
+
+  publish:
+    name: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+    - build
+    runs-on: windows-latest
+    steps:
+    - name: Restore Built PowerShell Module
+      uses: actions/download-artifact@v2
+      with:
+        name: PSModule
+        path: ./
+
+    - name: Publish to Gallery
+      if: github.event_name == 'release'
+      shell: pwsh
+      run: >-
+        dotnet nuget push '*.nupkg'
+        --api-key $env:PSGALLERY_TOKEN
+        --source 'https://www.powershellgallery.com/api/v2/package'
+        --no-symbols true
+      env:
+        PSGALLERY_TOKEN: ${{ secrets.PSGALLERY_TOKEN }}

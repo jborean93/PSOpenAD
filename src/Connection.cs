@@ -118,7 +118,7 @@ namespace PSOpenAD
                 while (await WrappedSend(reader)) { }
             }
             // Ignores socket closures as they are expected if the server closed their end.
-            catch (IOException e) when (e.InnerException is SocketException) {}
+            catch (IOException e) when (e.InnerException is SocketException) { }
             catch (Exception e)
             {
                 // Unknown failure - propagate back to the task waiters.
@@ -400,7 +400,7 @@ namespace PSOpenAD
 
                 // Lock to ensure any caller to WaitForMessage will have either already created the queue or checks
                 // beforehand that the connection has failed.
-                lock(_messages)
+                lock (_messages)
                 {
                     foreach (BlockingCollection<LDAPMessage> msgQueue in _messages.Values)
                     {
@@ -423,7 +423,7 @@ namespace PSOpenAD
             // The unbind response also marks the LDAP outgoing reader as done
             if (Session.State == SessionState.Opened)
                 Session.Unbind();
-            else if (Session.State != SessionState.Closed)
+            else
                 Session.Close();
             _sendTask.GetAwaiter().GetResult();
 
