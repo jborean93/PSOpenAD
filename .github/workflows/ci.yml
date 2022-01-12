@@ -23,32 +23,8 @@ env:
   BUILD_CONFIGURATION: ${{ fromJSON('["Debug", "Release"]')[startsWith(github.ref, 'refs/tags/v')] }}
 
 jobs:
-  build:
-    name: build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check out repository
-      uses: actions/checkout@v2
-
-    - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v1.9.0
-      with:
-        dotnet-version: 6.0.x
-
-    - name: Build module
-      shell: pwsh
-      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
-
-    - name: Capture PowerShell Module
-      uses: actions/upload-artifact@v2
-      with:
-        name: PSModule
-        path: output/*.nupkg
-
   test:
     name: test
-    needs:
-    - build
     runs-on: ${{ matrix.info.os }}
     strategy:
       fail-fast: false
@@ -60,29 +36,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-
-    - name: Restore Built PowerShell Module
-      uses: actions/download-artifact@v2
-      with:
-        name: PSModule
-        path: output
-
-    - name: Extract Built PowerShell Module
-      shell: pwsh
-      run: |
-        $manifestItem = Get-Item ([IO.Path]::Combine('module', '*.psd1'))
-        $moduleName = $manifestItem.BaseName
-        $manifest = Import-PowerShellDataFile -Path $manifestItem.FullName -ErrorAction Stop
-
-        $destPath = [IO.Path]::Combine('output', $moduleName, $manifest.ModuleVersion)
-        if (-not (Test-Path -LiteralPath $destPath)) {
-            New-Item -Path $destPath -ItemType Directory | Out-Null
-        }
-
-        # WinPS doesn't support extracting from anything without a .zip extension so we need to rename it
-        Get-ChildItem output/*.nupkg | Rename-Item -NewName { $_.Name -replace '.nupkg', '.zip' }
-
-        Expand-Archive -Path output/*.zip -DestinationPath $destPath -Force -ErrorAction Stop
 
     - name: Run Tests
       shell: bash
@@ -109,12 +62,37 @@ jobs:
         files: ./output/TestResults/Coverage.xml
         flags: ${{ matrix.info.name }}
 
+  # Would like to build for testing but it break coverage, need to reinvestigate if this gets fixed.
+  # https://github.com/coverlet-coverage/coverlet/issues/1271
+  build:
+    name: build
+    needs:
+    - test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v2
+
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v1.9.0
+      with:
+        dotnet-version: 6.0.x
+
+    - name: Build module
+      shell: pwsh
+      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
+
+    - name: Capture PowerShell Module
+      uses: actions/upload-artifact@v2
+      with:
+        name: PSModule
+        path: output/*.nupkg
+
   publish:
     name: publish
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
     - build
-    - test
     runs-on: windows-latest
     steps:
     - name: Restore Built PowerShell Module

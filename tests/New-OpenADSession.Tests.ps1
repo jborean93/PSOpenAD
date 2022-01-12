@@ -4,7 +4,7 @@ BeforeAll {
 
 Describe "New-OpenADSession" {
     It "Creates a session using default credentials" {
-        $s = New-OpenADSession -ComputerName $env:PSOPENAD_DC -Verbose
+        $s = New-OpenADSession -ComputerName $env:PSOPENAD_DC
         $s | Remove-OpenADSession
     }
 }

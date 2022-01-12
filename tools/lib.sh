@@ -41,6 +41,7 @@ lib::setup::gssapi() {
 
     cat > /tmp/psopenad-krb5.conf << EOF
 [libdefaults]
+  rdns = no
   default_realm = ${AD_REALM^^}
 
 [realms]
@@ -70,6 +71,7 @@ lib::tests::run() {
     export PSOPENAD_USERNAME="Administrator@${AD_REALM^^}"
     export PSOPENAD_PASSWORD="${AD_PASSWORD}"
 
+    pwsh -File ./build.ps1 -Configuration "${BUILD_CONFIGURATION:-Debug}" -Task Build
     pwsh -File ./build.ps1 -Configuration "${BUILD_CONFIGURATION:-Debug}" -Task Test
 
     if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
