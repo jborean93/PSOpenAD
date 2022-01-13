@@ -1,4 +1,5 @@
 using PSOpenAD.LDAP;
+using System.Text;
 using Xunit;
 
 namespace PSOpenADTests;
@@ -29,7 +30,7 @@ public class LDAPFiltrPresentTests
         LDAPFilter actual = LDAPFilter.ParseFilter(filter);
 
         Assert.IsType<FilterPresent>(actual);
-        Assert.Equal(((FilterPresent)actual).Attribute, attribute);
+        Assert.Equal(attribute, ((FilterPresent)actual).Attribute);
     }
 }
 
@@ -54,7 +55,7 @@ public class LDAPFilterAttributeTests
         LDAPFilter actual = LDAPFilter.ParseFilter(filter);
 
         Assert.IsType<FilterPresent>(actual);
-        Assert.Equal(((FilterPresent)actual).Attribute, attribute);
+        Assert.Equal(attribute, ((FilterPresent)actual).Attribute);
     }
 
     [Theory]
@@ -78,9 +79,10 @@ public class LDAPFilterAttributeTests
         LDAPFilter actual = LDAPFilter.ParseFilter(filter);
 
         Assert.IsType<FilterPresent>(actual);
-        Assert.Equal(((FilterPresent)actual).Attribute, attribute);
+        Assert.Equal(attribute, ((FilterPresent)actual).Attribute);
     }
 
+    [Theory]
     [InlineData("objectClass;option1", false)]
     [InlineData("objectClass;option1", true)]
     [InlineData("objectClass;option1;option-2", false)]
@@ -105,7 +107,7 @@ public class LDAPFilterAttributeTests
         LDAPFilter actual = LDAPFilter.ParseFilter(filter);
 
         Assert.IsType<FilterPresent>(actual);
-        Assert.Equal(((FilterPresent)actual).Attribute, attribute);
+        Assert.Equal(attribute, ((FilterPresent)actual).Attribute);
     }
 
     [Theory]
@@ -118,8 +120,110 @@ public class LDAPFilterAttributeTests
     {
         var ex = Assert.Throws<InvalidLDAPFilterException>(() => LDAPFilter.ParseFilter(filter));
 
-        Assert.Equal(ex.Filter, filter);
-        Assert.Equal(ex.StartPosition, expectedStart);
-        Assert.Equal(ex.EndPosition, expectedEnd);
+        Assert.Equal("Invalid filter attribute value", ex.Message);
+        Assert.Equal(filter, ex.Filter);
+        Assert.Equal(expectedStart, ex.StartPosition);
+        Assert.Equal(expectedEnd, ex.EndPosition);
+    }
+
+    [Fact]
+    public void InvalidSimpleFilterFormat()
+    {
+        string filter = "=foo";
+
+        var ex = Assert.Throws<InvalidLDAPFilterException>(() => LDAPFilter.ParseFilter(filter));
+
+        Assert.Equal("Simple filter value must not start with '='", ex.Message);
+        Assert.Equal(filter, ex.Filter);
+        Assert.Equal(0, ex.StartPosition);
+        Assert.Equal(1, ex.EndPosition);
+    }
+
+    [Fact]
+    public void InvalidSimpleFilterNoEquals()
+    {
+        string filter = "foo";
+
+        var ex = Assert.Throws<InvalidLDAPFilterException>(() => LDAPFilter.ParseFilter(filter));
+
+        Assert.Equal("Simple filter missing '=' character", ex.Message);
+        Assert.Equal(filter, ex.Filter);
+        Assert.Equal(0, ex.StartPosition);
+        Assert.Equal(3, ex.EndPosition);
+    }
+
+    [Fact]
+    public void InvalidSimpleFilterNoValue()
+    {
+        string filter = "foo=";
+
+        var ex = Assert.Throws<InvalidLDAPFilterException>(() => LDAPFilter.ParseFilter(filter));
+
+        Assert.Equal("Simple filter value is not present after '='", ex.Message);
+        Assert.Equal(filter, ex.Filter);
+        Assert.Equal(0, ex.StartPosition);
+        Assert.Equal(4, ex.EndPosition);
+    }
+}
+
+public class LDAPFilterValueTests
+{
+    [Theory]
+    [InlineData("simple_123", "simple_123")]
+    [InlineData("café", "café")]
+    [InlineData("test with space", "test with space")]
+    [InlineData("null \\00", "null \0")]
+    [InlineData("open paren \\28", "open paren (")]
+    [InlineData("close paren \\29", "close paren )")]
+    [InlineData("asterisk \\2a", "asterisk *")]
+    [InlineData("backslash \\5C", "backslash \\")]
+    [InlineData("any escaped \\20", "any escaped  ")]
+    [InlineData("happy face \\e2\\98\\BA", "happy face ☺")]
+    public void ParseSimpleValue(string value, string expected)
+    {
+        FilterEquality filter = (FilterEquality)LDAPFilter.ParseFilter($"foo={value}");
+
+        string actual = Encoding.UTF8.GetString(filter.Value.Span);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData("foo=abc\0", 7, 8)]
+    [InlineData("foo=ab(def", 6, 7)]
+    public void UnescapedCharacter(string filter, int expectedStart, int expectedEnd)
+    {
+        var ex = Assert.Throws<InvalidLDAPFilterException>(() => LDAPFilter.ParseFilter(filter));
+
+        Assert.StartsWith("LDAP filter value contained unescaped char", ex.Message);
+        Assert.Equal(filter, ex.Filter);
+        Assert.Equal(expectedStart, ex.StartPosition);
+        Assert.Equal(expectedEnd, ex.EndPosition);
+    }
+
+    [Theory]
+    [InlineData("foo=abc\\ax", 8, 10)]
+    [InlineData("foo=\\z3 testing", 5, 7)]
+    public void InvalidHexEscape(string filter, int expectedStart, int expectedEnd)
+    {
+        var ex = Assert.Throws<InvalidLDAPFilterException>(() => LDAPFilter.ParseFilter(filter));
+
+        Assert.StartsWith("Invalid hex characters following \\ '", ex.Message);
+        Assert.Equal(filter, ex.Filter);
+        Assert.Equal(expectedStart, ex.StartPosition);
+        Assert.Equal(expectedEnd, ex.EndPosition);
+    }
+
+    [Theory]
+    [InlineData("foo=test\\a", 8, 10)]
+    [InlineData("foo=testing \\", 12, 13)]
+    public void NotEnoughHexEscapeChars(string filter, int expectedStart, int expectedEnd)
+    {
+        var ex = Assert.Throws<InvalidLDAPFilterException>(() => LDAPFilter.ParseFilter(filter));
+
+        Assert.StartsWith("Not enough escape characters following \\", ex.Message);
+        Assert.Equal(filter, ex.Filter);
+        Assert.Equal(expectedStart, ex.StartPosition);
+        Assert.Equal(expectedEnd, ex.EndPosition);
     }
 }
