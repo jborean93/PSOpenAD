@@ -13,6 +13,15 @@
         "tools/dotnet": true,
     },
 
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "/test.settings.json"
+            ],
+            "url": "./tests/settings.schema.json"
+        }
+    ],
+
     //-------- PowerShell configuration --------
     // Binary modules cannot be unloaded so running in separate processes solves that problem
     //"powershell.debugging.createTemporaryIntegratedConsole": true,

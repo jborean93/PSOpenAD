@@ -67,9 +67,28 @@ lib::tests::run() {
         echo "::group::Running Tests"
     fi
 
-    export PSOPENAD_DC="dc.${AD_REALM,,}"
-    export PSOPENAD_USERNAME="Administrator@${AD_REALM^^}"
-    export PSOPENAD_PASSWORD="${AD_PASSWORD}"
+    pwsh -NoProfile -NoLogo -Command - << EOF
+\$ErrorActionPreference = 'Stop'
+
+ConvertTo-Json -InputObject ([Ordered]@{
+    server = 'dc.${AD_REALM,,}'
+    credentials = @(
+        [Ordered]@{
+            username = 'Administrators@${AD_REALM^^}'
+            password = '${AD_PASSWORD}'
+            cached = \$true
+        }
+    )
+    tls = [Ordered]@{
+        trusted = \$true
+    }
+    features = [Ordered]@{
+        negotiate_auth = \$true
+    }
+}) | Out-File ./test.settings.json
+
+exit
+EOF
 
     pwsh -File ./build.ps1 -Configuration "${BUILD_CONFIGURATION:-Debug}" -Task Build
     pwsh -File ./build.ps1 -Configuration "${BUILD_CONFIGURATION:-Debug}" -Task Test

@@ -1,0 +1,158 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "http://example.com/example.json",
+    "type": "object",
+    "title": "PSOpenAD Test Settings Schema",
+    "description": "The schema used for PSOpenAD's test settings.",
+    "default": {},
+    "examples": [
+        {
+            "server": "dc.psopenad.test",
+            "credentials": [
+                {
+                    "username": "Administrator@dc.psopenad.test",
+                    "password": "Password01",
+                    "cached": true
+                }
+            ],
+            "tls": {
+                "trusted": true
+            },
+            "features": {
+                "negotiate_auth": true
+            }
+        }
+    ],
+    "required": [
+        "server",
+        "credentials",
+        "features"
+    ],
+    "properties": {
+        "server": {
+            "$id": "#/properties/server",
+            "type": "string",
+            "title": "PSOpenAD Test Server",
+            "description": "The Active Directory/LDAP server to test against.",
+            "examples": [
+                "dc.psopenad.test"
+            ]
+        },
+        "credentials": {
+            "$id": "#/properties/credentials",
+            "type": "array",
+            "title": "Credentials used for Authentication",
+            "description": "A list of credentials that can be used for authentication against the server",
+            "default": [],
+            "examples": [],
+            "additionalItems": true,
+            "items": {
+                "$id": "#/properties/credentials/items",
+                "anyOf": [
+                    {
+                        "$id": "#/properties/credentials/items/anyOf/0",
+                        "type": "object",
+                        "title": "Credential",
+                        "description": "Credential that can be used for authentication.",
+                        "default": {},
+                        "examples": [
+                            {
+                                "username": "Administrator@dc.psopenad.test",
+                                "password": "Password01",
+                                "cached": true
+                            }
+                        ],
+                        "required": [
+                            "username",
+                            "password"
+                        ],
+                        "properties": {
+                            "username": {
+                                "$id": "#/properties/credentials/items/anyOf/0/properties/username",
+                                "type": "string",
+                                "title": "Credential Username",
+                                "description": "Username of this credential.",
+                                "examples": [
+                                    "Administrator@dc.psopenad.test"
+                                ]
+                            },
+                            "password": {
+                                "$id": "#/properties/credentials/items/anyOf/0/properties/password",
+                                "type": "string",
+                                "title": "Credential Password",
+                                "description": "Password of this credential.",
+                                "examples": [
+                                    "Password01"
+                                ]
+                            },
+                            "cached": {
+                                "$id": "#/properties/credentials/items/anyOf/0/properties/cached",
+                                "type": "boolean",
+                                "title": "Credential Cached Status",
+                                "description": "Whether the credential is available as a cached credential.",
+                                "default": false,
+                                "examples": [
+                                    true,
+                                    false
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        "tls": {
+            "$id": "#/properties/tls",
+            "type": "object",
+            "title": "TLS Settings",
+            "description": "Describes the TLS settings of the test server.",
+            "default": {},
+            "examples": [
+                {
+                    "trusted": true
+                }
+            ],
+            "required": [
+                "trusted"
+            ],
+            "properties": {
+                "trusted": {
+                    "$id": "#/properties/tls/properties/trusted",
+                    "type": "boolean",
+                    "title": "Trust Status",
+                    "description": "Whether the LDAP TLS endpoint is trusted by default.",
+                    "default": false,
+                    "examples": [
+                        true,
+                        false
+                    ]
+                }
+            }
+        },
+        "features": {
+            "$id": "#/properties/features",
+            "type": "object",
+            "title": "Optional Features",
+            "description": "Optional features that are supported by the server.",
+            "default": {},
+            "examples": [
+                {
+                    "negotiate_auth": true
+                }
+            ],
+            "properties": {
+                "negotiate_auth": {
+                    "$id": "#/properties/features/properties/negotiate_auth",
+                    "type": "boolean",
+                    "title": "Negotiate Auth Support",
+                    "description": "Whether the server supports negotiate authentication or just SIMPLE binds.",
+                    "default": false,
+                    "examples": [
+                        true,
+                        false
+                    ]
+                }
+            }
+        }
+    }
+}
