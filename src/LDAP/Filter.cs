@@ -55,9 +55,21 @@ namespace PSOpenAD.LDAP
     /// </remarks>
     internal abstract class LDAPFilter
     {
-        // The attribute name can either be an alpha number name (+ '-') or an OID string.
+        // The attribute name can either be an alpha number name (+ '-') or an OID string with optional options.
         private const string ATTRIBUTE_PATTERN =
-            @"^((?:[a-zA-Z][a-zA-Z0-9\-]*)|(?:[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*))((?:;[a-zA-Z0-9\-]+)*)$";
+            @"^(?:
+  (?: # Alphanumeric with hyphen (must start with alpha)
+    [a-zA-Z][a-zA-Z0-9\-]*
+  )
+  | # or
+  (?: # OID
+    (?:(?:[0-9])|(?:[1-9][0-9]*)) # number without leading 0 (except 0 itself)
+    (?:\.(?:(?:[0-9])|(?:[1-9][0-9]*)))* # repeat but with . as separator
+  )
+)
+# Optional attr options start with ; and are alphanumeric + -
+(?:;[a-zA-Z0-9\-]+)*
+$";
 
         /// <summary>Encode the filter to the AsnWriter provided.</summary>
         /// <param name="writer">The ASN.1 writer to encode the filter value to.</param>
@@ -380,7 +392,11 @@ namespace PSOpenAD.LDAP
                     attributeEnd--;
 
                 string attribute = filterSpan[..attributeEnd].ToString();
-                if (!Regex.Match(attribute, ATTRIBUTE_PATTERN, RegexOptions.Compiled).Success)
+                if (!Regex.Match(
+                    attribute,
+                    ATTRIBUTE_PATTERN,
+                    RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace
+                ).Success)
                 {
                     throw new InvalidLDAPFilterException(
                         "Invalid filter attribute value",
@@ -478,7 +494,11 @@ namespace PSOpenAD.LDAP
             if (colonIdx != 0)
             {
                 attribute = header[..colonIdx].ToString();
-                if (!Regex.Match(attribute, ATTRIBUTE_PATTERN, RegexOptions.Compiled).Success)
+                if (!Regex.Match(
+                    attribute,
+                    ATTRIBUTE_PATTERN,
+                    RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace
+                ).Success)
                 {
                     throw new InvalidLDAPFilterException(
                         "Invalid extensible filter attribute value",
