@@ -29,6 +29,7 @@ lib::setup::system_requirements::el() {
         --disablerepo=\*modul\* \
         krb5-libs \
         krb5-workstation \
+        dotnet-runtime-3.0 \
         dotnet-sdk-6.0 \
         powershell
 
