@@ -120,6 +120,50 @@ task Analyze {
     }
 }
 
+task DoUnitTest {
+    $resultsPath = [IO.Path]::Combine($BuildPath, 'TestResults')
+    if (-not (Test-Path -LiteralPath $resultsPath)) {
+        New-Item $resultsPath -ItemType Directory -ErrorAction Stop | Out-Null
+    }
+
+    # dotnet test places the results in a subfolder of the results-directory. This subfolder is based on a random guid
+    # so a temp folder is used to ensure we only get the current runs results
+    $tempResultsPath = [IO.Path]::Combine($resultsPath, "TempUnit")
+    if (Test-Path -LiteralPath $tempResultsPath) {
+        Remove-Item -LiteralPath $tempResultsPath -Force -Recurse
+    }
+    New-Item -Path $tempResultsPath -ItemType Directory | Out-Null
+
+    try {
+        $runSettingsPrefix = 'DataCollectionRunSettings.DataCollectors.DataCollector.Configuration'
+        $arguments = @(
+            'test'
+            '"{0}"' -f ([IO.Path]::Combine($PSScriptRoot, 'tests', 'units'))
+            '--results-directory', $tempResultsPath
+            if ($Configuration -eq 'Debug') {
+                '--collect:"XPlat Code Coverage"'
+                '--'
+                "$runSettingsPrefix.Format=json"
+                "$runSettingsPrefix.IncludeDirectory=`"$CSharpPath`""
+            }
+        )
+
+        Write-Host "Running unit tests"
+        dotnet @arguments
+
+        if ($LASTEXITCODE) {
+            throw "Unit tests failed"
+        }
+
+        if ($Configuration -eq 'Debug') {
+            Move-Item -Path $tempResultsPath/*/*.json -Destination $resultsPath/UnitCoverage.json -Force
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $tempResultsPath -Force -Recurse
+    }
+}
+
 task DoTest {
     $resultsPath = [IO.Path]::Combine($BuildPath, 'TestResults')
     if (-not (Test-Path $resultsPath)) {
@@ -146,13 +190,17 @@ task DoTest {
 
     if ($Configuration -eq 'Debug') {
         # We use coverlet to collect code coverage of our binary
+        $unitCoveragePath = [IO.Path]::Combine($resultsPath, 'UnitCoverage.json')
+
         $arguments = @(
             '"{0}"' -f ([IO.Path]::Combine($ReleasePath, 'bin', $PSFramework))
             '--target', $pwsh
             '--targetargs', (($arguments -join " ") -replace '"', '\"')
             '--output', ([IO.Path]::Combine($resultsPath, 'Coverage.xml'))
             '--format', 'cobertura'
-            '--verbosity', 'detailed'
+            if (Test-Path -LiteralPath $unitCoveragePath) {
+                '--merge-with', $unitCoveragePath
+            }
         )
         $pwsh = 'coverlet'
     }
@@ -166,6 +214,6 @@ task DoTest {
 task Build -Jobs Clean, BuildManaged, CopyToRelease, BuildDocs, Package
 
 # FIXME: Work out why we need the obj and bin folder for coverage to work
-task Test -Jobs BuildManaged, Analyze, DoTest
+task Test -Jobs BuildManaged, Analyze, DoUnitTest, DoTest
 
 task . Build
