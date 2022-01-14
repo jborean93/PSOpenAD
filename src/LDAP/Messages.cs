@@ -187,7 +187,8 @@ namespace PSOpenAD.LDAP
                     return resp;
 
                 default:
-                    throw new NotImplementedException(protocolOpTag.TagValue.ToString());
+                    throw new NotImplementedException(
+                        $"Received unknown LDAP response with tag {protocolOpTag.TagValue}");
             }
         }
     }
@@ -261,7 +262,7 @@ namespace PSOpenAD.LDAP
             writer.WriteInteger(Version);
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Name));
 
-            Asn1Tag tag = new Asn1Tag(TagClass.ContextSpecific, 0, false);
+            Asn1Tag tag = new(TagClass.ContextSpecific, 0, false);
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Password), tag);
         }
     }
@@ -291,7 +292,7 @@ namespace PSOpenAD.LDAP
             writer.WriteInteger(Version);
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Name));
 
-            Asn1Tag tag = new Asn1Tag(TagClass.ContextSpecific, 3, false);
+            Asn1Tag tag = new(TagClass.ContextSpecific, 3, false);
             using AsnWriter.Scope _2 = writer.PushSequence(tag);
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Mechanism));
 
@@ -506,7 +507,7 @@ namespace PSOpenAD.LDAP
             AsnDecoder.ReadSequence(data, ruleSet, out var attributeOffset, out var attributeLength, out consumed);
             bytesConsumed += consumed;
 
-            List<PartialAttribute> attributes = new List<PartialAttribute>();
+            List<PartialAttribute> attributes = new();
             ReadOnlySpan<byte> attributeSpan = data.Slice(attributeOffset, attributeLength);
             while (attributeSpan.Length > 0)
             {
@@ -580,7 +581,7 @@ namespace PSOpenAD.LDAP
         {
             bytesConsumed = 0;
 
-            List<string> uris = new List<string>();
+            List<string> uris = new();
             while (data.Length > 0)
             {
                 byte[] rawUri = AsnDecoder.ReadOctetString(data, ruleSet, out var consumed);
@@ -882,7 +883,7 @@ namespace PSOpenAD.LDAP
             AsnDecoder.ReadSetOf(data, ruleSet, out var valuesOffset, out var valuesLength, out consumed);
             bytesConsumed += consumed;
 
-            List<byte[]> values = new List<byte[]>();
+            List<byte[]> values = new();
             ReadOnlySpan<byte> valueSpan = data.Slice(valuesOffset, valuesLength);
             while (valueSpan.Length > 0)
             {

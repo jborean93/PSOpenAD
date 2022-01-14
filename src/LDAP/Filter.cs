@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Formats.Asn1;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -90,7 +91,7 @@ $";
                     "Extra data found at filter end",
                     filter,
                     read,
-                    filter.Length - read);
+                    filter.Length);
             }
 
             return filterObj;
@@ -103,6 +104,40 @@ $";
         public static Memory<byte> EncodeSimpleFilterValue(string value)
         {
             return ParseFilterValue(value.AsSpan(), 0, value.Length, out var _);
+        }
+
+        /// <summary>Serializes the LDAP filter value to a string usable in an LDAP filter.</summary>
+        /// <remarks>
+        /// This is a very naive method of serializing the value, only pure ASCII chars will be preserved, everything
+        /// else will be escaped to ensure portability.
+        /// </remarks>
+        /// <param name="data">The raw filter value to serialize as a string.</param>
+        /// <returns>The serialize LDAP filter string.</returns>
+        internal static string SerializeFilterValue(ReadOnlySpan<byte> data)
+        {
+            StringBuilder builder = new(data.Length);
+            for (int i = 0; i < data.Length; i++)
+            {
+                byte b = data[i];
+
+                // Any ASCII characters preserve as a string, otherwise escape. This excludes the ASCII chars 'NULL',
+                // '(', ')', '*', and '\' as they need to be escaped.
+                if (
+                    (b >= 0x20 && b < 0x28) ||
+                    (b >= 0x2b && b < 0x5c) ||
+                    (b >= 0x5d && b < 0x7f)
+                )
+                {
+                    builder.Append((char)b);
+                }
+                else
+                {
+                    builder.Append("\\");
+                    builder.Append(BitConverter.ToString(new[] { b }).ToLowerInvariant());
+                }
+            }
+
+            return builder.ToString();
         }
 
         /// <summary>Reads an LDAP filter string and creates the parsed filter objects.</summary>
@@ -153,15 +188,7 @@ $";
                     // LDAP filter inside parens - '(objectClass=*)' or '(&(test)(value))'. Determine whether it is a
                     // simple value or conditional value and parse accordingly. First make sure there isn't a double
                     // filter like '((objectClass=*))' or that it didn't just parse one '(!(foo=*)!(bar=*))'.
-                    if (parsedFilter != null)
-                    {
-                        throw new InvalidLDAPFilterException(
-                            "Expected ')' to close current filter group",
-                            filter.ToString(),
-                            offset + read,
-                            offset + read + 1);
-                    }
-                    else if (c == '(')
+                    if (c == '(')
                     {
                         throw new InvalidLDAPFilterException(
                             "Nested '(' without filter condition",
@@ -191,15 +218,6 @@ $";
                 else if (c == '(')
                 {
                     parensStart = read;
-                }
-                else if (parsedFilter != null)
-                {
-                    // LDAP filter - (!(foo=bar)objectClass=*)
-                    throw new InvalidLDAPFilterException(
-                        "Expected ')' to close current filter group",
-                        filter.ToString(),
-                        offset + read,
-                        offset + read + 1);
                 }
                 else
                 {
@@ -290,8 +308,8 @@ $";
                     throw new InvalidLDAPFilterException(
                         "Expecting ')' to end complex filter expression",
                         filter.ToString(),
-                        offset,
-                        offset + 1);
+                        offset + read,
+                        offset + read + 1);
                 }
                 else
                 {
@@ -299,8 +317,8 @@ $";
                     throw new InvalidLDAPFilterException(
                         "Expecting '(' to start after qualifier in complex filter expression",
                         filter.ToString(),
-                        offset,
-                        offset + 1);
+                        offset + read,
+                        offset + read + 1);
                 }
             }
 
@@ -421,7 +439,7 @@ $";
 
                     if (filterType == '<')
                     {
-                        return new FilterGreaterOrEqual(attribute, rawValue);
+                        return new FilterLessOrEqual(attribute, rawValue);
                     }
                     else if (filterType == '>')
                     {
@@ -480,7 +498,7 @@ $";
             {
                 // LDAP filter - ':=value'
                 throw new InvalidLDAPFilterException(
-                    "Extensible filter must define an attribute name or rule before ':='",
+                    "Extensible filter must define an attribute and/or rule before ':='",
                     filter.ToString(),
                     offset,
                     offset + equalsIdx);
@@ -534,6 +552,19 @@ $";
             if (colonIdx != -1 && colonIdx != 0)
             {
                 rule = header[..colonIdx].ToString();
+                if (!Regex.Match(
+                    rule,
+                    ATTRIBUTE_PATTERN,
+                    RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace
+                ).Success)
+                {
+                    throw new InvalidLDAPFilterException(
+                        "Invalid extensible filter rule value",
+                        filter.ToString(),
+                        offset + read,
+                        offset + read + colonIdx);
+                }
+
                 header = header[(colonIdx + 1)..];
                 read += colonIdx + 1;
 
@@ -544,7 +575,7 @@ $";
             {
                 // LDAP filter - ':dn:=value'
                 throw new InvalidLDAPFilterException(
-                    "Extensible filter must define the attribute, rule or both",
+                    "Extensible filter must define the attribute, rule, or both",
                     filter.ToString(),
                     offset,
                     offset + equalsIdx);
@@ -604,13 +635,7 @@ $";
 
                 if (value.Length == 0)
                 {
-                    if (read == length)
-                    {
-                        // Ends with '*' no final value set
-                        // LDAP filter - 'attr=foo*'
-                        break;
-                    }
-                    else if (read != valueRead)
+                    if (read != valueRead)
                     {
                         // LDAPFilter - 'attr=test**value'
                         throw new InvalidLDAPFilterException(
@@ -729,7 +754,7 @@ $";
                 }
                 else
                 {
-                    count += Encoding.UTF8.GetBytes(value.Slice(read, 1), encodedSpan[read..]);
+                    count += Encoding.UTF8.GetBytes(value.Slice(read, 1), encodedSpan[count..]);
                 }
             }
 
@@ -747,7 +772,9 @@ $";
         public Memory<byte> Value { get; internal set; }
 
         /// <summary>The ASN.1 tag value used when encoding the filter.</summary>
-        public abstract int TagValue { get; }
+        internal abstract int TagValue { get; }
+
+        internal abstract string EqualitySymbol { get; }
 
         internal FilterAttributeValue(string attribute, Memory<byte> value)
         {
@@ -760,6 +787,11 @@ $";
             using AsnWriter.Scope _ = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, TagValue, true));
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute));
             writer.WriteOctetString(Value.Span);
+        }
+
+        public override string ToString()
+        {
+            return $"({Attribute}{EqualitySymbol}{SerializeFilterValue(Value.Span)})";
         }
     }
 
@@ -783,6 +815,12 @@ $";
                 filter.ToBytes(writer);
             }
         }
+
+        public override string ToString()
+        {
+            string subValues = string.Concat(Filters.Select(v => v.ToString()));
+            return $"(&{subValues})";
+        }
     }
 
     /// <summary>Combines two filters together using an OR condition.</summary>
@@ -805,6 +843,12 @@ $";
                 filter.ToBytes(writer);
             }
         }
+
+        public override string ToString()
+        {
+            string subValues = string.Concat(Filters.Select(v => v.ToString()));
+            return $"(|{subValues})";
+        }
     }
 
     /// <summary>A filter that checks whether the filter applied is not true.</summary>
@@ -824,13 +868,20 @@ $";
             using AsnWriter.Scope _ = writer.PushSetOf(new Asn1Tag(TagClass.ContextSpecific, 2, true));
             Filter.ToBytes(writer);
         }
+
+        public override string ToString()
+        {
+            return $"(!{Filter})";
+        }
     }
 
     /// <summary>A filter used to check if the attribute is equal to the value specified.</summary>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.1">4.5.1.7.1. SearchRequest.equalityMatch</see>
     internal class FilterEquality : FilterAttributeValue
     {
-        public override int TagValue => 3;
+        internal override int TagValue => 3;
+
+        internal override string EqualitySymbol => "=";
 
         public FilterEquality(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
@@ -884,13 +935,25 @@ $";
             if (Final != null)
                 writer.WriteOctetString(((Memory<byte>)Final).Span, new Asn1Tag(TagClass.ContextSpecific, 2, false));
         }
+
+        public override string ToString()
+        {
+            List<string> values = Any.Select(v => SerializeFilterValue(v.Span)).ToList();
+            values.Insert(0, SerializeFilterValue((Initial ?? Array.Empty<byte>()).Span));
+            values.Insert(values.Count, SerializeFilterValue((Final ?? Array.Empty<byte>()).Span));
+            string strValue = string.Join("*", values);
+
+            return $"({Attribute}={strValue})";
+        }
     }
 
     /// <summary>A filter used to check if the attribute is greater than or equal to the value specified.</summary>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.3">4.5.1.7.3. SearchRequest.greaterOrEqual</see>
     internal class FilterGreaterOrEqual : FilterAttributeValue
     {
-        public override int TagValue => 5;
+        internal override int TagValue => 5;
+
+        internal override string EqualitySymbol => ">=";
 
         public FilterGreaterOrEqual(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
@@ -899,7 +962,9 @@ $";
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.4">4.5.1.7.4. SearchRequest.lessOrEqual</see>
     internal class FilterLessOrEqual : FilterAttributeValue
     {
-        public override int TagValue => 6;
+        internal override int TagValue => 6;
+
+        internal override string EqualitySymbol => "<=";
 
         public FilterLessOrEqual(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
@@ -921,13 +986,20 @@ $";
             writer.WriteOctetString(Encoding.UTF8.GetBytes(Attribute),
                 new Asn1Tag(TagClass.ContextSpecific, 7, false));
         }
+
+        public override string ToString()
+        {
+            return $"({Attribute}=*)";
+        }
     }
 
     /// <summary>A filter used to check if the attribute has an approximate match to the value specified.</summary>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7.6">4.5.1.7.6. SearchRequest.approxMatch</see>
     internal class FilterApproxMatch : FilterAttributeValue
     {
-        public override int TagValue => 8;
+        internal override int TagValue => 8;
+
+        internal override string EqualitySymbol => "~=";
 
         public FilterApproxMatch(string attribute, Memory<byte> value) : base(attribute, value) { }
     }
@@ -981,6 +1053,15 @@ $";
 
             if (DNAttributes)
                 writer.WriteBoolean(DNAttributes, new Asn1Tag(TagClass.ContextSpecific, 4, false));
+        }
+
+        public override string ToString()
+        {
+            string attribute = Attribute ?? "";
+            string dn = DNAttributes ? ":dn" : "";
+            string rule = MatchingRule == null ? "" : $":{MatchingRule}";
+
+            return $"({attribute}{dn}{rule}:={SerializeFilterValue(Value.Span)})";
         }
     }
 }
