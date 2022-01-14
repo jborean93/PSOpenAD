@@ -21,6 +21,7 @@ namespace PSOpenAD
         private readonly ManualResetEventSlim _tlsReplaceEvent = new(true);
         private readonly TcpClient _connection;
         private readonly int _waitTimeout;
+        private bool _closed;
         private Stream _ioStream;
         private CancellationTokenSource _recvCancel = new();
         private Exception? _taskFailure;
@@ -30,7 +31,7 @@ namespace PSOpenAD
 
         public bool Sign { get; set; }
         public bool Encrypt { get; set; }
-        public bool IsClosed => _taskFailure != null || !_connection.Connected;
+        public bool IsClosed => _taskFailure != null || _closed;
 
         public OpenADConnection(TcpClient connection, Stream stream, LDAPSession session, int waitTimeout)
         {
@@ -433,6 +434,8 @@ namespace PSOpenAD
             _ioStream.Dispose();
             _connection.Dispose();
             SecurityContext?.Dispose();
+
+            _closed = true;
 
             GC.SuppressFinalize(this);
         }

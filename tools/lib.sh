@@ -74,7 +74,7 @@ ConvertTo-Json -InputObject ([Ordered]@{
     server = 'dc.${AD_REALM,,}'
     credentials = @(
         [Ordered]@{
-            username = 'Administrators@${AD_REALM^^}'
+            username = 'Administrator@${AD_REALM^^}'
             password = '${AD_PASSWORD}'
             cached = \$true
         }

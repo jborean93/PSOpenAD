@@ -10,6 +10,44 @@ namespace PSOpenADTests;
 public class LDAPFilterGenericTests
 {
     [Fact]
+    public void InvalidLDAPFilterExceptionDefault()
+    {
+        var ex = new InvalidLDAPFilterException();
+
+        Assert.Equal("One of the identified items was in an invalid format.", ex.Message);
+        Assert.True(ex.InnerException == null);
+        Assert.Equal("", ex.Filter);
+        Assert.Equal(0, ex.StartPosition);
+        Assert.Equal(0, ex.EndPosition);
+    }
+
+    [Fact]
+    public void InvalidLDAPFilterExceptionMessage()
+    {
+        var ex = new InvalidLDAPFilterException("message");
+
+        Assert.Equal("message", ex.Message);
+        Assert.True(ex.InnerException == null);
+        Assert.Equal("", ex.Filter);
+        Assert.Equal(0, ex.StartPosition);
+        Assert.Equal(0, ex.EndPosition);
+    }
+
+    [Fact]
+    public void InvalidLDAPFilterExceptionInnerException()
+    {
+        var ex = new InvalidLDAPFilterException("message", new Exception("inner"));
+
+        Assert.Equal("message", ex.Message);
+        Assert.True(ex.InnerException != null);
+        Assert.IsType<Exception>(ex.InnerException);
+        Assert.Equal("inner", ex.InnerException?.Message);
+        Assert.Equal("", ex.Filter);
+        Assert.Equal(0, ex.StartPosition);
+        Assert.Equal(0, ex.EndPosition);
+    }
+
+    [Fact]
     public void InvalidFilterExtraData()
     {
         const string filter = "(objectClass=*)foo=bar";
@@ -484,7 +522,7 @@ public class LDAPFilterSubstringsTests
 
         string? actualFinal = null;
         if (filterSubstrings.Final != null)
-            actualFinal =  Encoding.UTF8.GetString(filterSubstrings.Final?.ToArray() ?? Array.Empty<byte>());
+            actualFinal = Encoding.UTF8.GetString(filterSubstrings.Final?.ToArray() ?? Array.Empty<byte>());
 
         Assert.Equal(attribute, filterSubstrings.Attribute);
         Assert.Equal(initial, actualInitial);
