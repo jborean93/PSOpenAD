@@ -14,7 +14,7 @@ Creates an object that contains advanced options for an `OpenAD` session.
 
 ```
 New-OpenADSessionOption [-NoEncryption] [-NoSigning] [-NoChannelBinding] [-SkipCertificateCheck]
- [<CommonParameters>]
+ [-ConnectTimeout <Int32>] [-OperationTimeout <Int32>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -52,9 +52,24 @@ Encryption and signing is used by auth mechanisms, like `Negotiate` and `Kerbero
 
 ## PARAMETERS
 
+### -ConnectTimeout
+The timeout in milliseconds that the client will wait to connect to the target host.
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -NoChannelBinding
 Stops the LDAP client from adding channel binding data to the authentication bind operation.
-This is mostly used for debugging or disabling this operation on older OpenLDAP clients that may fail outright to gather this data.
+This is mostly used for debugging or disabling this operation on older LDAP hosts that may fail to authenticate a client with this data.
 It is recommended to not use this option unless you know what you are doing.
 
 ```yaml
@@ -70,11 +85,13 @@ Accept wildcard characters: False
 ```
 
 ### -NoEncryption
-Disables GSSAPI encryption used when exchanging data between the client and LDAP server.
+Disables SASL encryption used when exchanging data between the client and LDAP server over a non-TLS connection.
 Encryption is used by the `Negotiate` and `Kerberos` mechanisms when communicating over LDAP without `StartTLS`.
 Set this option to disable the encryption done by the client, beware this means any data exchanged over the network will be in plaintext.
-This does nothing for the Anonymous or Simple authentication mechanisms and also does not affect the TLS encryption done with `StartTLS` or an LDAPS connection.
-The `Negotiate` mechanism must also set `-NoSigning` to disable encryption as the underlying SASL code can only disable both and not one of them.
+For either `Anonymous` or `Simple` this option has no affect as they do not have any encryption capabilities.
+For `Kerberos` this option will disable encryption but the data will still be signed for integrity checks.
+For `Negotiate` on Windows this will be the same as `Kerberos` but for `NTLM` this will do nothing as `NTLM` does not offer signature only wrappings.
+For `Negotiate` on non-Windows` this will do nothing as it cannot be disabled without also disabling signatures.
 
 ```yaml
 Type: SwitchParameter
@@ -89,13 +106,31 @@ Accept wildcard characters: False
 ```
 
 ### -NoSigning
-Disables GSSAPI signatures used when exchanging data between the client and LDAP server.
+Disables SASL signatures used when exchanging data between the client and LDAP server.
 These signatures ensure the data is not tampered with when it travelled across the network.
-Set this option with `-NoEncryption` to disable both encryption and signing on an LDAP connection without `StartTLS`.
-This does nothing for the Anonymous or Simple authentication mechanisms and also does not affect the TLS encryption done with `StartTLS` or an LDAPS connection.
+This option must be set with `-NoEncryption` as encrypiton needs to be disabled for signatures to be disabled on an LDAP connection without `StartTLS`.
+This cannot be set when using `-StartTLS` or an `LDAPS` connection.
+
+For either `Anonymous` or `Simple` this option has no affect as they do not have any signing capabilities.
+For other auth methods this will disable any signatures and with encryption also disabled the messages are exchanged in plaintext.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OperationTimeout
+The time, in milliseconds to wait until an individual request like a search request to take before timing out.
+
+```yaml
+Type: Int32
 Parameter Sets: (All)
 Aliases:
 

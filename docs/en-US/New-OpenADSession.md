@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-OpenADSession
 
 ## SYNOPSIS
-Creates an authenticated connection to an LDAP/AD host.
+Creates an authenticated connection to an AD/LDAP host.
 
 ## SYNTAX
 
@@ -31,7 +31,7 @@ When creating an `OpenAD` session, PowerShell will:
 
 + Open a connection to the endpoint configured
 
-+ Optionally perform the `StartTLS` bind if `-StartTLS` is specified.
++ Perform the `StartTLS` extended operation if `-StartTLS` is specified.
 
 + Bind/authenticate the client with the method specified
 
@@ -107,13 +107,14 @@ The `Anonymous` and `Simple` auth types are always available as the functionalit
 When using `Simple` you should always use LDAPS or specify `-StartTLS` to encrypt the data.
 Failure to do so will expose both the username and password in plaintext on the network.
 
+The `Negotiate` authentication type will attempt to use `Kerberos` but potentially fallback to `NTLM` if it's available (Windows only).
+On non-Windows platforms `Negotiate` is essentially `Kerberos` but requires less requests to the server to complete the authentication phase.
+
 The `Kerberos` and `Negotiate` options both rely on a few factors before they are ready to use:
 
-+ A SASL provider is installed and OpenLDAP is configured to use it
++ Windows and macOS will always include support for both but may not be able to use `Kerberos` is the client cannot communicate with a domain
 
-+ The GSSAPI libraries are installed so the module can get and manage the credentials used
-
-+ The version of OpenLDAP and the SASL implementation is new enough to support GSSAPI authentication
++ Linux requires a GSSAPI library to be installed and configured for both `Negotiate` and `Kerberos` to work
 
 Use `Get-OpenADAuthSupport` to get more information around authentication.
 
@@ -148,6 +149,10 @@ Accept wildcard characters: False
 ### -Credential
 The username and password to authenticate with.
 This is only required when using `-AuthType Simple` other mechanisms can still use explicit credentials but can also rely on system wide caches, like `kinit`.
+
+If using `Negotiate` or `Kerberos` on non-Windows with an explicit credential the username should be in the `UPN` form `username@DOMAIN.COM`.
+The neglogon form `DOMAIN\username` will typically only work for Windows.
+A credential with a blank password (`[SecureString]::new()`) will attempt to lookup the username specified in the credential cache of the host and use that if present or fail if not present.
 
 ```yaml
 Type: PSCredential
@@ -195,7 +200,7 @@ Accept wildcard characters: False
 
 ### -StartTLS
 Use `StartTLS` over a standard LDAP connection.
-This is used to encrypt data sent over an LDAP connection.
+This is used to encrypt data sent over an LDAP connection before any subsequent traffic, like authentication details.
 Either `StartTLS` or an LDAPS connection should be used when `-AuthType Simple` to ensure the data exchanged is encrypted and the server's identity is verified.
 
 ```yaml
@@ -271,5 +276,7 @@ The connected AD session that can be used as an explicit connection on the vario
 + `IsClosed`: Whether the session is closed or not.
 
 ## NOTES
+Once the connection has been successfully made the connection is placed in a cache and reused for any subsequent requests to the same URI.
+This will be removed from the cache when it is closed with `Remove-OpenADSession`.
 
 ## RELATED LINKS

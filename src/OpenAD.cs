@@ -275,6 +275,163 @@ namespace PSOpenAD
         NamingContextBeingRemoved = 0x00000020,
     }
 
+    // https://docs.microsoft.com/en-us/windows/win32/api/ntsecapi/ns-ntsecapi-domain_password_information
+    [Flags]
+    public enum PasswordProperties
+    {
+        /// <summary>
+        /// The password must have a mix of at least two of the following types of characters:
+        ///     * Uppercase characters
+        ///     * Lowercase characters
+        ///     * Numerals
+        ///
+        /// DOMAIN_PASSWORD_COMPLEX
+        /// </summary>
+        Complex = 0x00000001,
+
+        /// <summary>
+        /// The password cannot be changed without logging on. Otherwise, if your password has expired, you can change
+        /// your password and then log on.
+        ///
+        /// DOMAIN_PASSWORD_NO_ANON_CHANGE
+        /// </summary>
+        NoAnonymousChange = 0x00000002,
+
+        /// <summary>
+        /// Forces the client to use a protocol that does not allow the domain controller to get the plaintext
+        /// password.
+        ///
+        /// DOMAIN_PASSWORD_NO_CLEAR_CHANGE
+        /// </summary>
+        NoClearChange = 0x00000004,
+
+        /// <summary>
+        /// Allows the built-in administrator account to be locked out from network logons.
+        ///
+        /// DOMAIN_LOCKOUT_ADMINS
+        /// </summary>
+        LockoutAdmins = 0x00000008,
+
+        /// <summary>
+        /// The directory service is storing a plaintext password for all users instead of a hash function of the
+        /// password.
+        ///
+        /// DOMAIN_PASSWORD_STORE_CLEARTEXT
+        /// </summary>
+        StoreCleartext = 0x00000010,
+
+        /// <summary>
+        /// Removes the requirement that the machine account password be automatically changed every week. This value
+        /// should not be used as it can weaken security.
+        ///
+        /// DOMAIN_REFUSE_PASSWORD_CHANGE
+        /// </summary>
+        RefusePasswordChange = 0x00000020,
+    }
+
+    public enum SAMAccountType
+    {
+        DomainObject = 0x0000000,
+        GroupObject = 0x10000000,
+        NonSecurityGroupObject = 0x10000001,
+        AliasObject = 0x20000000,
+        NonSecurityAliasObject = 0x20000001,
+        UserObject = 0x30000000,
+        MachineObject = 0x30000001,
+        TrustAccount = 0x30000002,
+        AppBasicGroup = 0x40000000,
+        AppQueryGroup = 0x40000001,
+    }
+
+    // https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/1e38247d-8234-4273-9de3-bbf313548631
+    [Flags]
+    public enum SystemFlags : uint
+    {
+        None = 0x00000000,
+
+        /// <summary>
+        /// When used on an attributeSchema object, it specifies that this attribute is not replicated. If it is used
+        /// on a crossRef object, it specifies that the NC that the crossRef is for is an Active Directory NC.
+        /// FLAG_ATTR_NOT_REPLICATED - FLAG_CR_NTDS_NC
+        /// </summary>
+        NotReplicated = 0x00000001,
+
+        /// <summary>
+        /// When used on an attributeSchema object, it specifies that the attribute is a member of a partial attribute
+        /// set (PAS). If used on a crossRef object, it specifies that the NC is a domain NC.
+        /// FLAG_ATTR_REQ_PARTIAL_SET_MEMBER - FLAG_CR_NTDS_DOMAIN
+        /// </summary>
+        PartialAttributeSet = 0x00000002,
+
+        /// <summary>
+        /// When used on an attributeSchema object, this flag specifies that the attribute is a constructed attribute.
+        /// If used on a crossRef object, it specifies that the NC is not to be replicated to GCs.
+        /// FLAG_ATTR_IS_CONSTRUCTED - FLAG_CR_NTDS_NOT_GC_REPLICATED
+        /// </summary>
+        AttributeIsConstructed = 0x00000004,
+
+        /// <summary>
+        /// Only used on an attributeSchema object. It specifies that the attribute is an operational attribute.
+        /// FLAG_ATTR_IS_OPERATIONAL
+        /// </summary>
+        AttributeIsOperational = 0x00000008,
+
+        /// <summary>
+        /// Only used on attributeSchema and classSchema objects. It specifies that this attribute or class is part of
+        /// the base schema. Modifications to base schema objects are specially restricted.
+        /// FLAG_SCHEMA_BASE_OBJECT
+        /// </summary>
+        SchemaBaseObject = 0x00000010,
+
+        /// <summary>
+        /// Only used on an attributeSchema object. It specifies that this attribute can be used as an RDN attribute.
+        /// FLAG_ATTR_IS_RDN
+        /// </summary>
+        AttributeIsRDN = 0x00000020,
+
+        /// <summary>
+        /// Specifies that the object does not move to the Deleted Objects container when the object is deleted.
+        /// FLAG_DISALLOW_MOVE_ON_DELETE
+        /// </summary>
+        DisallowMoveOnDelete = 0x02000000,
+
+        /// <summary>
+        /// Specifies that if the object is in a domain NC, the object cannot be moved.
+        /// FLAG_DOMAIN_DISALLOW_MOVE
+        /// </summary>
+        DomainDisallowMove = 0x04000000,
+
+        /// <summary>
+        /// Specifies that if the object is in a domain NC, the object cannot be renamed.
+        /// FLAG_DOMAIN_DISALLOW_RENAME
+        /// </summary>
+        DomainDisallowRename = 0x08000000,
+
+        /// <summary>
+        /// Specifies that if the object is in the config NC, the object can be moved, with restrictions.
+        /// FLAG_CONFIG_ALLOW_LIMITED_MOVE
+        /// </summary>
+        ConfigAllowLimitedMove = 0x10000000,
+
+        /// <summary>
+        /// Specifies that if the object is in the config NC, the object can be moved.
+        /// FLAG_CONFIG_ALLOW_MOVE
+        /// </summary>
+        ConfigAllowMove = 0x20000000,
+
+        /// <summary>
+        /// Specifies that if the object is in the config NC, the object can be renamed.
+        /// FLAG_CONFIG_ALLOW_RENAME
+        /// </summary>
+        ConfigAllowRename = 0x40000000,
+
+        /// <summary>
+        /// Specifies that the object cannot be deleted.
+        /// FLAG_DISALLOW_DELETE
+        /// </summary>
+        DisallowDelete = 0x80000000,
+    }
+
     [Flags]
     public enum UserAccountControl : uint
     {
@@ -301,19 +458,5 @@ namespace PSOpenAD
         PasswordExpired = 0x00800000,
         TrustedToAuthenticateForDelegation = 0x01000000,
         PartialSecretsAccount = 0x04000000,
-    }
-
-    public enum SAMAccountType
-    {
-        DomainObject = 0x0000000,
-        GroupObject = 0x10000000,
-        NonSecurityGroupObject = 0x10000001,
-        AliasObject = 0x20000000,
-        NonSecurityAliasObject = 0x20000001,
-        UserObject = 0x30000000,
-        MachineObject = 0x30000001,
-        TrustAccount = 0x30000002,
-        AppBasicGroup = 0x40000000,
-        AppQueryGroup = 0x40000001,
     }
 }

@@ -26,8 +26,11 @@ Gets one or more Active Directory objects.
 ### [Get-OpenADUser](Get-OpenADUser.md)
 Gets one or more Active Directory users.
 
+### [Get-OpenADWhoami](Get-OpenADWhoami.md)
+Performs an LDAP Whoami extended operation on the target server.
+
 ### [New-OpenADSession](New-OpenADSession.md)
-Creates an authenticated connection to an LDAP/AD host.
+Creates an authenticated connection to an AD/LDAP host.
 
 ### [New-OpenADSessionOption](New-OpenADSessionOption.md)
 Creates an object that contains advanced options for an `OpenAD` session.

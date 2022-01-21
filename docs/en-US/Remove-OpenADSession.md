@@ -58,5 +58,6 @@ The session(s) to disconnect.
 
 ### None
 ## NOTES
+Once the session has been closed it will be removed from the pool and cannot be used for any future operations.
 
 ## RELATED LINKS
