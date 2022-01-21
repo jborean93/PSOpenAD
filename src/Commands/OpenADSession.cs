@@ -1,7 +1,7 @@
 using PSOpenAD.LDAP;
-using PSOpenAD.Native;
 using System;
 using System.Management.Automation;
+using System.Security.Authentication;
 using System.Threading;
 
 namespace PSOpenAD.Commands
@@ -78,9 +78,9 @@ namespace PSOpenAD.Commands
                 {
                     WriteError(new ErrorRecord(e, "LDAPError", ErrorCategory.ProtocolError, null));
                 }
-                catch (GSSAPIException e)
+                catch (AuthenticationException e)
                 {
-                    WriteError(new ErrorRecord(e, "GSSAPIError", ErrorCategory.ProtocolError, null));
+                    WriteError(new ErrorRecord(e, "AuthError", ErrorCategory.AuthenticationError, null));
                 }
                 catch (ArgumentException e)
                 {

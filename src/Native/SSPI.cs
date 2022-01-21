@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
 using System.Text;
 
 namespace PSOpenAD.Native
@@ -189,7 +190,7 @@ namespace PSOpenAD.Native
         /// The credential logon information or <c>null</c> to use the current user's credentials.
         /// </param>
         /// <returns>Credential information including the handle to the credential itself.</returns>
-        /// <exception href="Win32Exception">Error when retrieving the credential.</exception>
+        /// <exception href="SspiException">Error when retrieving the credential.</exception>
         /// <see cref="https://docs.microsoft.com/en-us/windows/win32/secauthn/acquirecredentialshandle--general">AcquireCredentialsHandle</see>
         public static SspiCredential AcquireCredentialsHandle(string? principal, string package, CredentialUse usage,
             WinNTAuthIdentity? identity)
@@ -225,7 +226,7 @@ namespace PSOpenAD.Native
                         IntPtr.Zero, cred, out var expiryStruct);
 
                     if (res != 0)
-                        throw new Win32Exception(res);
+                        throw new SspiException(res, "AcquireCredentialsHandle");
 
                     UInt64 expiry = (UInt64)expiryStruct.HighPart << 32 | (UInt64)expiryStruct.LowPart;
                     return new SspiCredential(cred, expiry);
@@ -241,7 +242,7 @@ namespace PSOpenAD.Native
         /// <param name="message">The security buffers to decrypt.</param>
         /// <param name="seqNo">The expected sequence number of the encrypted message.</param>
         /// <returns>The quality of protection that had applied to the encrypted message.</returns>
-        /// <exception cref="Win32Exception">Failure trying to decrypt the message.</exception>
+        /// <exception cref="SspiException">Failure trying to decrypt the message.</exception>
         /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/decryptmessage--general">DecryptMessage</see>
         public static UInt32 DecryptMessage(SafeSspiContextHandle context, Span<Helpers.SecBuffer> message, UInt32 seqNo)
         {
@@ -258,7 +259,7 @@ namespace PSOpenAD.Native
 
                     int res = DecryptMessageNative(context, ref bufferDesc, seqNo, out var qop);
                     if (res != 0)
-                        throw new Win32Exception(res);
+                        throw new SspiException(res, "DecryptMessage");
 
                     return qop;
                 }
@@ -273,7 +274,7 @@ namespace PSOpenAD.Native
         /// <param name="qop">The quality of protection to apply to the message.</param>
         /// <param name="message">The security buffers to encrypt.</param>
         /// <param name="seqNo">The sequence number to apply to the encrypted message.</param>
-        /// <exception cref="Win32Exception">Failure trying to entry the message.</exception>
+        /// <exception cref="SspiException">Failure trying to entry the message.</exception>
         /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/encryptmessage--general">EncryptMessage</see>
         public static void EncryptMessage(SafeSspiContextHandle context, UInt32 qop, Span<Helpers.SecBuffer> message,
             UInt32 seqNo)
@@ -291,7 +292,7 @@ namespace PSOpenAD.Native
 
                     int res = EncryptMessageNative(context, qop, ref bufferDesc, seqNo);
                     if (res != 0)
-                        throw new Win32Exception(res);
+                        throw new SspiException(res, "EncryptMessage");
                 }
             }
         }
@@ -308,7 +309,7 @@ namespace PSOpenAD.Native
         /// <param name="input">Optional token received from the acceptor or null for the first call.</param>
         /// <param name="outputBufferTypes">List of types expected in the output buffer that is returned.</param>
         /// <returns>Context information including the handle to the context itself.</returns>
-        /// <exception cref="Win32Exception">Failure initiating/continuing the security context.</exception>
+        /// <exception cref="SspiException">Failure initiating/continuing the security context.</exception>
         /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/initializesecuritycontext--general">InitializeSecurityContext</see>
         public static SspiSecContext InitializeSecurityContext(SafeSspiCredentialHandle cred,
             SafeSspiContextHandle? context, string targetName, InitiatorContextRequestFlags contextReq,
@@ -361,7 +362,7 @@ namespace PSOpenAD.Native
                         inputPtr, 0, outputContext, outputPtr, out var contextattr, out var expiryStruct);
 
                     if (res != 0 && res != SEC_I_CONTINUE_NEEDED)
-                        throw new Win32Exception(res);
+                        throw new SspiException(res, "InitializeSecurityContext");
 
                     try
                     {
@@ -398,13 +399,40 @@ namespace PSOpenAD.Native
         /// <param name="context">The security context to query.</param>
         /// <param name="attribute">The type of value to query.</param>
         /// <param name="buffer">The buffer that will store the queried value.</param>
-        /// <exception cref="Win32Exception">Failure trying to query the requested value.</exception>
+        /// <exception cref="SspiException">Failure trying to query the requested value.</exception>
         /// <see href="https://docs.microsoft.com/en-us/windows/win32/secauthn/querycontextattributes--general">QueryContextAttributes</see>
         public static void QueryContextAttributes(SafeSspiContextHandle context, SecPkgAttribute attribute, IntPtr buffer)
         {
             int res = QueryContextAttributesNative(context, attribute, buffer);
             if (res != 0)
-                throw new Win32Exception(res);
+                throw new SspiException(res, "QueryContextAttributesNative");
+        }
+    }
+
+    public class SspiException : AuthenticationException
+    {
+        public int ErrorCode { get; } = -1;
+
+        public SspiException() { }
+
+        public SspiException(string message) : base(message) { }
+
+        public SspiException(string message, Exception innerException) :
+            base(message, innerException)
+        { }
+
+        public SspiException(int errorCode, string method)
+            : base(GetExceptionMessage(errorCode, method))
+        {
+            ErrorCode = errorCode;
+        }
+
+        private static string GetExceptionMessage(int errorCode, string? method)
+        {
+            method = String.IsNullOrWhiteSpace(method) ? "SSPI Call" : method;
+            string errMsg = new Win32Exception(errorCode).Message;
+
+            return String.Format("{0} failed ({1}, Win32ErrorCode {2} - 0x{2:X8})", method, errMsg, errorCode);
         }
     }
 

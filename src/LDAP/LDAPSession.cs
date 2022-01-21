@@ -143,11 +143,17 @@ namespace PSOpenAD.LDAP
         private void PutRequest(LDAPMessage message)
         {
             AsnWriter writer = new(AsnEncodingRules.BER);
-            using (AsnWriter.Scope _ = writer.PushSequence())
+            using (AsnWriter.Scope _1 = writer.PushSequence())
             {
                 writer.WriteInteger(message.MessageId);
                 message.ToBytes(writer);
-                // TODO: controls
+
+                if (message.Controls != null)
+                {
+                    using AsnWriter.Scope _2 = writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0, false));
+                    foreach (LDAPControl control in message.Controls)
+                        control.ToBytes(writer);
+                }
             }
 
             Memory<byte> buffer = _outgoing.Writer.GetMemory(writer.GetEncodedLength());

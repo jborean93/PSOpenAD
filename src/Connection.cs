@@ -99,15 +99,19 @@ namespace PSOpenAD
             // before continuing with the replace IOStream which is the SSL context that was created.
             _tlsReplaceEvent.Reset();
             _recvCancel.Cancel();
+            try
+            {
+                SslStream tls = new(_ioStream, false);
+                tls.AuthenticateAsClientAsync(authOptions, cancelToken).GetAwaiter().GetResult();
+                _ioStream = tls;
 
-            SslStream tls = new(_ioStream, false);
-            tls.AuthenticateAsClientAsync(authOptions, cancelToken).GetAwaiter().GetResult();
-            _ioStream = tls;
-
-            _recvCancel = new CancellationTokenSource();
-            _tlsReplaceEvent.Set();
-
-            return tls;
+                return tls;
+            }
+            finally
+            {
+                _recvCancel = new CancellationTokenSource();
+                _tlsReplaceEvent.Set();
+            }
         }
 
         private async Task Send()
@@ -149,9 +153,6 @@ namespace PSOpenAD
                 if (BitConverter.IsLittleEndian)
                     Array.Reverse(lengthData);
 
-                // FIXME: Check if the below can work to save allocating a new arrya and copying.
-                // await _ioStream.WriteAsync(lengthData, 0, lengthData.Length);
-                // await _ioStream.WriteAsync(wrappedData, 0, wrappedData.Length);
                 ArrayPool<byte> shared = ArrayPool<byte>.Shared;
                 byte[] rentedArray = shared.Rent(wrappedData.Length + 4);
                 try
@@ -167,7 +168,6 @@ namespace PSOpenAD
             }
             else
             {
-                // FIXME: See if there is a better way to do this.
                 ReadOnlyMemory<byte> data = buffer.ToArray();
                 await _ioStream.WriteAsync(data);
             }
@@ -301,7 +301,6 @@ namespace PSOpenAD
                     }
                     else
                     {
-                        // FIXME: Is there a better way to do this.
                         ReadOnlyMemory<byte> data = buffer.ToArray();
                         consumed = TryReadMessage(data.Span);
                     }

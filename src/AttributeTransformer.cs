@@ -108,7 +108,7 @@ namespace PSOpenAD
                 }
             }
 
-            return attrInfo?.SingleValue == true ? processed[0] : processed.ToArray();
+            return attrInfo?.SingleValue == true ? processed[0] : processed;
         }
 
         private static object? ProcessAttributeValue(string oid, ReadOnlySpan<byte> value) => oid switch

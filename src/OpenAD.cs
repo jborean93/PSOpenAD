@@ -232,7 +232,6 @@ namespace PSOpenAD
         Rc4Hmac = 0x04,
         Aes128CtsHmacSha196 = 0x08,
         Aes256CtsHmacSha196 = 0x10,
-
     }
 
     public enum ADGroupCategory

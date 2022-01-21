@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
 using System.Text;
 
 namespace PSOpenAD.Native
@@ -785,35 +786,35 @@ namespace PSOpenAD.Native
         }
     }
 
-    public class GSSAPIException : Exception
+    public class GSSAPIException : AuthenticationException
     {
-        public int MajorStatus { get; }
+        public int MajorStatus { get; } = -1;
 
-        public int MinorStatus { get; }
+        public int MinorStatus { get; } = -1;
 
-        public string? ErrorMessage { get; }
+        public GSSAPIException() { }
 
-        internal GSSAPIException(int majorStatus, int minorStatus, string method, string? errorMessage = null)
-            : base(GetExceptionMessage(majorStatus, minorStatus, method, errorMessage))
+        public GSSAPIException(string message) : base(message) { }
+
+        public GSSAPIException(string message, Exception innerException) :
+            base(message, innerException)
+        { }
+
+        public GSSAPIException(int majorStatus, int minorStatus, string method)
+            : base(GetExceptionMessage(majorStatus, minorStatus, method))
         {
             MajorStatus = majorStatus;
             MinorStatus = minorStatus;
-            ErrorMessage = errorMessage;
         }
 
-        private static string GetExceptionMessage(int majorStatus, int minorStatus, string? method,
-            string? errorMessage)
+        private static string GetExceptionMessage(int majorStatus, int minorStatus, string? method)
         {
             method = String.IsNullOrWhiteSpace(method) ? "GSSAPI Call" : method;
             string majString = GSSAPI.DisplayStatus(majorStatus, true, null);
             string minString = GSSAPI.DisplayStatus(minorStatus, false, null);
 
-            string msg = String.Format("{0} failed (Major Status {1} - {2}) (Minor Status {3} - {4})",
+            return String.Format("{0} failed (Major Status {1} - {2}) (Minor Status {3} - {4})",
                 method, majorStatus, majString, minorStatus, minString);
-            if (!String.IsNullOrWhiteSpace(errorMessage))
-                msg += $" - {errorMessage}";
-
-            return msg;
         }
     }
 

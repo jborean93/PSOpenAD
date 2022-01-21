@@ -84,6 +84,7 @@ namespace PSOpenAD.Commands
 
         #region Common Parameters
 
+        // FIXME: Auto completion with known list
         [Parameter()]
         [Alias("Properties")]
         [ValidateNotNullOrEmpty]
@@ -141,12 +142,12 @@ namespace PSOpenAD.Commands
                 }
 
                 List<LDAPControl>? serverControls = null;
-                // FIXME: implement this
-                // if (_includeDeleted)
-                // {
-                //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DELETED_OID, null, false));
-                //     serverControls.Add(new LDAPControl(LDAPControl.LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID, null, false));
-                // }
+                if (_includeDeleted)
+                {
+                    serverControls = new();
+                    serverControls.Add(new("1.2.840.113556.1.4.417", false, null)); // LDAP_SERVER_SHOW_DELETED_OID
+                    serverControls.Add(new("1.2.840.113556.1.4.2065", false, null)); // LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID
+                }
 
                 if (ParameterSetName.StartsWith("Server"))
                 {

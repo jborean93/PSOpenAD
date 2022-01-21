@@ -847,6 +847,17 @@ namespace PSOpenAD.LDAP
 
             return new LDAPControl(controlType, criticality, value);
         }
+
+        public void ToBytes(AsnWriter writer)
+        {
+            using AsnWriter.Scope _1 = writer.PushSequence();
+            writer.WriteOctetString(Encoding.UTF8.GetBytes(ControlType));
+            writer.WriteBoolean(Criticality);
+            if (Value != null)
+            {
+                writer.WriteOctetString(Value);
+            }
+        }
     }
 
     /// <summary>LDAP Partial Attribute</summary>

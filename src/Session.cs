@@ -7,6 +7,7 @@ using System.Management.Automation;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -185,10 +186,14 @@ namespace PSOpenAD
             cmdlet?.WriteVerbose("Performing TLS handshake on connection");
             SslClientAuthenticationOptions authOptions = new()
             {
-                // FIXME: only blinding accept if session options want this.
-                RemoteCertificateValidationCallback = ValidateServerCertificate,
                 TargetHost = uri.DnsSafeHost,
             };
+            if (sessionOptions.SkipCertificateCheck)
+            {
+                authOptions.RemoteCertificateValidationCallback =
+                    ((sender, ceritificate, chain, SslPolicyErrors) => true);
+            }
+
             SslStream tls = connection.SetTlsStream(authOptions, cancelToken);
 
             ChannelBindings? cbt = null;
@@ -396,12 +401,11 @@ namespace PSOpenAD
                 inputToken = response.ServerSaslCreds;
             }
 
-            // FIXME: use proper exceptions
-            if (integrity && !context.IntegrityAvailable)
-                throw new Exception("No integrity available on context");
-
-            if (confidentiality && !context.ConfidentialityAvailable)
-                throw new Exception("No confidentiality available on context");
+            if (integrity && !context.IntegrityAvailable || confidentiality && !context.ConfidentialityAvailable)
+            {
+                throw new AuthenticationException(
+                    "Failed to negotiate encryption or signing capabilities with the server during authentication.");
+            }
 
             // The only SASL mech supported that does further work is the GSSAPI mech. This behaviour is defined in
             // RF 4752 - Section 3.1 - https://datatracker.ietf.org/doc/html/rfc4752#section-3.1
@@ -419,13 +423,18 @@ namespace PSOpenAD
 
             inputToken = response.ServerSaslCreds;
 
-            // FIXME exceptions
             if (inputToken == null)
-                throw new Exception("Expecting input token to verify security context");
+            {
+                throw new AuthenticationException(
+                    "Expecting input token to verify security context with SASL GSSAPI mech");
+            }
 
             byte[] contextInfo = context.Unwrap(inputToken);
             if (contextInfo.Length != 4)
-                throw new Exception("Expecting input to contain 4 bytes");
+            {
+                throw new AuthenticationException(
+                    "Input token for SASL GSSAPI negotiation was not the expected size");
+            }
 
             SASLSecurityFlags serverFlags = (SASLSecurityFlags)contextInfo[0];
             contextInfo[0] = 0;
@@ -434,7 +443,10 @@ namespace PSOpenAD
             uint maxServerMessageLength = BitConverter.ToUInt32(contextInfo);
 
             if (serverFlags == SASLSecurityFlags.NoSecurity && maxServerMessageLength != 0)
-                throw new Exception("Max size must be 0 with no security");
+            {
+                throw new AuthenticationException(
+                    $"Server did not response with 0 for the server message length but was {maxServerMessageLength}");
+            }
 
             // Build the client flags based on what the client requests
             SASLSecurityFlags clientFlags = SASLSecurityFlags.NoSecurity;
@@ -544,12 +556,6 @@ namespace PSOpenAD
             }
 
             return new AttributeTransformer(attrInfo);
-        }
-
-        private static bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain,
-            SslPolicyErrors sslPolicyErrors)
-        {
-            return true; // FIXME: only blindly accept if in session options.
         }
     }
 
