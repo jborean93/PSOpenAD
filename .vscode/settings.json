@@ -18,6 +18,9 @@
         }
     ],
     "dotnet-test-explorer.testProjectPath": "tests/units/*.csproj",
+    "editor.rulers": [
+        120,
+    ],
     //-------- PowerShell configuration --------
     // Binary modules cannot be unloaded so running in separate processes solves that problem
     //"powershell.debugging.createTemporaryIntegratedConsole": true,

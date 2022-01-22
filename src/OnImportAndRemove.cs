@@ -6,160 +6,159 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
-namespace PSOpenAD
+namespace PSOpenAD;
+
+internal sealed class LibraryInfo : IDisposable
 {
-    internal sealed class LibraryInfo : IDisposable
+    public string Id { get; }
+    public string Path { get; }
+    public IntPtr Handle { get; }
+
+    public LibraryInfo(string id, string path)
     {
-        public string Id { get; }
-        public string Path { get; }
-        public IntPtr Handle { get; }
-
-        public LibraryInfo(string id, string path)
-        {
-            Id = id;
-            Path = path;
-            Handle = NativeLibrary.Load(path);
-        }
-
-        public void Dispose()
-        {
-            if (Handle != IntPtr.Zero)
-                NativeLibrary.Free(Handle);
-        }
-        ~LibraryInfo() { Dispose(); }
+        Id = id;
+        Path = path;
+        Handle = NativeLibrary.Load(path);
     }
 
-    internal sealed class NativeResolver : IDisposable
+    public void Dispose()
     {
-        private readonly Dictionary<string, LibraryInfo> NativeHandles = new Dictionary<string, LibraryInfo>();
+        if (Handle != IntPtr.Zero)
+            NativeLibrary.Free(Handle);
+    }
+    ~LibraryInfo() { Dispose(); }
+}
 
-        public NativeResolver()
-        {
-            AssemblyLoadContext.Default.ResolvingUnmanagedDll += ImportResolver;
-        }
+internal sealed class NativeResolver : IDisposable
+{
+    private readonly Dictionary<string, LibraryInfo> NativeHandles = new Dictionary<string, LibraryInfo>();
 
-        public LibraryInfo? CacheLibrary(string id, string path)
-        {
-            string? envOverride = Environment.GetEnvironmentVariable(id.ToUpperInvariant().Replace(".", "_"));
-            if (!String.IsNullOrWhiteSpace(envOverride))
-                path = envOverride;
-
-            try
-            {
-                NativeHandles[id] = new LibraryInfo(id, path);
-                return NativeHandles[id];
-            }
-            catch (DllNotFoundException) {}
-
-            return null;
-        }
-
-        private IntPtr ImportResolver(Assembly assembly, string libraryName)
-        {
-            if (NativeHandles.ContainsKey(libraryName))
-                return NativeHandles[libraryName].Handle;
-
-            return IntPtr.Zero;
-        }
-
-        public void Dispose()
-        {
-            foreach (KeyValuePair<string, LibraryInfo> native in NativeHandles)
-                native.Value.Dispose();
-
-            AssemblyLoadContext.Default.ResolvingUnmanagedDll -= ImportResolver;
-            GC.SuppressFinalize(this);
-        }
-        ~NativeResolver() { Dispose(); }
+    public NativeResolver()
+    {
+        AssemblyLoadContext.Default.ResolvingUnmanagedDll += ImportResolver;
     }
 
-    public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemblyCleanup
+    public LibraryInfo? CacheLibrary(string id, string path)
     {
-        internal NativeResolver? Resolver;
+        string? envOverride = Environment.GetEnvironmentVariable(id.ToUpperInvariant().Replace(".", "_"));
+        if (!String.IsNullOrWhiteSpace(envOverride))
+            path = envOverride;
 
-        public void OnImport()
+        try
         {
-            Resolver = new NativeResolver();
+            NativeHandles[id] = new LibraryInfo(id, path);
+            return NativeHandles[id];
+        }
+        catch (DllNotFoundException) { }
 
-            // GSSAPI is needed for Negotiate or Kerberos auth while Krb5 is used on non-Windows to locate the default
-            // realm when setting up an implicit connection.
-            LibraryInfo? gssapiLib = null;
-            LibraryInfo? krb5Lib = null;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "/System/Library/Frameworks/GSS.framework/GSS");
-                krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5,
-                    "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal");
-            }
-            else if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
-                krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
-            }
+        return null;
+    }
 
-            // While channel binding isn't technically done by both these methods an Active Directory implementation
-            // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
-            // server end.true
-            GlobalState.Providers[AuthenticationMethod.Anonymous] = new(AuthenticationMethod.Anonymous, "ANONYMOUS",
-                true, false, "");
-            GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
-                false, "");
+    private IntPtr ImportResolver(Assembly assembly, string libraryName)
+    {
+        if (NativeHandles.ContainsKey(libraryName))
+            return NativeHandles[libraryName].Handle;
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
-                    true, true, "");
-                GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
-                    "GSS-SPNEGO", true, true, "");
+        return IntPtr.Zero;
+    }
 
-                // FUTURE: Add ad lookup.
-            }
-            else
-            {
-                foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
-                {
-                    { AuthenticationMethod.Kerberos, "GSSAPI" },
-                    { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
-                })
-                {
-                    bool present = false;
-                    bool canSign = false;
-                    string details = "";
+    public void Dispose()
+    {
+        foreach (KeyValuePair<string, LibraryInfo> native in NativeHandles)
+            native.Value.Dispose();
 
-                    if (gssapiLib != null)
-                    {
-                        present = canSign = true;
-                    }
-                    else
-                    {
-                        details = "GSSAPI library not found";
-                    }
+        AssemblyLoadContext.Default.ResolvingUnmanagedDll -= ImportResolver;
+        GC.SuppressFinalize(this);
+    }
+    ~NativeResolver() { Dispose(); }
+}
 
-                    GlobalState.Providers[kvp.Key] = new(kvp.Key, kvp.Value, present, canSign, details);
-                }
+public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemblyCleanup
+{
+    internal NativeResolver? Resolver;
 
-                // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
-                if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
-                {
-                    if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
-                        GlobalState.GssapiIsHeimdal = true;
+    public void OnImport()
+    {
+        Resolver = new NativeResolver();
 
-                    using SafeKrb5Context ctx = Kerberos.InitContext();
-                    try
-                    {
-                        GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
-                    }
-                    catch (KerberosException) { }
-                }
-            }
+        // GSSAPI is needed for Negotiate or Kerberos auth while Krb5 is used on non-Windows to locate the default
+        // realm when setting up an implicit connection.
+        LibraryInfo? gssapiLib = null;
+        LibraryInfo? krb5Lib = null;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "/System/Library/Frameworks/GSS.framework/GSS");
+            krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5,
+                "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal");
+        }
+        else if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
+            krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
         }
 
-        public void OnRemove(PSModuleInfo module)
-        {
-            foreach (OpenADSession session in GlobalState.ImplicitSessions.Values)
-                session.Close();
+        // While channel binding isn't technically done by both these methods an Active Directory implementation
+        // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
+        // server end.true
+        GlobalState.Providers[AuthenticationMethod.Anonymous] = new(AuthenticationMethod.Anonymous, "ANONYMOUS",
+            true, false, "");
+        GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
+            false, "");
 
-            Resolver?.Dispose();
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
+                true, true, "");
+            GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+                "GSS-SPNEGO", true, true, "");
+
+            // FUTURE: Add ad lookup.
         }
+        else
+        {
+            foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
+            {
+                { AuthenticationMethod.Kerberos, "GSSAPI" },
+                { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
+            })
+            {
+                bool present = false;
+                bool canSign = false;
+                string details = "";
+
+                if (gssapiLib != null)
+                {
+                    present = canSign = true;
+                }
+                else
+                {
+                    details = "GSSAPI library not found";
+                }
+
+                GlobalState.Providers[kvp.Key] = new(kvp.Key, kvp.Value, present, canSign, details);
+            }
+
+            // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
+            if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
+            {
+                if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
+                    GlobalState.GssapiIsHeimdal = true;
+
+                using SafeKrb5Context ctx = Kerberos.InitContext();
+                try
+                {
+                    GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
+                }
+                catch (KerberosException) { }
+            }
+        }
+    }
+
+    public void OnRemove(PSModuleInfo module)
+    {
+        foreach (OpenADSession session in GlobalState.ImplicitSessions.Values)
+            session.Close();
+
+        Resolver?.Dispose();
     }
 }
