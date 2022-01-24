@@ -521,7 +521,7 @@ internal sealed class OpenADSessionFactory
             SearchScope.Base, 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
             new string[] { "attributeTypes" }, null, cancelToken, cmdlet))
         {
-            PartialAttribute? attribute = result.Attributes.Where(a => a.Name == "attributeTypes").First();
+            PartialAttribute? attribute = result.Attributes.First(a => a.Name == "attributeTypes");
             if (attribute != null)
             {
                 foreach (byte[] value in attribute.Values)
@@ -536,13 +536,13 @@ internal sealed class OpenADSessionFactory
                         cmdlet?.WriteVerbose($"Failed to parse SYNTAX: '{rawValue}'");
                         continue;
                     }
-                    if (String.IsNullOrEmpty(attrTypes.Name))
+                    if (String.IsNullOrEmpty(attrTypes.Names[0]))
                     {
                         cmdlet?.WriteVerbose($"Failed to parse NAME: '{rawValue}'");
                         continue;
                     }
 
-                    attrInfo[attrTypes.Name] = attrTypes;
+                    attrInfo[attrTypes.Names[0]] = attrTypes;
                 }
             }
         }

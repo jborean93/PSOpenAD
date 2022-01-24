@@ -7,7 +7,7 @@ using Xunit;
 
 namespace PSOpenADTests;
 
-public class LDAPSyntaxDefinitionTests
+public class SyntaxDefinitionTests
 {
     [Fact]
     public void ReadAttributeTypeDescription()
@@ -15,9 +15,23 @@ public class LDAPSyntaxDefinitionTests
         const string raw = "( 2.5.18.1 NAME 'createTimestamp' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE NO-USER-MODIFICATION USAGE directoryOperation )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadAttributeTypeDescription(data);
+        var actual = SyntaxDefinition.ReadAttributeTypeDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("2.5.18.1", actual.OID);
+        Assert.Equal(new[] { "createTimestamp" }, actual.Names);
+        Assert.Null(actual.Description);
+        Assert.False(actual.Obsolete);
+        Assert.Null(actual.SuperType);
+        Assert.Equal("generalizedTimeMatch", actual.Equality);
+        Assert.Equal("generalizedTimeOrderingMatch", actual.Ordering);
+        Assert.Null(actual.Substrings);
+        Assert.Equal("1.3.6.1.4.1.1466.115.121.1.24", actual.Syntax);
+        Assert.Null(actual.SyntaxLength);
+        Assert.True(actual.SingleValue);
+        Assert.False(actual.Collective);
+        Assert.True(actual.NoUserModification);
+        Assert.Equal(AttributeTypeUsage.DirectoryOperation, actual.Usage);
+        Assert.Empty(actual.Extensions);
     }
 
     [Theory]
@@ -55,7 +69,7 @@ public class LDAPSyntaxDefinitionTests
     {
         byte[] data = Encoding.UTF8.GetBytes(value);
 
-        string actual = SyntaxDefinition.ReadAttributeTypeDescription(data);
+        string actual = SyntaxDefinition.ReadCountryString(data);
 
         Assert.Equal(expected, actual);
     }

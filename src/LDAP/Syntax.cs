@@ -17,7 +17,8 @@ public static class SyntaxDefinition
     /// <param name="data">The raw byte value to read</param>
     /// <returns>The parsed Attribute Type Description string in the ABNF notation.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.1">RFC 4517 3.3.1. Attribute Type Description</see>
-    public static string ReadAttributeTypeDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static AttributeTypeDescription ReadAttributeTypeDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads a Bit String.</summary>
     /// <remarks>

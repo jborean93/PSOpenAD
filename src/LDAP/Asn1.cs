@@ -1,7 +1,7 @@
 using System;
 using System.Formats.Asn1;
 
-namespace PSOpenAD;
+namespace PSOpenAD.LDAP;
 
 internal static class Asn1Helper
 {

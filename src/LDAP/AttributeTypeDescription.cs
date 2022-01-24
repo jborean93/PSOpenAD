@@ -1,105 +1,21 @@
 using System;
-using System.Text.RegularExpressions;
+using System.Collections.Generic;
 
-namespace PSOpenAD;
+namespace PSOpenAD.LDAP;
 
-internal enum AttributeTypeUsage
+public enum AttributeTypeUsage
 {
-    Unknown,
+    NotSpecified,
     UserApplications,
     DirectoryOperation,
     DistributedOperation,
     DsaOperation,
-
 }
 
-internal class AttributeTypeDescription
+public class AttributeTypeDescription
 {
-    /*
-    Regex to parse the ABNF defined at RFC 4512  4.1.2
-    https://datatracker.ietf.org/doc/html/rfc4512#section-4.1.2
-
-    AttributeTypeDescription = LPAREN WSP
-        numericoid                    ; object identifier
-        [ SP "NAME" SP qdescrs ]      ; short names (descriptors)
-        [ SP "DESC" SP qdstring ]     ; description
-        [ SP "OBSOLETE" ]             ; not active
-        [ SP "SUP" SP oid ]           ; supertype
-        [ SP "EQUALITY" SP oid ]      ; equality matching rule
-        [ SP "ORDERING" SP oid ]      ; ordering matching rule
-        [ SP "SUBSTR" SP oid ]        ; substrings matching rule
-        [ SP "SYNTAX" SP noidlen ]    ; value syntax
-        [ SP "SINGLE-VALUE" ]         ; single-value
-        [ SP "COLLECTIVE" ]           ; collective
-        [ SP "NO-USER-MODIFICATION" ] ; not user modifiable
-        [ SP "USAGE" SP usage ]       ; usage
-        extensions WSP RPAREN         ; extensions
-
-    usage = "userApplications"     /  ; user
-            "directoryOperation"   /  ; directory operational
-            "distributedOperation" /  ; DSA-shared operational
-            "dSAOperation"            ; DSA-specific operational
-
-    Active Directory seems to use oid as the SYNTAX type and is quoted using single quotes. This isn't compliant with
-    the spec but still needs to be handled.
-    */
-    private const string SCHEMA_PATTERN = @"^\(\ *
-(?<oid>[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*)
-(?:\ NAME\ (?:
-    '(?<name>[a-zA-Z][a-zA-Z0-9\-]*)'
-  |
-    \(\ *
-      (?<nameList>
-        '[a-zA-Z][a-zA-Z0-9\-]*'
-        (?:\ '[a-zA-Z][a-zA-Z0-9\-]*')*
-      )
-    \ *\)
-  )
-)?
-(?:\ DESC\ '(?<desc>[^']*)')?
-(?:\ (?<obsolete>OBSOLETE))?
-(?:\ SUP\ (?:
-    (?<supStr>[a-zA-Z][a-zA-Z0-9\-]*)
-  |
-    (?<supOid>[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*)
-  )
-)?
-(?:\ EQUALITY\ (?:
-    (?<equalityStr>[a-zA-Z][a-zA-Z0-9\-]*)
-  |
-    (?<equalityOid>[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*)
-  )
-)?
-(?:\ ORDERING\ (?:
-    (?<orderingStr>[a-zA-Z][a-zA-Z0-9\-]*)
-  |
-    (?<orderingOid>[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*)
-  )
-)?
-(?:\ SUBSTR\ (?:
-    (?<substrStr>[a-zA-Z][a-zA-Z0-9\-]*)
-  |
-    (?<substrOid>[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*)
-  )
-)?
-# The RFC does not state the syntax is quoted but it is for AD
-# I cannot find any references to this but it's needed to parse the value
-# AD also uses non OID values so handle that
-(?:\ SYNTAX\ '?(?<syntax>
-    (?:[0-2](?:(?:\.0)|(?:\.[1-9][0-9]*))*)
-  |
-    (?:[a-zA-Z][a-zA-Z0-9\-]*)
-  )(?:{(?<syntaxLen>\d+)})?
-  '?
-)?
-(?:\ (?<singleValue>SINGLE-VALUE))?
-(?:\ (?<collective>COLLECTIVE))?
-(?:\ (?<noUserModification>NO-USER-MODIFICATION))?
-(?:\ (?<usage>userApplications|directoryOperation|distributedOperation|dSAOperation))?
-.*\)$";
-
     public string OID { get; set; }
-    public string? Name { get; set; }
+    public string[] Names { get; set; } = Array.Empty<string>();
     public string? Description { get; set; }
     public bool Obsolete { get; set; }
     public string? SuperType { get; set; }
@@ -111,74 +27,305 @@ internal class AttributeTypeDescription
     public bool SingleValue { get; set; }
     public bool Collective { get; set; }
     public bool NoUserModification { get; set; }
-    public AttributeTypeUsage Usage { get; set; }
+    public AttributeTypeUsage Usage { get; set; } = AttributeTypeUsage.NotSpecified;
+
+    public Dictionary<string, string[]> Extensions { get; set; } = new();
 
     public AttributeTypeDescription(string definition)
     {
-        Match match = Regex.Match(definition, SCHEMA_PATTERN,
-            RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace);
-        if (!match.Success)
-            throw new ArgumentException("Failed to decode objectClasses definition");
-
-        OID = match.Groups["oid"].Value;
-
-        if (match.Groups["name"].Success)
+        ReadOnlySpan<char> data = definition.AsSpan();
+        if (data.Length < 2 || data[0] != '(')
         {
-            Name = match.Groups["name"].Value;
+            throw new FormatException("Invalid AttributeTypeDescription value does not start with '('");
         }
-        else if (match.Groups["nameList"].Success)
+        data = data[1..];
+
+        LdapAbnfDefinitions.TryParseWSP(data, out var _, out var read);
+        data = data[read..];
+
+        if (!LdapAbnfDefinitions.TryParseNumericOid(data, out var numericOid, out read))
         {
-            Name = match.Groups["nameList"].Value.Trim('\'').Split("' '")[0];
+            throw new FormatException("Invalid AttributeTypeDescription value has no numericoid value");
+        }
+        OID = numericOid;
+        data = data[read..];
+
+        List<(string, TryReadOptionalField)> fields = new()
+        {
+            ("NAME", TryReadNameField),
+            ("DESC", TryReadDescField),
+            ("OBSOLETE", TryReadObsoleteField),
+            ("SUP", TryReadSupField),
+            ("EQUALITY", TryReadEqualityField),
+            ("ORDERING", TryReadOrderingField),
+            ("SUBSTR", TryReadSubstrField),
+            ("SYNTAX", TryReadSyntaxField),
+            ("SINGLE-VALUE", TryReadSingleValueField),
+            ("COLLECTIVE", TryReadCollectiveField),
+            ("NO-USER-MODIFICATION", TryReadNoUserModificationField),
+            ("USAGE", TryReadUsageField),
+        };
+        foreach ((string field, TryReadOptionalField reader) in fields)
+        {
+            if (!LdapAbnfDefinitions.TryParseSP(data, out var _, out read))
+            {
+                break;
+            }
+
+            if (data[read..].StartsWith(field))
+            {
+                data = data[read..];
+
+                if (reader(data[field.Length..], out read))
+                {
+                    data = data[(field.Length + read)..];
+                }
+                else
+                {
+                    throw new FormatException($"Invalid AttributeTypeDescription {field} value is invalid");
+                }
+            }
         }
 
-        Description = match.Groups["desc"].Success ? match.Groups["desc"].Value : null;
-        Obsolete = match.Groups["obsolete"].Success;
+        LdapAbnfDefinitions.TryParseExtensions(data, out var parsedExtensions, out read);
+        if (read > 0)
+        {
+            Extensions = parsedExtensions;
+            data = data[read..];
+        }
 
-        if (match.Groups["supStr"].Success)
-            SuperType = match.Groups["supStr"].Value;
-        else if (match.Groups["supOid"].Success)
-            SuperType = match.Groups["supOid"].Value;
+        LdapAbnfDefinitions.TryParseWSP(data, out var _, out read);
+        data = data[read..];
 
-        if (match.Groups["equalityStr"].Success)
-            Equality = match.Groups["equalityStr"].Value;
-        else if (match.Groups["equalityOid"].Success)
-            Equality = match.Groups["equalityOid"].Value;
+        if (data.Length != 1 || data[0] != ')')
+        {
+            throw new FormatException("Invalid AttributeTypeDescription value does not end with ')'");
+        }
+    }
 
-        if (match.Groups["orderingStr"].Success)
-            Ordering = match.Groups["orderingStr"].Value;
-        else if (match.Groups["orderingOid"].Success)
-            Ordering = match.Groups["orderingOid"].Value;
+    private delegate bool TryReadOptionalField(ReadOnlySpan<char> data, out int charConsumed);
 
-        if (match.Groups["substrStr"].Success)
-            Substrings = match.Groups["substrStr"].Value;
-        else if (match.Groups["substrOid"].Success)
-            Substrings = match.Groups["substrOid"].Value;
+    private bool TryReadNameField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
 
-        Syntax = match.Groups["syntax"].Success ? match.Groups["syntax"].Value : null;
+        if (!LdapAbnfDefinitions.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
 
-        if (match.Groups["syntaxLen"].Success)
-            SyntaxLength = Int32.Parse(match.Groups["syntaxLen"].Value);
+        if (LdapAbnfDefinitions.TryParseQDescrs(data, out var names, out read))
+        {
+            Names = names;
+            charConsumed += read;
+            return true;
+        }
         else
-            SyntaxLength = null;
-
-        SingleValue = match.Groups["singleValue"].Success;
-        Collective = match.Groups["collective"].Success;
-        NoUserModification = match.Groups["noUserModification"].Success;
-
-        switch (match.Groups["usage"].Value)
         {
-            case "directoryOperation":
-                Usage = AttributeTypeUsage.DirectoryOperation;
-                break;
-            case "distributedOperation":
-                Usage = AttributeTypeUsage.DistributedOperation;
-                break;
-            case "dSAOperation":
-                Usage = AttributeTypeUsage.DsaOperation;
-                break;
-            default:
-                Usage = AttributeTypeUsage.UserApplications;
-                break;
+            return false;
+        }
+    }
+
+    private bool TryReadDescField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
+
+        if (!LdapAbnfDefinitions.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (LdapAbnfDefinitions.TryParseQDString(data, out var desc, out read))
+        {
+            Description = desc;
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadObsoleteField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
+        Obsolete = true;
+        return true;
+    }
+
+    private bool TryReadSupField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        if (TryReadOidField(data, out var oid, out charConsumed))
+        {
+            SuperType = oid;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadEqualityField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        if (TryReadOidField(data, out var oid, out charConsumed))
+        {
+            Equality = oid;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadOrderingField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        if (TryReadOidField(data, out var oid, out charConsumed))
+        {
+            Ordering = oid;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadSubstrField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        if (TryReadOidField(data, out var oid, out charConsumed))
+        {
+            Substrings = oid;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadSyntaxField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
+
+        if (!LdapAbnfDefinitions.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (LdapAbnfDefinitions.TryParseNOidLen(data, out var oid, out var oidLen, out read))
+        {
+            Syntax = oid;
+            if (oidLen != null)
+            {
+                SyntaxLength = int.Parse(oidLen);
+            }
+            charConsumed += read;
+            return true;
+        }
+        else if (LdapAbnfDefinitions.TryParseQDString(data, out oid, out read))
+        {
+            // While not parse of the spec for this field ActiveDirectory effectively returns a qdstring value here
+            // instead of an oid. This handles that scenario while trying the actual spec definition first.
+            Syntax = oid;
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadSingleValueField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
+        SingleValue = true;
+        return true;
+    }
+
+    private bool TryReadCollectiveField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
+        Collective = true;
+        return true;
+    }
+
+    private bool TryReadNoUserModificationField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
+        NoUserModification = true;
+        return true;
+    }
+
+    private bool TryReadUsageField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        charConsumed = 0;
+
+        if (!LdapAbnfDefinitions.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (LdapAbnfDefinitions.TryParseKeyString(data, out var usage, out read))
+        {
+            switch (usage)
+            {
+                case "userApplications":
+                    Usage = AttributeTypeUsage.UserApplications;
+                    break;
+                case "directoryOperation":
+                    Usage = AttributeTypeUsage.DirectoryOperation;
+                    break;
+                case "distributedOperation":
+                    Usage = AttributeTypeUsage.DistributedOperation;
+                    break;
+                case "dSAOperation":
+                    Usage = AttributeTypeUsage.DsaOperation;
+                    break;
+                default:
+                    return false;
+            }
+
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadOidField(ReadOnlySpan<char> data, out string oid, out int charConsumed)
+    {
+        oid = "";
+        charConsumed = 0;
+
+        if (!LdapAbnfDefinitions.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (LdapAbnfDefinitions.TryParseOid(data, out oid, out read))
+        {
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
         }
     }
 }
