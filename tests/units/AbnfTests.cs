@@ -1,10 +1,11 @@
 using PSOpenAD.LDAP;
+using System;
 using System.Collections.Generic;
 using Xunit;
 
 namespace PSOpenADTests;
 
-public static class AbnfDefinitionsTests
+public static class AbnfDecoderTests
 {
     [Theory]
     [InlineData(" ", " ")]
@@ -13,7 +14,7 @@ public static class AbnfDefinitionsTests
     [InlineData("    abc def", "    ")]
     public static void TryParseSP(string data, string expected)
     {
-        bool actual = LdapAbnfDefinitions.TryParseSP(data, out var actualSP, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseSP(data, out var actualSP, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualSP);
@@ -25,7 +26,7 @@ public static class AbnfDefinitionsTests
     [InlineData("a ")]
     public static void TryParseSPFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseSP(data, out var actualSP, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseSP(data, out var actualSP, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualSP);
@@ -41,7 +42,7 @@ public static class AbnfDefinitionsTests
     [InlineData("a ", "")]
     public static void TryParseWSP(string data, string expected)
     {
-        bool actual = LdapAbnfDefinitions.TryParseWSP(data, out var actualSP, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseWSP(data, out var actualSP, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualSP);
@@ -62,7 +63,7 @@ public static class AbnfDefinitionsTests
     [InlineData("café ", "caf")]
     public static void TryParseKeyString(string data, string expected)
     {
-        bool actual = LdapAbnfDefinitions.TryParseKeyString(data, out var actualKS, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseKeyString(data, out var actualKS, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualKS);
@@ -78,7 +79,7 @@ public static class AbnfDefinitionsTests
     [InlineData("ést")]
     public static void TryParseKeyStringFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseKeyString(data, out var actualSP, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseKeyString(data, out var actualSP, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualSP);
@@ -106,7 +107,7 @@ public static class AbnfDefinitionsTests
     [InlineData("testing\\27 abc\\5c\\27 ' ", "testing' abc\\' ", 21)]
     public static void TryParseEscapedUTF8String(string data, string expected, int expectedConsumed)
     {
-        bool actual = LdapAbnfDefinitions.TryParseEscapedUTF8String(data, out var actualKS, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseEscapedUTF8String(data, out var actualKS, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualKS);
@@ -119,7 +120,7 @@ public static class AbnfDefinitionsTests
     [InlineData("\\")]
     public static void TryParseEscapedUTF8StringFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseEscapedUTF8String(data, out var actualSP, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseEscapedUTF8String(data, out var actualSP, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualSP);
@@ -135,7 +136,7 @@ public static class AbnfDefinitionsTests
     [InlineData("101a", "101")]
     public static void TryParseNumber(string data, string expected)
     {
-        bool actual = LdapAbnfDefinitions.TryParseNumber(data, out var actualNumber, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseNumber(data, out var actualNumber, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualNumber);
@@ -147,7 +148,7 @@ public static class AbnfDefinitionsTests
     [InlineData("a1")]
     public static void TryParseNumberFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseNumber(data, out var actualNumber, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseNumber(data, out var actualNumber, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualNumber);
@@ -167,7 +168,7 @@ public static class AbnfDefinitionsTests
     [InlineData("112.325423.0.91.12.932", "112.325423.0.91.12.932")]
     public static void TryParseNumericOid(string data, string expected)
     {
-        bool actual = LdapAbnfDefinitions.TryParseNumericOid(data, out var actualNumericOid, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseNumericOid(data, out var actualNumericOid, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualNumericOid);
@@ -183,10 +184,46 @@ public static class AbnfDefinitionsTests
     [InlineData("1.")]
     public static void TryParseNumericOidFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseNumericOid(data, out var actualNumericOid, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseNumericOid(data, out var actualNumericOid, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualNumericOid);
+        Assert.Equal(0, charsConsumed);
+    }
+
+    [Theory]
+    [InlineData("1.0", new[] { "1.0" }, 3)]
+    [InlineData("( 1.29.1 )", new[] { "1.29.1" }, 10)]
+    [InlineData("(  1.29.1 )", new[] { "1.29.1" }, 11)]
+    [InlineData("( 1.29.1  )", new[] { "1.29.1" }, 11)]
+    [InlineData("(  1.29.1  )", new[] { "1.29.1" }, 12)]
+    [InlineData("(3.85$129.3.0)", new[] { "3.85", "129.3.0" }, 14)]
+    [InlineData("( 3.85$129.3.0)", new[] { "3.85", "129.3.0" }, 15)]
+    [InlineData("(3.85$129.3.0  )", new[] { "3.85", "129.3.0" }, 16)]
+    [InlineData("(3.85   $129.3.0)", new[] { "3.85", "129.3.0" }, 17)]
+    [InlineData("(3.85$ 129.3.0)", new[] { "3.85", "129.3.0" }, 15)]
+    public static void TryParseOids(string data, string[] expected, int expectedConsumed)
+    {
+        bool actual = AbnfDecoder.TryParseOids(data, out var actualOids, out var charsConsumed);
+
+        Assert.True(actual);
+        Assert.Equal(expected, actualOids);
+        Assert.Equal(expectedConsumed, charsConsumed);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("01")]
+    [InlineData("1")]
+    [InlineData("1.")]
+    [InlineData("(1.2 | 3.4)")]
+    [InlineData("(1.2 $ -abc)")]
+    public static void TryParseOidsFailure(string data)
+    {
+        bool actual = AbnfDecoder.TryParseOids(data, out var actualOids, out var charsConsumed);
+
+        Assert.False(actual);
+        Assert.Empty(actualOids);
         Assert.Equal(0, charsConsumed);
     }
 
@@ -214,7 +251,7 @@ public static class AbnfDefinitionsTests
     [InlineData("café ", "caf")]
     public static void TryParseOid(string data, string expected)
     {
-        bool actual = LdapAbnfDefinitions.TryParseOid(data, out var actualOid, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseOid(data, out var actualOid, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualOid);
@@ -234,7 +271,7 @@ public static class AbnfDefinitionsTests
     [InlineData("ést")]
     public static void TryParseOidFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseOid(data, out var actualNumericOid, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseOid(data, out var actualNumericOid, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualNumericOid);
@@ -251,7 +288,7 @@ public static class AbnfDefinitionsTests
     [InlineData("1.2{10}", "1.2", "10", 7)]
     public static void TryParseNOidLen(string data, string expectedOid, string? expectedLen, int expectedConsumed)
     {
-        bool actual = LdapAbnfDefinitions.TryParseNOidLen(data, out var actualOid, out var actualLen,
+        bool actual = AbnfDecoder.TryParseNOidLen(data, out var actualOid, out var actualLen,
             out var charsConsumed);
 
         Assert.True(actual);
@@ -269,7 +306,7 @@ public static class AbnfDefinitionsTests
     [InlineData("1.")]
     public static void TryParseNOidLenFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseNOidLen(data, out var actualOid, out var actualLen,
+        bool actual = AbnfDecoder.TryParseNOidLen(data, out var actualOid, out var actualLen,
             out var charsConsumed);
 
         Assert.False(actual);
@@ -285,7 +322,7 @@ public static class AbnfDefinitionsTests
     [InlineData("'abc-123' ", "abc-123", 9)]
     public static void TryParseQDescr(string data, string expected, int expectedConsumed)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDescr(data, out var actualqdescr, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDescr(data, out var actualqdescr, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualqdescr);
@@ -303,7 +340,7 @@ public static class AbnfDefinitionsTests
     [InlineData("'abc def'")]
     public static void TryParseQDescrFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDescr(data, out var actualqdescr, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDescr(data, out var actualqdescr, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualqdescr);
@@ -323,7 +360,7 @@ public static class AbnfDefinitionsTests
     [InlineData("('abc' 'def1' )", new[] { "abc", "def1" }, 15)]
     public static void TryParseQDescrs(string data, string[] expected, int expectedConsumed)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDescrs(data, out var actualqdescrs, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDescrs(data, out var actualqdescrs, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualqdescrs);
@@ -346,7 +383,7 @@ public static class AbnfDefinitionsTests
     [InlineData("( 'abc''def' )")]
     public static void TryParseQDescrsFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDescrs(data, out var actualqdescrs, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDescrs(data, out var actualqdescrs, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Empty(actualqdescrs);
@@ -365,7 +402,7 @@ public static class AbnfDefinitionsTests
     [InlineData("'café \\5C\\27'", "café \\'", 13)]
     public static void TryParseQDString(string data, string expected, int expectedConsumed)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDString(data, out var actualqdstring, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDString(data, out var actualqdstring, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualqdstring);
@@ -380,7 +417,7 @@ public static class AbnfDefinitionsTests
     [InlineData("'abc\\'")]
     public static void TryParseQDStringFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDString(data, out var actualqdstring, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDString(data, out var actualqdstring, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Equal("", actualqdstring);
@@ -401,7 +438,7 @@ public static class AbnfDefinitionsTests
     [InlineData("('café \\5c' '\\5C\\27😊 happy_123\\5c\\27' ) ", new[] { "café \\", "\\'😊 happy_123\\'" }, 40)]
     public static void TryParseQDStrings(string data, string[] expected, int expectedConsumed)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDStrings(data, out var actualqdstrings, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDStrings(data, out var actualqdstrings, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Equal(expected, actualqdstrings);
@@ -422,7 +459,7 @@ public static class AbnfDefinitionsTests
     [InlineData("( 'abc''def' )")]
     public static void TryParseQDStringsFailure(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseQDStrings(data, out var actualqdstrings, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseQDStrings(data, out var actualqdstrings, out var charsConsumed);
 
         Assert.False(actual);
         Assert.Empty(actualqdstrings);
@@ -434,7 +471,7 @@ public static class AbnfDefinitionsTests
     {
         const string EXTENSIONS_EMPTY = "";
 
-        bool actual = LdapAbnfDefinitions.TryParseExtensions(EXTENSIONS_EMPTY, out var extensions,
+        bool actual = AbnfDecoder.TryParseExtensions(EXTENSIONS_EMPTY, out var extensions,
             out var charsConsumed);
 
         Assert.True(actual);
@@ -453,7 +490,7 @@ public static class AbnfDefinitionsTests
             { "X--", new[] { "hello", "world" } },
         };
 
-        bool actual = LdapAbnfDefinitions.TryParseExtensions(EXTENSIONS_RAW, out var extensions,
+        bool actual = AbnfDecoder.TryParseExtensions(EXTENSIONS_RAW, out var extensions,
             out var charsConsumed);
 
         Assert.True(actual);
@@ -467,7 +504,7 @@ public static class AbnfDefinitionsTests
     [InlineData(" X-123 'foo'")]
     public static void TryParseExtensionsInvalidKey(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseExtensions(data, out var extensions, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseExtensions(data, out var extensions, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Empty(extensions);
@@ -479,7 +516,7 @@ public static class AbnfDefinitionsTests
     [InlineData(" X-foo( 'bar' )")]
     public static void TryParseExtensionsNoSpace(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseExtensions(data, out var extensions, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseExtensions(data, out var extensions, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Empty(extensions);
@@ -493,10 +530,35 @@ public static class AbnfDefinitionsTests
     [InlineData(" X-foo ('foo'")]
     public static void TryParseExtensionsInvalidValue(string data)
     {
-        bool actual = LdapAbnfDefinitions.TryParseExtensions(data, out var extensions, out var charsConsumed);
+        bool actual = AbnfDecoder.TryParseExtensions(data, out var extensions, out var charsConsumed);
 
         Assert.True(actual);
         Assert.Empty(extensions);
         Assert.Equal(0, charsConsumed);
+    }
+}
+
+public static class AbnfEncoderTests
+{
+    [Theory]
+    [InlineData(new string[] { }, "''")]
+    [InlineData(new[] { "1.2.3" }, "1.2.3")]
+    [InlineData(new[] { "foo", "23.94.0.1" }, "( foo $ 23.94.0.1 )")]
+    public static void EncodeOIds(string[] value, string expected)
+    {
+        string actual = AbnfEncoder.EncodeOids(value);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData(new string[] { }, "''")]
+    [InlineData(new[] { "abc" }, "'abc'")]
+    [InlineData(new[] { "café", "'foo'", "\\bar" }, "( 'café' '\\27foo\\27' '\\5Cbar' )")]
+    public static void EncodeQDStrings(string[] value, string expected)
+    {
+        string actual = AbnfEncoder.EncodeQDStrings(value);
+
+        Assert.Equal(expected, actual);
     }
 }

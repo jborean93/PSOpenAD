@@ -334,9 +334,18 @@ public class SyntaxDefinitionTests
         const string raw = "( 2.5.6.2 NAME 'country' SUP top STRUCTURAL MUST c MAY ( searchGuide $ description ) )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadObjectClassDescription(data);
+        ObjectClassDescription actual = SyntaxDefinition.ReadObjectClassDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("2.5.6.2", actual.OID);
+        Assert.Equal(new[] { "country" }, actual.Names);
+        Assert.Null(actual.Description);
+        Assert.Equal(new[] { "top" }, actual.SuperTypes);
+        Assert.Equal(ObjectClassKind.Structural, actual.Kind);
+        Assert.Equal(new[] { "c" }, actual.Must);
+        Assert.Equal(new[] { "searchGuide", "description" }, actual.May);
+        Assert.Empty(actual.Extensions);
+
+        Assert.Equal(raw, actual.ToString());
     }
 
     [Theory]

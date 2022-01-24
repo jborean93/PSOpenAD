@@ -29,6 +29,8 @@ public static class AttributeTypeDescriptionTests
         Assert.True(actual.NoUserModification);
         Assert.Equal(AttributeTypeUsage.DirectoryOperation, actual.Usage);
         Assert.Empty(actual.Extensions);
+
+        Assert.Equal(VALUE, actual.ToString());
     }
 
     [Fact]
@@ -55,14 +57,17 @@ public static class AttributeTypeDescriptionTests
         Assert.False(actual.SingleValue);
         Assert.False(actual.Collective);
         Assert.False(actual.NoUserModification);
-        Assert.Equal(AttributeTypeUsage.NotSpecified, actual.Usage);
+        Assert.Equal(AttributeTypeUsage.UserApplications, actual.Usage);
         Assert.Equal(expectedExtensions, actual.Extensions);
+
+        Assert.Equal(VALUE, actual.ToString());
     }
 
     [Fact]
     public static void ParseADSyntaxOID()
     {
         const string VALUE = "( 1.2.840.113556.1.4.221 NAME 'sAMAccountName' SYNTAX '1.3.6.1.4.1.1466.115.121.1.15' SINGLE-VALUE )";
+        const string EXPECTED_STR = "( 1.2.840.113556.1.4.221 NAME 'sAMAccountName' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )";
 
         var actual = new AttributeTypeDescription(VALUE);
 
@@ -79,14 +84,17 @@ public static class AttributeTypeDescriptionTests
         Assert.True(actual.SingleValue);
         Assert.False(actual.Collective);
         Assert.False(actual.NoUserModification);
-        Assert.Equal(AttributeTypeUsage.NotSpecified, actual.Usage);
+        Assert.Equal(AttributeTypeUsage.UserApplications, actual.Usage);
         Assert.Empty(actual.Extensions);
+
+        Assert.Equal(EXPECTED_STR, actual.ToString());
     }
 
     [Fact]
     public static void ParseADSyntaxDesc()
     {
         const string VALUE = "( 1.2.840.113556.1.2.83 NAME 'repsTo' SYNTAX 'OctetString' NO-USER-MODIFICATION )";
+        const string EXPECTED_STR = "( 1.2.840.113556.1.2.83 NAME 'repsTo' SYNTAX OctetString NO-USER-MODIFICATION )";
 
         var actual = new AttributeTypeDescription(VALUE);
 
@@ -103,8 +111,10 @@ public static class AttributeTypeDescriptionTests
         Assert.False(actual.SingleValue);
         Assert.False(actual.Collective);
         Assert.True(actual.NoUserModification);
-        Assert.Equal(AttributeTypeUsage.NotSpecified, actual.Usage);
+        Assert.Equal(AttributeTypeUsage.UserApplications, actual.Usage);
         Assert.Empty(actual.Extensions);
+
+        Assert.Equal(EXPECTED_STR, actual.ToString());
     }
 
     [Fact]
@@ -116,6 +126,8 @@ public static class AttributeTypeDescriptionTests
 
         Assert.Equal("1.0", actual.OID);
         Assert.Empty(actual.Names);
+
+        Assert.Equal(VALUE, actual.ToString());
     }
 
     [Fact]
@@ -127,6 +139,8 @@ public static class AttributeTypeDescriptionTests
 
         Assert.Equal("1.0", actual.OID);
         Assert.Equal(new[] { "name1", "name2" }, actual.Names);
+
+        Assert.Equal("( 1.0 NAME ( 'name1' 'name2' ) )", actual.ToString());
     }
 
     [Fact]
@@ -138,6 +152,8 @@ public static class AttributeTypeDescriptionTests
 
         Assert.Equal("1.0", actual.OID);
         Assert.Equal("foo 'bar'", actual.Description);
+
+        Assert.Equal("( 1.0 DESC 'foo \\27bar\\27' )", actual.ToString());
     }
 
     [Fact]
@@ -149,6 +165,8 @@ public static class AttributeTypeDescriptionTests
 
         Assert.Equal("1.0", actual.OID);
         Assert.True(actual.Obsolete);
+
+        Assert.Equal("( 1.0 OBSOLETE )", actual.ToString());
     }
 
     [Fact]
@@ -160,6 +178,8 @@ public static class AttributeTypeDescriptionTests
 
         Assert.Equal("1.0", actual.OID);
         Assert.Equal("1.2.34", actual.SuperType);
+
+        Assert.Equal("( 1.0 SUP 1.2.34 )", actual.ToString());
     }
 
     [Fact]
@@ -171,6 +191,8 @@ public static class AttributeTypeDescriptionTests
 
         Assert.Equal("1.0", actual.OID);
         Assert.True(actual.Collective);
+
+        Assert.Equal("( 1.0 COLLECTIVE )", actual.ToString());
     }
 
     [Theory]
@@ -186,6 +208,15 @@ public static class AttributeTypeDescriptionTests
 
         Assert.Equal("1.0", actual.OID);
         Assert.Equal(expected, actual.Usage);
+
+        if (usage == "userApplications")
+        {
+            Assert.Equal("( 1.0 )", actual.ToString());
+        }
+        else
+        {
+            Assert.Equal($"( 1.0 USAGE {usage} )", actual.ToString());
+        }
     }
 
     [Fact]

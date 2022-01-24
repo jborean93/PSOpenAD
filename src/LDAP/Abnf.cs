@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace PSOpenAD.LDAP;
 
-internal static class LdapAbnfDefinitions
+internal static class AbnfDecoder
 {
     /// <summary>Checks whether the current char is an ALPHA char.</summary>
     /// <remarks>
@@ -314,6 +315,77 @@ internal static class LdapAbnfDefinitions
         }
     }
 
+    /// <summary>Tries to parse oid values.</summary>
+    /// <remarks>
+    /// ABNF notation for oids is:
+    ///     oids = oid / ( LPAREN WSP oidlist WSP RPAREN )
+    ///     oidlist = oid *( WSP DOLLAR WSP oid )
+    /// </remarks>
+    /// <param name="data">The value to parse.</param>
+    /// <param name="oids">The oid values if the input data was in a valid format.</param>
+    /// <param name="charsConsumed">The number of chars that formed the oid values.</param>
+    /// <returns><c>true</c> if <c>data</c> was successfully parsed, else <c>false</c>.</returns>
+    /// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1">RFC 4512 4.1. Schema Definitions</see>
+    public static bool TryParseOids(ReadOnlySpan<char> data, out string[] oids, out int charsConsumed)
+    {
+        if (TryParseOid(data, out var value, out charsConsumed))
+        {
+            oids = new[] { value };
+            return true;
+        }
+        else if (data.Length > 1 && data[0] == '(')
+        {
+            charsConsumed = 1;
+            TryParseWSP(data[1..], out var _, out var wspConsumed);
+            charsConsumed += wspConsumed;
+
+            List<string> values = new();
+            while (true)
+            {
+                if (values.Count > 0)
+                {
+                    TryParseWSP(data[charsConsumed..], out _, out wspConsumed);
+                    charsConsumed += wspConsumed;
+
+                    if (data[charsConsumed..].Length < 1 || data[charsConsumed] != '$')
+                    {
+                        break;
+                    }
+                    charsConsumed++;
+
+                    TryParseWSP(data[charsConsumed..], out _, out wspConsumed);
+                    charsConsumed += wspConsumed;
+                }
+
+                bool isOid = TryParseOid(data[charsConsumed..], out value, out var oidConsumed);
+                if (!isOid)
+                {
+                    break;
+                }
+
+                values.Add(value);
+                charsConsumed += oidConsumed;
+            }
+
+            if (values.Count > 0)
+            {
+                TryParseWSP(data[charsConsumed..], out var _, out wspConsumed);
+                charsConsumed += wspConsumed;
+
+                if (data.Length > charsConsumed && data[charsConsumed] == ')')
+                {
+                    charsConsumed++;
+                    oids = values.ToArray();
+                    return true;
+                }
+            }
+        }
+
+        oids = Array.Empty<string>();
+        charsConsumed = 0;
+        return false;
+    }
+
     /// <summary>Tries to parse an oid value.</summary>
     /// <remarks>
     /// ABNF notation for oid is:
@@ -598,5 +670,57 @@ internal static class LdapAbnfDefinitions
         strings = Array.Empty<string>();
         charsConsumed = 0;
         return false;
+    }
+}
+
+internal static class AbnfEncoder
+{
+    /// <summary>Encodes a list of OID values.</summary>
+    /// <param name="value">The oids to encode.</param>
+    /// <returns>The string encoded oids.</returns>
+    public static string EncodeOids(string[] oids)
+    {
+        if (oids.Length == 0)
+        {
+            return "''";
+        }
+        else if (oids.Length == 1)
+        {
+            return oids[0];
+        }
+        else
+        {
+            string values = string.Join(" $ ", oids);
+            return $"( {values} )";
+        }
+    }
+
+    /// <summary>Encodes a list of QDString values.</summary>
+    /// <param name="value">The values to encode.</param>
+    /// <returns>The string encoded values.</returns>
+    public static string EncodeQDStrings(string[] value)
+    {
+        if (value.Length == 0)
+        {
+            return "''";
+        }
+        else if (value.Length == 1)
+        {
+            return EncodeQDString(value[0]);
+        }
+        else
+        {
+            string values = string.Join(" ", value.Select(v => EncodeQDString(v)));
+            return $"( {values} )";
+        }
+    }
+
+    /// <summary>Encode a single QDString value.</summary>
+    /// <param name="value">The value to encode.</param>
+    /// <returns>The string encoded value.</returns>
+    public static string EncodeQDString(string value)
+    {
+        string escapedValue = value.Replace("\\", "\\5C").Replace("'", "\\27");
+        return $"'{escapedValue}'";
     }
 }

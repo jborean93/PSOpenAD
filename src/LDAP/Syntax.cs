@@ -397,7 +397,8 @@ public static class SyntaxDefinition
     /// <param name="data">The raw byte value to read</param>
     /// <returns>The parsed Object Class Description in the ABNF notation.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.24">RFC 4517 3.3.24. Object Class Description</see>
-    public static string ReadObjectClassDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static ObjectClassDescription ReadObjectClassDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads an object identifer (OID).</summary>
     /// <remarks>
