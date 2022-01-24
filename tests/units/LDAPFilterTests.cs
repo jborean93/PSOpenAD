@@ -598,7 +598,6 @@ public class LDAPFilterGreaterOrEqualTests
         Assert.Equal(value, Encoding.UTF8.GetString(((FilterGreaterOrEqual)parsedFilter).Value.Span));
     }
 
-
     [Fact]
     public void FilterGreaterOrEqualToBytes()
     {

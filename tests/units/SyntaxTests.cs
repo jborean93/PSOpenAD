@@ -207,7 +207,7 @@ public class SyntaxDefinitionTests
     public void ReadGeneralizedTime(string value, int year, int month, int day, int hour, int minute, int second,
         long ticks, long tzOffset)
     {
-        DateTimeOffset expected = new DateTimeOffset(year, month, day, hour, minute, second, new TimeSpan(tzOffset));
+        DateTimeOffset expected = new(year, month, day, hour, minute, second, new TimeSpan(tzOffset));
         expected = expected.AddTicks(ticks);
         byte[] data = Encoding.UTF8.GetBytes(value);
 
@@ -512,7 +512,7 @@ public class SyntaxDefinitionTests
     public void ReadUTCTime(string value, int year, int month, int day, int hour, int minute, int second,
         long tzOffset)
     {
-        DateTimeOffset expected = new DateTimeOffset(year, month, day, hour, minute, second, new TimeSpan(tzOffset));
+        DateTimeOffset expected = new(year, month, day, hour, minute, second, new TimeSpan(tzOffset));
         byte[] data = Encoding.UTF8.GetBytes(value);
 
         DateTimeOffset actual = SyntaxDefinition.ReadUTCTime(data);

@@ -17,5 +17,4 @@ public class LDAPErrorTests
         Assert.Equal(code, exc.ResultCode);
         Assert.Equal("Protocol error - diagnostic message", exc.Message);
     }
-
 }
