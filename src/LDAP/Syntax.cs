@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -10,12 +9,11 @@ public static class SyntaxDefinition
 {
     /// <summary>Reads an Attribute Type Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.3 DESC 'Attribute Type Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed Attribute Type Description string in the ABNF notation.</returns>
+    /// <returns>The parsed Attribute Type Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.1">RFC 4517 3.3.1. Attribute Type Description</see>
     public static AttributeTypeDescription ReadAttributeTypeDescription(ReadOnlySpan<byte> data)
         => new(Encoding.UTF8.GetString(data));
@@ -31,7 +29,7 @@ public static class SyntaxDefinition
     public static byte[] ReadBitString(ReadOnlySpan<byte> data)
     {
         string raw = Encoding.ASCII.GetString(data);
-        raw = raw.Substring(1, raw.Length - 3); // Strip surrounding single quotes and remaining B.
+        raw = raw[1..(raw.Length - 2)]; // Strip surrounding single quotes and remaining B.
         int numBytes = (int)Math.Ceiling((decimal)raw.Length / 8);
         raw = raw.PadLeft(numBytes * 8, '0');
 
@@ -103,25 +101,25 @@ public static class SyntaxDefinition
 
     /// <summary>Reads a DIT Content Rule Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.16 DESC 'DIT Content Rule Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed Context Rule Description string in the ABNF notation.</returns>
+    /// <returns>The parsed Context Rule Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.7">RFC 4517 3.3.7. DIT Content Rule Description</see>
-    public static string ReadDITContentRuleDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static DITContentRuleDescription ReadDITContentRuleDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads a DIT Structure Rule Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.17 DESC 'DIT Structure Rule Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed Structure Rule Description string in the ABNF notation.</returns>
+    /// <returns>The parsed Structure Rule Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.8">RFC 4517 3.3.8. DIT Structure Rule Description</see>
-    public static string ReadDITStructureRuleDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static DITStructureRuleDescription ReadDITStructureRuleDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads an Enhanced Guide value.</summary>
     /// <remarks>
@@ -145,8 +143,11 @@ public static class SyntaxDefinition
 
     /// <summary>Reads a Fax image.</summary>
     /// <remarks>
+    /// <para>
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.23 DESC 'Fax' )
+    /// </para>
+    /// <para>
     /// The ASN.1 definition for this field is.
     /// Fax ::= CHOICE {
     ///     g3-facsimile  [3] G3FacsimileBodyPart
@@ -168,6 +169,7 @@ public static class SyntaxDefinition
     /// }
     ///
     /// G3FacsimileData ::= SEQUENCE OF BIT STRING
+    /// </para>
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
     /// <returns>The raw fax data.</returns>
@@ -176,8 +178,11 @@ public static class SyntaxDefinition
 
     /// <summary>Reads a generialized time value.</summary>
     /// <remarks>
+    /// <para>
     /// The LDAP definition for this syntax is:
     ///      ( 1.3.6.1.4.1.1466.115.121.1.24 DESC 'Generalized Time' )
+    /// </para>
+    /// <para>
     /// The ABNF notation of this field is:
     ///     GeneralizedTime = century year month day hour
     ///                         [ minute [ second / leap-second ] ]
@@ -201,6 +206,7 @@ public static class SyntaxDefinition
     ///                     / g-differential
     ///     g-differential  = ( MINUS / PLUS ) hour [ minute ]
     ///     MINUS           = %x2D  ; minus sign ("-")
+    /// </para>
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
     /// <returns>The generalized date time value.</returns>
@@ -274,7 +280,7 @@ public static class SyntaxDefinition
                 tz = -tz;
         }
 
-        DateTimeOffset dt = new DateTimeOffset(year, month, day, 0, 0, 0, tz);
+        DateTimeOffset dt = new(year, month, day, 0, 0, 0, tz);
         return dt.AddTicks(hourTicks + minuteTicks + secondTicks);
     }
 
@@ -326,34 +332,39 @@ public static class SyntaxDefinition
 
     /// <summary>Reads an Matching Rule Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.30 DESC 'Matching Rule Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed Matching Rule Description in the ABNF notation.</returns>
+    /// <returns>The parsed Matching Rule Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.19">RFC 4517 3.3.19. Matching Rule Description</see>
-    public static string ReadMatchingRuleDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static MatchingRuleDescription ReadMatchingRuleDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads an Matching Rule Use Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.31 DESC 'Matching Rule Use Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed Matching Rule Use Description in the ABNF notation.</returns>
+    /// <returns>The parsed Matching Rule Use Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.19">RFC 4517 3.3.19. Matching Rule Use Description</see>
-    public static string ReadMatchingRuleUseDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static MatchingRuleUseDescription ReadMatchingRuleUseDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads a name and optional UID of an entity.</summary>
     /// <remarks>
+    /// <para>
     /// This just returns the raw string value rather than process it into an object.
+    /// </para>
+    /// <para>
     /// The ABNF form is:
     ///     NameAndOptionalUID = distinguishedName [ SHARP BitString ]
-    ///
+    /// </para>
+    /// <para>
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.34 DESC 'Name And Optional UID' )
+    /// </para>
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
     /// <returns>The entity name with optional UID.</returns>
@@ -362,21 +373,24 @@ public static class SyntaxDefinition
 
     /// <summary>Reads a Name Form Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.35 DESC 'Name Form Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed Name Form Description in the ABNF notation.</returns>
+    /// <returns>The parsed Name Form Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.22">RFC 4517 3.3.22. Name Form Description</see>
-    public static string ReadNameFormDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static NameFormDescription ReadNameFormDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads a numeric string.</summary>
     /// <remarks>
+    /// <para>
     /// There is size limit on each numeric part.
-    ///
+    /// </para>
+    /// <para>
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.36 DESC 'Numeric String' )
+    /// </para>
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
     /// <returns>An array of each numeric entry.</returns>
@@ -390,12 +404,11 @@ public static class SyntaxDefinition
 
     /// <summary>Reads an Object Class Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.37 DESC 'Object Class Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed Object Class Description in the ABNF notation.</returns>
+    /// <returns>The parsed Object Class Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.24">RFC 4517 3.3.24. Object Class Description</see>
     public static ObjectClassDescription ReadObjectClassDescription(ReadOnlySpan<byte> data)
         => new(Encoding.UTF8.GetString(data));
@@ -484,8 +497,7 @@ public static class SyntaxDefinition
     /// <param name="data">The raw byte value to read</param>
     /// <returns>The teletex terminal identifier.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.32">RFC 4517 3.3.32. Teletex Terminal Identifier</see>
-    public static TeletexTerminalIdentifier ReadTeletexTerminalIdentifier(ReadOnlySpan<byte> data)
-        => new TeletexTerminalIdentifier(data);
+    public static TeletexTerminalIdentifier ReadTeletexTerminalIdentifier(ReadOnlySpan<byte> data) => new(data);
 
     /// <summary>Reads a Telex Number.</summary>
     /// <remarks>
@@ -548,14 +560,14 @@ public static class SyntaxDefinition
 
     /// <summary>Reads an LDAP Syntax Description.</summary>
     /// <remarks>
-    /// This just returns the raw string value rather than process it into an object.
     /// The LDAP definition for this syntax is:
     ///     ( 1.3.6.1.4.1.1466.115.121.1.54 DESC 'LDAP Syntax Description' )
     /// </remarks>
     /// <param name="data">The raw byte value to read</param>
-    /// <returns>The parsed LDAP Syntax Description in the ABNF notation.</returns>
+    /// <returns>The parsed LDAP Syntax Description.</returns>
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4517#section-3.3.18">RFC 4517 3.3.18. LDAP Syntax Description</see>
-    public static string ReadLDAPSyntaxDescription(ReadOnlySpan<byte> data) => Encoding.UTF8.GetString(data);
+    public static SyntaxDescription ReadLDAPSyntaxDescription(ReadOnlySpan<byte> data)
+        => new(Encoding.UTF8.GetString(data));
 
     /// <summary>Reads a Substring Assertion.</summary>
     /// <remarks>
@@ -572,113 +584,5 @@ public static class SyntaxDefinition
         string value = Encoding.UTF8.GetString(data);
 
         return value.Split('*').Select(v => v.Replace("\\2A", "*").Replace("\\5C", "\\")).ToArray();
-    }
-}
-
-/// <summary>A Teletex Terminal Identifier.</summary>
-/// <remarks>
-/// The ABNF notation of this field is:
-///     teletex-id = ttx-term *(DOLLAR ttx-param)
-///     ttx-term   = PrintableString          ; terminal identifier
-///     ttx-param  = ttx-key COLON ttx-value  ; parameter
-///     ttx-key    = "graphic" / "control" / "misc" / "page" / "private"
-///     ttx-value  = *ttx-value-octet
-///
-///     ttx-value-octet = %x00-23
-///                     / (%x5C "24")  ; escaped "$"
-///                     / %x25-5B
-///                     / (%x5C "5C")  ; escaped "\"
-///                     / %x5D-FF
-/// The LDAP definition for this syntax is:
-///     ( 1.3.6.1.4.1.1466.115.121.1.51 DESC 'Teletex Terminal Identifier' )
-/// </remarks>
-public class TeletexTerminalIdentifier
-{
-    /// <summary>Teletex Terminal Identifier.</summary>
-    public string Identifier { get; }
-
-    /// <summary>Array of optional parameters for the identifier.</summary>
-    public TeletexTerminalParameter[] Parameters { get; }
-
-    public TeletexTerminalIdentifier(ReadOnlySpan<byte> data)
-    {
-        int dollarIdx = data.IndexOf((byte)0x24); // $
-        List<TeletexTerminalParameter> parameters = new();
-
-        if (dollarIdx == -1)
-        {
-            Identifier = Encoding.ASCII.GetString(data);
-        }
-        else
-        {
-            Identifier = Encoding.ASCII.GetString(data.Slice(0, dollarIdx));
-            data = data[(dollarIdx + 1)..];
-
-            while (data.Length > 0)
-            {
-                parameters.Add(TeletexTerminalParameter.ParseParameter(data, out var read));
-                data = data[read..];
-            }
-        }
-
-        Parameters = parameters.ToArray();
-    }
-}
-
-/// <summary>Encoded form of a Teletex Terminal Identifier parameter.</summary>
-public class TeletexTerminalParameter
-{
-    /// <summary>The name/key of the parameter.</summary>
-    public string Name { get; }
-
-    /// <summary>The raw bytes of the parameter.</summary>
-    public byte[] Value { get; }
-
-    public TeletexTerminalParameter(string name, byte[] value)
-    {
-        Name = name;
-        Value = value;
-    }
-
-    /// <summary>Parse a Teletex Terminal Identifier parameter from the raw bytes.</summary>
-    /// <param name="data">The raw bytes to start parsing from.</param>
-    /// <oaram name="read">How many bytes that were consumed for this parameter.</param>
-    /// <returns>The parsed Teletex Terminal Identifier parameter.</returns>
-    internal static TeletexTerminalParameter ParseParameter(ReadOnlySpan<byte> data, out int read)
-    {
-        int colonIdx = data.IndexOf((byte)0x3A); // :
-        string name = Encoding.ASCII.GetString(data.Slice(0, colonIdx));
-
-        // The serialized form is going to be the same size or larger (if $ or \ are escaped). Keep the count to know
-        // how much data was written after it was converted from the escaped form.
-        Memory<byte> value = new Memory<byte>(new byte[data.Length - colonIdx]);
-        Span<byte> encodedValue = value.Span;
-        int count = 0;
-
-        for (read = colonIdx + 1; read < data.Length; read++)
-        {
-            char c = (char)data[read];
-
-            // Need to escape \24 or \5C is found.
-            if (c == '\\' && data.Length > (read + 2))
-            {
-                string escapedHex = Encoding.ASCII.GetString(data.Slice(read + 1, 2));
-                encodedValue[count] = Convert.ToByte(escapedHex, 16);
-                count++;
-                read += 2;
-                continue;
-            }
-            else if (c == '$')
-            {
-                // Include the $ so the next call starts with what comes after $
-                read++;
-                break;
-            }
-
-            encodedValue[count] = data[read];
-            count++;
-        }
-
-        return new TeletexTerminalParameter(name, value[..count].ToArray());
     }
 }

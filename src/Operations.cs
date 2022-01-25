@@ -5,10 +5,10 @@ using System.Threading;
 
 namespace PSOpenAD;
 
-internal class Operations
+internal static class Operations
 {
     /// <summary>Performs an LDAP search operation.</summary>
-    /// <param name="connection">The LDAP connection to perform the search on on.</param>
+    /// <param name="connection">The LDAP connection to perform the search on.</param>
     /// <param name="searchBase">The search base of the query.</param>
     /// <param name="scope">The scope of the query.</param>
     /// <param name="sizeLimit"></param>

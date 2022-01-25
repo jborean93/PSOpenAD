@@ -286,7 +286,7 @@ internal class SspiContext : SecurityContext
 
                 if (_bindingData != null)
                 {
-                    inputBuffers[idx].cbBuffer = (UInt32)_bindingData.Length; ;
+                    inputBuffers[idx].cbBuffer = (UInt32)_bindingData.Length;
                     inputBuffers[idx].BufferType = (UInt32)SecBufferType.SECBUFFER_CHANNEL_BINDINGS;
                     inputBuffers[idx].pvBuffer = (IntPtr)cbBuffer;
                 }

@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
 
 namespace PSOpenAD;
 
@@ -132,7 +133,7 @@ internal class SafeKrb5Realm : SafeHandle
     }
 }
 
-public class KerberosException : Exception
+public class KerberosException : AuthenticationException
 {
     public int ErrorCode { get; }
 

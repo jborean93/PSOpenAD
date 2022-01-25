@@ -4,62 +4,43 @@ using System.Text;
 
 namespace PSOpenAD.LDAP;
 
-/// <summary>The object class kind.</summary>
-public enum ObjectClassKind
-{
-    /// <summary>Abstract object class.</summary>
-    Abstract,
-
-    /// <summary>Structural object class.</summary>
-    Structural,
-
-    /// <summary>Auxiliary object class.</summary>
-    Auxiliary,
-}
-
-/// <summary>Definition of an object class.</summary>
+/// <summary>Definition of a name form class.</summary>
 /// <remarks>
 /// <para>
-/// The ABNF notation of an ObjectClassDescription is:
-///     ObjectClassDescription = LPAREN WSP
+/// The ABNF notation of an NameFormDescription is:
+///     NameFormDescription = LPAREN WSP
 ///         numericoid                 ; object identifier
 ///         [ SP "NAME" SP qdescrs ]   ; short names (descriptors)
 ///         [ SP "DESC" SP qdstring ]  ; description
 ///         [ SP "OBSOLETE" ]          ; not active
-///         [ SP "SUP" SP oids ]       ; superior object classes
-///         [ SP kind ]                ; kind of class
-///         [ SP "MUST" SP oids ]      ; attribute types
+///         SP "OC" SP oid             ; structural object class
+///         SP "MUST" SP oids          ; attribute types
 ///         [ SP "MAY" SP oids ]       ; attribute types
-///         extensions WSP RPAREN
-///
-///     kind = "ABSTRACT" / "STRUCTURAL" / "AUXILIARY"
+///         extensions WSP RPAREN      ; extensions
 /// </para>
 /// </remarks>
-/// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1.1">RFC 4512 4.1.1. Object Class Definitions</see>
-public class ObjectClassDescription : LdapAbnfClass
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1.7.2">RFC 4512 4.1.7.2. Name Forms</see>
+public class NameFormDescription : LdapAbnfClass
 {
-    /// <summary>The object identifier assigned to this object class.</summary>
+    /// <summary>The object identifier assigned to this name form.</summary>
     public string OID { get; set; } = "";
 
-    /// <summary>Short names (descriptors) identifying this object class.</summary>
+    /// <summary>Short names (descriptors) identifying this name form.</summary>
     public string[] Names { get; set; } = Array.Empty<string>();
 
     /// <summary>The short descriptive string.</summary>
     public string? Description { get; set; }
 
-    /// <summary>Indicates this object class is not active.</summary>
+    /// <summary>Indicates this name form is not active.</summary>
     public bool Obsolete { get; set; }
 
-    /// <summary>The OID that specifies the direct superclass of this object class.</summary>
-    public string[] SuperTypes { get; set; } = Array.Empty<string>();
+    /// <summary>The structural object class this rule applies to.</summary>
+    public string ObjectClass { get; set; } = "";
 
-    /// <summary>The kind of the object class.</summary>
-    public ObjectClassKind Kind { get; set; } = ObjectClassKind.Structural;
-
-    /// <summary>Set of required attribute types.</summary>
+    /// <summary>Set of required naming attributes.</summary>
     public string[] Must { get; set; } = Array.Empty<string>();
 
-    /// <summary>Set of allowed attribute types.</summary>
+    /// <summary>Set of allowed naming attributes.</summary>
     public string[] May { get; set; } = Array.Empty<string>();
 
     internal override List<(string, TryReadField, bool)> Fields => new()
@@ -68,15 +49,12 @@ public class ObjectClassDescription : LdapAbnfClass
         ("NAME", TryReadNameField, false),
         ("DESC", TryReadDescField, false),
         ("OBSOLETE", TryReadObsoleteField, false),
-        ("SUP", TryReadSupField, false),
-        ("ABSTRACT", TryReadAbstractField, false),
-        ("STRUCTURAL", TryReadStructuralField, false),
-        ("AUXILIARY", TryReadAuxiliaryField, false),
-        ("MUST", TryReadMustField, false),
+        ("OC", TryReadOcField, true),
+        ("MUST", TryReadMustField, true),
         ("MAY", TryReadMayField, false),
     };
 
-    public ObjectClassDescription(string definition) : base(definition) { }
+    public NameFormDescription(string definition) : base(definition) { }
 
     public override string ToString()
     {
@@ -100,26 +78,7 @@ public class ObjectClassDescription : LdapAbnfClass
             sb.Append(" OBSOLETE");
         }
 
-        if (SuperTypes.Length > 0)
-        {
-            string value = AbnfEncoder.EncodeOids(SuperTypes);
-            sb.AppendFormat(" SUP {0}", value);
-        }
-
-        switch (Kind)
-        {
-            case ObjectClassKind.Abstract:
-                sb.Append(" ABSTRACT");
-                break;
-
-            case ObjectClassKind.Structural:
-                sb.AppendFormat(" STRUCTURAL");
-                break;
-
-            case ObjectClassKind.Auxiliary:
-                sb.Append(" AUXILIARY");
-                break;
-        }
+        sb.AppendFormat(" OC {0}", ObjectClass);
 
         if (Must.Length > 0)
         {
@@ -189,38 +148,17 @@ public class ObjectClassDescription : LdapAbnfClass
         return true;
     }
 
-    private bool TryReadSupField(ReadOnlySpan<char> data, out int charConsumed)
+    private bool TryReadOcField(ReadOnlySpan<char> data, out int charConsumed)
     {
-        if (TryReadOids(data, out var oids, out charConsumed))
+        if (TryReadOid(data, out var oid, out charConsumed))
         {
-            SuperTypes = oids;
+            ObjectClass = oid;
             return true;
         }
         else
         {
             return false;
         }
-    }
-
-    private bool TryReadAbstractField(ReadOnlySpan<char> data, out int charConsumed)
-    {
-        charConsumed = 0;
-        Kind = ObjectClassKind.Abstract;
-        return true;
-    }
-
-    private bool TryReadStructuralField(ReadOnlySpan<char> data, out int charConsumed)
-    {
-        charConsumed = 0;
-        Kind = ObjectClassKind.Structural;
-        return true;
-    }
-
-    private bool TryReadAuxiliaryField(ReadOnlySpan<char> data, out int charConsumed)
-    {
-        charConsumed = 0;
-        Kind = ObjectClassKind.Auxiliary;
-        return true;
     }
 
     private bool TryReadMustField(ReadOnlySpan<char> data, out int charConsumed)

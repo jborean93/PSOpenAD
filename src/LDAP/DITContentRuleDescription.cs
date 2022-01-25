@@ -4,57 +4,39 @@ using System.Text;
 
 namespace PSOpenAD.LDAP;
 
-/// <summary>The object class kind.</summary>
-public enum ObjectClassKind
-{
-    /// <summary>Abstract object class.</summary>
-    Abstract,
-
-    /// <summary>Structural object class.</summary>
-    Structural,
-
-    /// <summary>Auxiliary object class.</summary>
-    Auxiliary,
-}
-
 /// <summary>Definition of an object class.</summary>
 /// <remarks>
 /// <para>
-/// The ABNF notation of an ObjectClassDescription is:
-///     ObjectClassDescription = LPAREN WSP
+/// The ABNF notation of an DITContentRuleDescription is:
+///     DITContentRuleDescription = LPAREN WSP
 ///         numericoid                 ; object identifier
 ///         [ SP "NAME" SP qdescrs ]   ; short names (descriptors)
 ///         [ SP "DESC" SP qdstring ]  ; description
 ///         [ SP "OBSOLETE" ]          ; not active
-///         [ SP "SUP" SP oids ]       ; superior object classes
-///         [ SP kind ]                ; kind of class
+///         [ SP "AUX" SP oids ]       ; auxiliary object classes
 ///         [ SP "MUST" SP oids ]      ; attribute types
 ///         [ SP "MAY" SP oids ]       ; attribute types
-///         extensions WSP RPAREN
-///
-///     kind = "ABSTRACT" / "STRUCTURAL" / "AUXILIARY"
+///         [ SP "NOT" SP oids ]       ; attribute types
+///         extensions WSP RPAREN      ; extensions
 /// </para>
 /// </remarks>
-/// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1.1">RFC 4512 4.1.1. Object Class Definitions</see>
-public class ObjectClassDescription : LdapAbnfClass
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1.6">RFC 4512 4.1.6. DIT Content Rules</see>
+public class DITContentRuleDescription : LdapAbnfClass
 {
     /// <summary>The object identifier assigned to this object class.</summary>
     public string OID { get; set; } = "";
 
-    /// <summary>Short names (descriptors) identifying this object class.</summary>
+    /// <summary>Short names (descriptors) identifying this DIT content rule.</summary>
     public string[] Names { get; set; } = Array.Empty<string>();
 
     /// <summary>The short descriptive string.</summary>
     public string? Description { get; set; }
 
-    /// <summary>Indicates this object class is not active.</summary>
+    /// <summary>Indicates this DIT content rule is not active.</summary>
     public bool Obsolete { get; set; }
 
-    /// <summary>The OID that specifies the direct superclass of this object class.</summary>
-    public string[] SuperTypes { get; set; } = Array.Empty<string>();
-
-    /// <summary>The kind of the object class.</summary>
-    public ObjectClassKind Kind { get; set; } = ObjectClassKind.Structural;
+    /// <summary>Set of auxiliary object classes that entries ubject to this DIT content rule may belong to.</summary>
+    public string[] Auxiliary { get; set; } = Array.Empty<string>();
 
     /// <summary>Set of required attribute types.</summary>
     public string[] Must { get; set; } = Array.Empty<string>();
@@ -62,21 +44,22 @@ public class ObjectClassDescription : LdapAbnfClass
     /// <summary>Set of allowed attribute types.</summary>
     public string[] May { get; set; } = Array.Empty<string>();
 
+    /// <summary>Set of allowed attribute types.</summary>
+    public string[] Not { get; set; } = Array.Empty<string>();
+
     internal override List<(string, TryReadField, bool)> Fields => new()
     {
         ("OID", TryReadIdentifierField, true),
         ("NAME", TryReadNameField, false),
         ("DESC", TryReadDescField, false),
         ("OBSOLETE", TryReadObsoleteField, false),
-        ("SUP", TryReadSupField, false),
-        ("ABSTRACT", TryReadAbstractField, false),
-        ("STRUCTURAL", TryReadStructuralField, false),
-        ("AUXILIARY", TryReadAuxiliaryField, false),
+        ("AUX", TryReadAuxField, false),
         ("MUST", TryReadMustField, false),
         ("MAY", TryReadMayField, false),
+        ("NOT", TryReadNotField, false),
     };
 
-    public ObjectClassDescription(string definition) : base(definition) { }
+    public DITContentRuleDescription(string definition) : base(definition) { }
 
     public override string ToString()
     {
@@ -100,25 +83,10 @@ public class ObjectClassDescription : LdapAbnfClass
             sb.Append(" OBSOLETE");
         }
 
-        if (SuperTypes.Length > 0)
+        if (Auxiliary.Length > 0)
         {
-            string value = AbnfEncoder.EncodeOids(SuperTypes);
-            sb.AppendFormat(" SUP {0}", value);
-        }
-
-        switch (Kind)
-        {
-            case ObjectClassKind.Abstract:
-                sb.Append(" ABSTRACT");
-                break;
-
-            case ObjectClassKind.Structural:
-                sb.AppendFormat(" STRUCTURAL");
-                break;
-
-            case ObjectClassKind.Auxiliary:
-                sb.Append(" AUXILIARY");
-                break;
+            string value = AbnfEncoder.EncodeOids(Auxiliary);
+            sb.AppendFormat(" AUX {0}", value);
         }
 
         if (Must.Length > 0)
@@ -131,6 +99,12 @@ public class ObjectClassDescription : LdapAbnfClass
         {
             string value = AbnfEncoder.EncodeOids(May);
             sb.AppendFormat(" MAY {0}", value);
+        }
+
+        if (Not.Length > 0)
+        {
+            string value = AbnfEncoder.EncodeOids(Not);
+            sb.AppendFormat(" NOT {0}", value);
         }
 
         foreach (KeyValuePair<string, string[]> ext in Extensions)
@@ -189,40 +163,6 @@ public class ObjectClassDescription : LdapAbnfClass
         return true;
     }
 
-    private bool TryReadSupField(ReadOnlySpan<char> data, out int charConsumed)
-    {
-        if (TryReadOids(data, out var oids, out charConsumed))
-        {
-            SuperTypes = oids;
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
-    private bool TryReadAbstractField(ReadOnlySpan<char> data, out int charConsumed)
-    {
-        charConsumed = 0;
-        Kind = ObjectClassKind.Abstract;
-        return true;
-    }
-
-    private bool TryReadStructuralField(ReadOnlySpan<char> data, out int charConsumed)
-    {
-        charConsumed = 0;
-        Kind = ObjectClassKind.Structural;
-        return true;
-    }
-
-    private bool TryReadAuxiliaryField(ReadOnlySpan<char> data, out int charConsumed)
-    {
-        charConsumed = 0;
-        Kind = ObjectClassKind.Auxiliary;
-        return true;
-    }
-
     private bool TryReadMustField(ReadOnlySpan<char> data, out int charConsumed)
     {
         if (TryReadOids(data, out var oids, out charConsumed))
@@ -236,11 +176,37 @@ public class ObjectClassDescription : LdapAbnfClass
         }
     }
 
+    private bool TryReadAuxField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        if (TryReadOids(data, out var oids, out charConsumed))
+        {
+            Auxiliary = oids;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
     private bool TryReadMayField(ReadOnlySpan<char> data, out int charConsumed)
     {
         if (TryReadOids(data, out var oids, out charConsumed))
         {
             May = oids;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    private bool TryReadNotField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        if (TryReadOids(data, out var oids, out charConsumed))
+        {
+            Not = oids;
             return true;
         }
         else

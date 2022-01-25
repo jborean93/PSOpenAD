@@ -451,7 +451,7 @@ internal static class AbnfDecoder
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1">RFC 4512 4.1. Schema Definitions</see>
     public static bool TryParseQDescrs(ReadOnlySpan<char> data, out string[] qdescrs, out int charsConsumed)
     {
-        return TryParseQuotedStringList(data, out qdescrs, out charsConsumed, TryParseQDescr);
+        return TryParseValueList(data, out qdescrs, out charsConsumed, TryParseQDescr);
     }
 
     /// <summary>Tries to parse a qdescr value.</summary>
@@ -497,7 +497,7 @@ internal static class AbnfDecoder
     /// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1">RFC 4512 4.1. Schema Definitions</see>
     public static bool TryParseQDStrings(ReadOnlySpan<char> data, out string[] qdstrings, out int charsConsumed)
     {
-        return TryParseQuotedStringList(data, out qdstrings, out charsConsumed, TryParseQDString);
+        return TryParseValueList(data, out qdstrings, out charsConsumed, TryParseQDString);
     }
 
     /// <summary>Tries to parse a qdescr value.</summary>
@@ -613,11 +613,11 @@ internal static class AbnfDecoder
         return true;
     }
 
-    private delegate bool TryParsedQuotedString(ReadOnlySpan<char> data, out string value,
+    internal delegate bool TryParseValueReader(ReadOnlySpan<char> data, out string value,
         out int charsConsumed);
 
-    private static bool TryParseQuotedStringList(ReadOnlySpan<char> data, out string[] strings, out int charsConsumed,
-        TryParsedQuotedString valueParser)
+    internal static bool TryParseValueList(ReadOnlySpan<char> data, out string[] strings, out int charsConsumed,
+        TryParseValueReader valueParser)
     {
         if (valueParser(data, out var value, out charsConsumed))
         {
@@ -676,7 +676,7 @@ internal static class AbnfDecoder
 internal static class AbnfEncoder
 {
     /// <summary>Encodes a list of OID values.</summary>
-    /// <param name="value">The oids to encode.</param>
+    /// <param name="oids">The oids to encode.</param>
     /// <returns>The string encoded oids.</returns>
     public static string EncodeOids(string[] oids)
     {
@@ -693,6 +693,30 @@ internal static class AbnfEncoder
             string values = string.Join(" $ ", oids);
             return $"( {values} )";
         }
+    }
+
+    /// <summary>Encodes a list of QDescrs values.</summary>
+    /// <param name="value">The values to encode.</param>
+    /// <returns>The string encoded values.</returns>
+    public static string EncodeQDescrs(string[] value)
+    {
+        if (value.Length == 1)
+        {
+            return EncodeQDescr(value[0]);
+        }
+        else
+        {
+            string values = string.Join(" ", value.Select(v => EncodeQDescr(v)));
+            return $"( {values} )";
+        }
+    }
+
+    /// <summary>Encode a single QDescr value.</summary>
+    /// <param name="value">The value to encode.</param>
+    /// <returns>The string encoded value.</returns>
+    public static string EncodeQDescr(string value)
+    {
+        return $"'{value}'";
     }
 
     /// <summary>Encodes a list of QDString values.</summary>
@@ -722,5 +746,199 @@ internal static class AbnfEncoder
     {
         string escapedValue = value.Replace("\\", "\\5C").Replace("'", "\\27");
         return $"'{escapedValue}'";
+    }
+}
+
+/// <summary>Base class used for and LDAP complex values that are defined by an ABNF format.</summary>
+public abstract class LdapAbnfClass
+{
+    internal abstract List<(string, TryReadField, bool)> Fields { get; }
+
+    /// <summary>Custom extensions of this attribute type.</summary>
+    public Dictionary<string, string[]> Extensions { get; set; } = new();
+
+    internal LdapAbnfClass(string definition)
+    {
+        ReadOnlySpan<char> data = definition.AsSpan();
+        if (data.Length < 2 || data[0] != '(')
+        {
+            string className = GetType().Name;
+            throw new FormatException($"Invalid {className} value does not start with '('");
+        }
+        data = data[1..];
+
+        AbnfDecoder.TryParseWSP(data, out var _, out var read);
+        data = data[read..];
+
+        read = 0;
+        bool first = true;
+        foreach ((string field, TryReadField reader, bool required) in Fields)
+        {
+            if (!first && !AbnfDecoder.TryParseSP(data, out var _, out read))
+            {
+                break;
+            }
+
+            if (first || data[read..].StartsWith(field))
+            {
+                data = data[read..];
+                int valueOffset = first ? 0 : field.Length;
+
+                if (reader(data[valueOffset..], out read))
+                {
+                    data = data[(valueOffset + read)..];
+                }
+                else
+                {
+                    string className = GetType().Name;
+                    throw new FormatException($"Invalid {className} {field} value is invalid");
+                }
+            }
+            else if (required)
+            {
+                string className = GetType().Name;
+                throw new FormatException($"Invalid {className} {field} value is missing");
+            }
+
+            first = false;
+        }
+
+        AbnfDecoder.TryParseExtensions(data, out var parsedExtensions, out read);
+        if (read > 0)
+        {
+            Extensions = parsedExtensions;
+            data = data[read..];
+        }
+
+        AbnfDecoder.TryParseWSP(data, out var _, out read);
+        data = data[read..];
+
+        if (data.Length != 1 || data[0] != ')')
+        {
+            string className = GetType().Name;
+            throw new FormatException($"Invalid {className} value does not end with ')'");
+        }
+    }
+
+    internal delegate bool TryReadField(ReadOnlySpan<char> data, out int charConsumed);
+
+    internal bool TryReadQDescrs(ReadOnlySpan<char> data, out string[] qdescrs, out int charConsumed)
+    {
+        qdescrs = Array.Empty<string>();
+        charConsumed = 0;
+
+        if (!AbnfDecoder.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (AbnfDecoder.TryParseQDescrs(data, out qdescrs, out read))
+        {
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    internal bool TryReadQDString(ReadOnlySpan<char> data, out string qdstring, out int charConsumed)
+    {
+        qdstring = "";
+        charConsumed = 0;
+
+        if (!AbnfDecoder.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (AbnfDecoder.TryParseQDString(data, out qdstring, out read))
+        {
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    internal bool TryReadNumericOid(ReadOnlySpan<char> data, bool whiteSpacePrefix, out string oid,
+        out int charConsumed)
+    {
+        oid = "";
+        charConsumed = 0;
+
+        int read = 0;
+        if (whiteSpacePrefix)
+        {
+            if (!AbnfDecoder.TryParseSP(data, out var _, out read))
+            {
+                return false;
+            }
+            data = data[read..];
+            charConsumed += read;
+        }
+
+        if (AbnfDecoder.TryParseNumericOid(data, out oid, out read))
+        {
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    internal bool TryReadOid(ReadOnlySpan<char> data, out string oid, out int charConsumed)
+    {
+        oid = "";
+        charConsumed = 0;
+
+        if (!AbnfDecoder.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (AbnfDecoder.TryParseOid(data, out oid, out read))
+        {
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    internal bool TryReadOids(ReadOnlySpan<char> data, out string[] oids, out int charConsumed)
+    {
+        oids = Array.Empty<string>();
+        charConsumed = 0;
+
+        if (!AbnfDecoder.TryParseSP(data, out var _, out var read))
+        {
+            return false;
+        }
+        data = data[read..];
+        charConsumed += read;
+
+        if (AbnfDecoder.TryParseOids(data, out oids, out read))
+        {
+            charConsumed += read;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 }

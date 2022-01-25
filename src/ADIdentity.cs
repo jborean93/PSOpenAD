@@ -121,7 +121,7 @@ public class ADPrincipalIdentity : ADObjectIdentity
 
         try
         {
-            SecurityIdentifier sid = new SecurityIdentifier(value);
+            SecurityIdentifier sid = new(value);
             filter = ObjectSidFilter(sid);
             return true;
         }

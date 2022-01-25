@@ -156,10 +156,13 @@ internal sealed class OpenADSessionFactory
                 foreach (PartialAttribute attribute in searchRes.Attributes)
                 {
                     if (attribute.Name == "defaultNamingContext")
+                    {
                         defaultNamingContext = Encoding.UTF8.GetString(attribute.Values[0]);
-
+                    }
                     else if (attribute.Name == "subschemaSubentry")
+                    {
                         subschemaSubentry = Encoding.UTF8.GetString(attribute.Values[0]);
+                    }
                 }
             }
 
@@ -215,8 +218,7 @@ internal sealed class OpenADSessionFactory
         };
         if (sessionOptions.SkipCertificateCheck)
         {
-            authOptions.RemoteCertificateValidationCallback =
-                ((sender, ceritificate, chain, SslPolicyErrors) => true);
+            authOptions.RemoteCertificateValidationCallback = (_1, _2, _3, _4) => true;
         }
 
         SslStream tls = connection.SetTlsStream(authOptions, cancelToken);
@@ -426,7 +428,7 @@ internal sealed class OpenADSessionFactory
             inputToken = response.ServerSaslCreds;
         }
 
-        if (integrity && !context.IntegrityAvailable || confidentiality && !context.ConfidentialityAvailable)
+        if ((integrity && !context.IntegrityAvailable) || (confidentiality && !context.ConfidentialityAvailable))
         {
             throw new AuthenticationException(
                 "Failed to negotiate encryption or signing capabilities with the server during authentication.");
@@ -507,7 +509,7 @@ internal sealed class OpenADSessionFactory
     }
 
     /// <summary>Gets the attribute schema information.</summary>
-    /// <param name="connection">The LDAP connection to perform the search on on.</param>
+    /// <param name="connection">The LDAP connection to perform the search on.</param>
     /// <param name="subschemaSubentry">The DN of the subschemaSubentry to query.</param>
     /// <param name="cancelToken">Token to cancel any network IO waits</param>
     /// <param name="cmdlet">PSCmdlet used to write verbose records.</param>

@@ -119,8 +119,8 @@ internal sealed class AttributeTransformer
             }
             catch (Exception e)
             {
-                ErrorRecord rec = new ErrorRecord(e, "AttributeParserError", ErrorCategory.ParserError, val);
-                rec.ErrorDetails = new ErrorDetails($"Failed to parse {attribute} (OID '{oidSyntax}') - {e.Message}");
+                ErrorRecord rec = new(e, "AttributeParserError", ErrorCategory.ParserError, val);
+                rec.ErrorDetails = new($"Failed to parse {attribute} (OID '{oidSyntax}') - {e.Message}");
                 cmdlet?.WriteError(rec);
 
                 parsed = PSObject.AsPSObject(val);

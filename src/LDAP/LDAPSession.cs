@@ -161,7 +161,6 @@ internal class LDAPSession
         int written = writer.Encode(buffer.Span);
         _outgoing.Writer.Advance(written);
 
-
         _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
     }
 

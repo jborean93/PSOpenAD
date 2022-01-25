@@ -111,14 +111,24 @@ public class SyntaxDefinitionTests
     }
 
     [Fact]
-    public void ReadDITContextRuleDescription()
+    public void ReadDITContentRuleDescription()
     {
         const string raw = "( 2.5.6.4 DESC 'content rule for organization' NOT ( x121Address $ telexNumber ) )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadDITContentRuleDescription(data);
+        DITContentRuleDescription actual = SyntaxDefinition.ReadDITContentRuleDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("2.5.6.4", actual.OID);
+        Assert.Empty(actual.Names);
+        Assert.Equal("content rule for organization", actual.Description);
+        Assert.False(actual.Obsolete);
+        Assert.Empty(actual.Auxiliary);
+        Assert.Empty(actual.Must);
+        Assert.Empty(actual.May);
+        Assert.Equal(new[] { "x121Address", "telexNumber" }, actual.Not);
+        Assert.Empty(actual.Extensions);
+
+        Assert.Equal(raw, actual.ToString());
     }
 
     [Fact]
@@ -127,9 +137,17 @@ public class SyntaxDefinitionTests
         const string raw = "( 2 DESC 'organization structure rule' FORM 2.5.15.3 )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadDITStructureRuleDescription(data);
+        DITStructureRuleDescription actual = SyntaxDefinition.ReadDITStructureRuleDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("2", actual.Id);
+        Assert.Empty(actual.Names);
+        Assert.Equal("organization structure rule", actual.Description);
+        Assert.False(actual.Obsolete);
+        Assert.Equal("2.5.15.3", actual.Form);
+        Assert.Empty(actual.SuperRules);
+        Assert.Empty(actual.Extensions);
+
+        Assert.Equal(raw, actual.ToString());
     }
 
     [Fact]
@@ -138,7 +156,7 @@ public class SyntaxDefinitionTests
         const string raw = "person#(sn$EQ)#oneLevel";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadDITStructureRuleDescription(data);
+        string actual = SyntaxDefinition.ReadEnhancedGuide(data);
 
         Assert.Equal(raw, actual);
     }
@@ -273,9 +291,16 @@ public class SyntaxDefinitionTests
         const string raw = "( 2.5.13.2 NAME 'caseIgnoreMatch' SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadMatchingRuleDescription(data);
+        MatchingRuleDescription actual = SyntaxDefinition.ReadMatchingRuleDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("2.5.13.2", actual.OID);
+        Assert.Equal(new[] { "caseIgnoreMatch" }, actual.Names);
+        Assert.Null(actual.Description);
+        Assert.False(actual.Obsolete);
+        Assert.Equal("1.3.6.1.4.1.1466.115.121.1.15", actual.Syntax);
+        Assert.Empty(actual.Extensions);
+
+        Assert.Equal(raw, actual.ToString());
     }
 
     [Fact]
@@ -284,9 +309,16 @@ public class SyntaxDefinitionTests
         const string raw = "( 2.5.13.16 APPLIES ( givenName $ surname ) )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadMatchingRuleUseDescription(data);
+        MatchingRuleUseDescription actual = SyntaxDefinition.ReadMatchingRuleUseDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("2.5.13.16", actual.OID);
+        Assert.Empty(actual.Names);
+        Assert.Null(actual.Description);
+        Assert.False(actual.Obsolete);
+        Assert.Equal(new [] { "givenName", "surname" }, actual.Applies);
+        Assert.Empty(actual.Extensions);
+
+        Assert.Equal(raw, actual.ToString());
     }
 
     [Theory]
@@ -309,9 +341,18 @@ public class SyntaxDefinitionTests
         const string raw = "( 2.5.15.3 NAME 'orgNameForm' OC organization MUST o )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadNameFormDescription(data);
+        NameFormDescription actual = SyntaxDefinition.ReadNameFormDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("2.5.15.3", actual.OID);
+        Assert.Equal(new[] { "orgNameForm" }, actual.Names);
+        Assert.Null(actual.Description);
+        Assert.False(actual.Obsolete);
+        Assert.Equal("organization", actual.ObjectClass);
+        Assert.Equal(new[] { "o" }, actual.Must);
+        Assert.Empty(actual.May);
+        Assert.Empty(actual.Extensions);
+
+        Assert.Equal(raw, actual.ToString());
     }
 
     [Theory]
@@ -535,9 +576,13 @@ public class SyntaxDefinitionTests
         const string raw = "( 1.3.6.1.4.1.1466.115.121.1.54 DESC 'LDAP Syntax Description' )";
         byte[] data = Encoding.UTF8.GetBytes(raw);
 
-        string actual = SyntaxDefinition.ReadLDAPSyntaxDescription(data);
+        SyntaxDescription actual = SyntaxDefinition.ReadLDAPSyntaxDescription(data);
 
-        Assert.Equal(raw, actual);
+        Assert.Equal("1.3.6.1.4.1.1466.115.121.1.54", actual.OID);
+        Assert.Equal("LDAP Syntax Description", actual.Description);
+        Assert.Empty(actual.Extensions);
+
+        Assert.Equal(raw, actual.ToString());
     }
 
     [Theory]

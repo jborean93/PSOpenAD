@@ -118,7 +118,7 @@ public static class AttributeTypeDescriptionTests
     }
 
     [Fact]
-    public static void ParseWithNonames()
+    public static void ParseWithNoNames()
     {
         const string VALUE = "( 1.0 )";
 
@@ -246,7 +246,7 @@ public static class AttributeTypeDescriptionTests
 
         var ex = Assert.Throws<FormatException>(() => new AttributeTypeDescription(VALUE));
 
-        Assert.Equal("Invalid AttributeTypeDescription value has no numericoid value", ex.Message);
+        Assert.Equal("Invalid AttributeTypeDescription OID value is invalid", ex.Message);
     }
 
     [Fact]

@@ -31,7 +31,7 @@ internal sealed class LibraryInfo : IDisposable
 
 internal sealed class NativeResolver : IDisposable
 {
-    private readonly Dictionary<string, LibraryInfo> NativeHandles = new Dictionary<string, LibraryInfo>();
+    private readonly Dictionary<string, LibraryInfo> NativeHandles = new();
 
     public NativeResolver()
     {

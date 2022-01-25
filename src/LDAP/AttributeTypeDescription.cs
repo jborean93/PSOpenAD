@@ -7,7 +7,6 @@ namespace PSOpenAD.LDAP;
 /// <summary>The application of the attribute type.</summary>
 public enum AttributeTypeUsage
 {
-
     /// <summary>Attributes of this type represent user information.</summary>
     UserApplications,
 
@@ -23,6 +22,7 @@ public enum AttributeTypeUsage
 
 /// <summary>Definition of an attribute type.</summary>
 /// <remarks>
+/// <para>
 /// The ABNF notation of an AttributeTypeDescription is:
 ///     AttributeTypeDescription = LPAREN WSP
 ///         numericoid                    ; object identifier
@@ -44,12 +44,13 @@ public enum AttributeTypeUsage
 ///             "directoryOperation"   /  ; directory operational
 ///             "distributedOperation" /  ; DSA-shared operational
 ///             "dSAOperation"            ; DSA-specific operational
+/// </para>
 /// </remarks>
 /// <see href="https://datatracker.ietf.org/doc/html/rfc4512#section-4.1.2">RFC 4512 4.1.2.Attribute Types</see>
-public class AttributeTypeDescription
+public class AttributeTypeDescription : LdapAbnfClass
 {
     /// <summary>The object identifier assigned to this attribute type.</summary>
-    public string OID { get; set; }
+    public string OID { get; set; } = "";
 
     /// <summary>Short names (descriptors) identifying this attribute type.</summary>
     public string[] Names { get; set; } = Array.Empty<string>();
@@ -90,100 +91,40 @@ public class AttributeTypeDescription
     /// <summary>The application of this attribute type.</summary>
     public AttributeTypeUsage Usage { get; set; } = AttributeTypeUsage.UserApplications;
 
-    /// <summary>Custom extensions of this attribute type.</summary>
-    public Dictionary<string, string[]> Extensions { get; set; } = new();
-
-    public AttributeTypeDescription(string definition)
+    internal override List<(string, TryReadField, bool)> Fields => new()
     {
-        ReadOnlySpan<char> data = definition.AsSpan();
-        if (data.Length < 2 || data[0] != '(')
-        {
-            throw new FormatException("Invalid AttributeTypeDescription value does not start with '('");
-        }
-        data = data[1..];
+        ("OID", TryReadIdentifierField, true),
+        ("NAME", TryReadNameField, false),
+        ("DESC", TryReadDescField, false),
+        ("OBSOLETE", TryReadObsoleteField, false),
+        ("SUP", TryReadSupField, false),
+        ("EQUALITY", TryReadEqualityField, false),
+        ("ORDERING", TryReadOrderingField, false),
+        ("SUBSTR", TryReadSubstrField, false),
+        ("SYNTAX", TryReadSyntaxField, false),
+        ("SINGLE-VALUE", TryReadSingleValueField, false),
+        ("COLLECTIVE", TryReadCollectiveField, false),
+        ("NO-USER-MODIFICATION", TryReadNoUserModificationField, false),
+        ("USAGE", TryReadUsageField, false),
+    };
 
-        AbnfDecoder.TryParseWSP(data, out var _, out var read);
-        data = data[read..];
-
-        if (!AbnfDecoder.TryParseNumericOid(data, out var numericOid, out read))
-        {
-            throw new FormatException("Invalid AttributeTypeDescription value has no numericoid value");
-        }
-        OID = numericOid;
-        data = data[read..];
-
-        List<(string, TryReadOptionalField)> fields = new()
-        {
-            ("NAME", TryReadNameField),
-            ("DESC", TryReadDescField),
-            ("OBSOLETE", TryReadObsoleteField),
-            ("SUP", TryReadSupField),
-            ("EQUALITY", TryReadEqualityField),
-            ("ORDERING", TryReadOrderingField),
-            ("SUBSTR", TryReadSubstrField),
-            ("SYNTAX", TryReadSyntaxField),
-            ("SINGLE-VALUE", TryReadSingleValueField),
-            ("COLLECTIVE", TryReadCollectiveField),
-            ("NO-USER-MODIFICATION", TryReadNoUserModificationField),
-            ("USAGE", TryReadUsageField),
-        };
-        foreach ((string field, TryReadOptionalField reader) in fields)
-        {
-            if (!AbnfDecoder.TryParseSP(data, out var _, out read))
-            {
-                break;
-            }
-
-            if (data[read..].StartsWith(field))
-            {
-                data = data[read..];
-
-                if (reader(data[field.Length..], out read))
-                {
-                    data = data[(field.Length + read)..];
-                }
-                else
-                {
-                    throw new FormatException($"Invalid AttributeTypeDescription {field} value is invalid");
-                }
-            }
-        }
-
-        AbnfDecoder.TryParseExtensions(data, out var parsedExtensions, out read);
-        if (read > 0)
-        {
-            Extensions = parsedExtensions;
-            data = data[read..];
-        }
-
-        AbnfDecoder.TryParseWSP(data, out var _, out read);
-        data = data[read..];
-
-        if (data.Length != 1 || data[0] != ')')
-        {
-            throw new FormatException("Invalid AttributeTypeDescription value does not end with ')'");
-        }
-    }
+    public AttributeTypeDescription(string definition) : base(definition) { }
 
     public override string ToString()
     {
-        StringBuilder sb = new StringBuilder();
-        sb.Append($"( {OID}");
+        StringBuilder sb = new();
+        sb.AppendFormat("( {0}", OID);
 
-        if (Names.Length == 1)
+        if (Names.Length > 0)
         {
-            sb.Append($" NAME '{Names[0]}'");
-        }
-        else if (Names.Length > 1)
-        {
-            string names = string.Join("' '", Names);
-            sb.Append($" NAME ( '{names}' )");
+            string names = AbnfEncoder.EncodeQDescrs(Names);
+            sb.AppendFormat(" NAME {0}", names);
         }
 
         if (!string.IsNullOrWhiteSpace(Description))
         {
             string desc = AbnfEncoder.EncodeQDString(Description);
-            sb.Append($" DESC {desc}");
+            sb.AppendFormat(" DESC {0}", desc);
         }
 
         if (Obsolete)
@@ -193,30 +134,30 @@ public class AttributeTypeDescription
 
         if (!string.IsNullOrWhiteSpace(SuperType))
         {
-            sb.Append($" SUP {SuperType}");
+            sb.AppendFormat(" SUP {0}", SuperType);
         }
 
         if (!string.IsNullOrWhiteSpace(Equality))
         {
-            sb.Append($" EQUALITY {Equality}");
+            sb.AppendFormat(" EQUALITY {0}", Equality);
         }
 
         if (!string.IsNullOrWhiteSpace(Ordering))
         {
-            sb.Append($" ORDERING {Ordering}");
+            sb.AppendFormat(" ORDERING {0}", Ordering);
         }
 
         if (!string.IsNullOrWhiteSpace(Substrings))
         {
-            sb.Append($" SUBSTR {Substrings}");
+            sb.AppendFormat(" SUBSTR {0}", Substrings);
         }
 
         if (!string.IsNullOrWhiteSpace(Syntax))
         {
-            sb.Append($" SYNTAX {Syntax}");
+            sb.AppendFormat(" SYNTAX {0}", Syntax);
             if (SyntaxLength != null)
             {
-                sb.Append("{" + SyntaxLength.ToString() + "}");
+                sb.Append("{").Append(SyntaxLength.ToString()).Append("}");
             }
         }
 
@@ -253,30 +194,31 @@ public class AttributeTypeDescription
         foreach (KeyValuePair<string, string[]> ext in Extensions)
         {
             string value = AbnfEncoder.EncodeQDStrings(ext.Value);
-            sb.Append($" {ext.Key} {value}");
+            sb.AppendFormat(" {0} {1}", ext.Key, value);
         }
 
         sb.Append(" )");
         return sb.ToString();
     }
 
-    private delegate bool TryReadOptionalField(ReadOnlySpan<char> data, out int charConsumed);
-
-    private bool TryReadNameField(ReadOnlySpan<char> data, out int charConsumed)
+    private bool TryReadIdentifierField(ReadOnlySpan<char> data, out int charConsumed)
     {
-        charConsumed = 0;
-
-        if (!AbnfDecoder.TryParseSP(data, out var _, out var read))
+        if (TryReadNumericOid(data, false, out var oid, out charConsumed))
+        {
+            OID = oid;
+            return true;
+        }
+        else
         {
             return false;
         }
-        data = data[read..];
-        charConsumed += read;
+    }
 
-        if (AbnfDecoder.TryParseQDescrs(data, out var names, out read))
+    private bool TryReadNameField(ReadOnlySpan<char> data, out int charConsumed)
+    {
+        if (TryReadQDescrs(data, out var value, out charConsumed))
         {
-            Names = names;
-            charConsumed += read;
+            Names = value;
             return true;
         }
         else
@@ -287,19 +229,9 @@ public class AttributeTypeDescription
 
     private bool TryReadDescField(ReadOnlySpan<char> data, out int charConsumed)
     {
-        charConsumed = 0;
-
-        if (!AbnfDecoder.TryParseSP(data, out var _, out var read))
+        if (TryReadQDString(data, out var value, out charConsumed))
         {
-            return false;
-        }
-        data = data[read..];
-        charConsumed += read;
-
-        if (AbnfDecoder.TryParseQDString(data, out var desc, out read))
-        {
-            Description = desc;
-            charConsumed += read;
+            Description = value;
             return true;
         }
         else
@@ -317,7 +249,7 @@ public class AttributeTypeDescription
 
     private bool TryReadSupField(ReadOnlySpan<char> data, out int charConsumed)
     {
-        if (TryReadOidField(data, out var oid, out charConsumed))
+        if (TryReadOid(data, out var oid, out charConsumed))
         {
             SuperType = oid;
             return true;
@@ -330,7 +262,7 @@ public class AttributeTypeDescription
 
     private bool TryReadEqualityField(ReadOnlySpan<char> data, out int charConsumed)
     {
-        if (TryReadOidField(data, out var oid, out charConsumed))
+        if (TryReadOid(data, out var oid, out charConsumed))
         {
             Equality = oid;
             return true;
@@ -343,7 +275,7 @@ public class AttributeTypeDescription
 
     private bool TryReadOrderingField(ReadOnlySpan<char> data, out int charConsumed)
     {
-        if (TryReadOidField(data, out var oid, out charConsumed))
+        if (TryReadOid(data, out var oid, out charConsumed))
         {
             Ordering = oid;
             return true;
@@ -356,7 +288,7 @@ public class AttributeTypeDescription
 
     private bool TryReadSubstrField(ReadOnlySpan<char> data, out int charConsumed)
     {
-        if (TryReadOidField(data, out var oid, out charConsumed))
+        if (TryReadOid(data, out var oid, out charConsumed))
         {
             Substrings = oid;
             return true;
@@ -454,29 +386,6 @@ public class AttributeTypeDescription
                     return false;
             }
 
-            charConsumed += read;
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
-    private bool TryReadOidField(ReadOnlySpan<char> data, out string oid, out int charConsumed)
-    {
-        oid = "";
-        charConsumed = 0;
-
-        if (!AbnfDecoder.TryParseSP(data, out var _, out var read))
-        {
-            return false;
-        }
-        data = data[read..];
-        charConsumed += read;
-
-        if (AbnfDecoder.TryParseOid(data, out oid, out read))
-        {
             charConsumed += read;
             return true;
         }

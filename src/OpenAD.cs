@@ -310,34 +310,43 @@ public enum InstanceType
 public enum PasswordProperties
 {
     /// <summary>
+    /// <para>
     /// The password must have a mix of at least two of the following types of characters:
     ///     * Uppercase characters
     ///     * Lowercase characters
     ///     * Numerals
-    ///
+    /// </para>
+    /// <para>
     /// DOMAIN_PASSWORD_COMPLEX
+    /// </para>
     /// </summary>
     Complex = 0x00000001,
 
     /// <summary>
+    /// <para>
     /// The password cannot be changed without logging on. Otherwise, if your password has expired, you can change
     /// your password and then log on.
-    ///
+    /// </para>
+    /// <para>
     /// DOMAIN_PASSWORD_NO_ANON_CHANGE
     /// </summary>
     NoAnonymousChange = 0x00000002,
 
     /// <summary>
+    /// <para>
     /// Forces the client to use a protocol that does not allow the domain controller to get the plaintext
     /// password.
-    ///
+    /// </para>
+    /// <para>
     /// DOMAIN_PASSWORD_NO_CLEAR_CHANGE
     /// </summary>
     NoClearChange = 0x00000004,
 
     /// <summary>
+    /// <para>
     /// Allows the built-in administrator account to be locked out from network logons.
-    ///
+    /// </para>
+    /// <para>
     /// DOMAIN_LOCKOUT_ADMINS
     /// </summary>
     LockoutAdmins = 0x00000008,
@@ -345,15 +354,18 @@ public enum PasswordProperties
     /// <summary>
     /// The directory service is storing a plaintext password for all users instead of a hash function of the
     /// password.
-    ///
+    /// </para>
+    /// <para>
     /// DOMAIN_PASSWORD_STORE_CLEARTEXT
     /// </summary>
     StoreCleartext = 0x00000010,
 
     /// <summary>
+    /// <para>
     /// Removes the requirement that the machine account password be automatically changed every week. This value
     /// should not be used as it can weaken security.
-    ///
+    /// </para>
+    /// <para>
     /// DOMAIN_REFUSE_PASSWORD_CHANGE
     /// </summary>
     RefusePasswordChange = 0x00000020,
