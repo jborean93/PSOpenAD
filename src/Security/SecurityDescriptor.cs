@@ -96,9 +96,10 @@ public enum ControlFlags : ushort
     SelfRelative = 0x8000,
 }
 
-public class CommonSecurityDescriptor
+public sealed class CommonSecurityDescriptor
 {
-    public int BinaryLength => 0;
+    public int BinaryLength => 20 + (Owner?.BinaryLength + Group?.BinaryLength + SystemAcl?.BinaryLength +
+        DiscretionaryAcl?.BinaryLength) ?? 0;
 
     public ControlFlags Flags { get; set; }
 

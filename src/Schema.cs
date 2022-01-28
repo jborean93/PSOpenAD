@@ -75,25 +75,94 @@ internal static class DefaultOverrider
     }
 }
 
-internal sealed class AttributeTransformer
+internal sealed class ObjectClass
+{
+    public string Name { get; }
+    public ObjectClass[] SuperTypes { get; }
+    public string[] Must { get; }
+    public string[] May { get; }
+
+    public ObjectClass(string name, ObjectClass[] superTypes, string[] must, string[] may)
+    {
+        Name = name;
+        SuperTypes = superTypes;
+        Must = must;
+        May = may;
+    }
+}
+
+internal sealed class SchemaMetadata
 {
     private readonly Dictionary<string, AttributeTypeDescription> _typeInformation;
+    private readonly Dictionary<string, ObjectClass> _classInformation = new();
 
-    public AttributeTransformer(Dictionary<string, AttributeTypeDescription> typeInformation)
+    public SchemaMetadata(Dictionary<string, AttributeTypeDescription> typeInformation,
+        Dictionary<string, ObjectClassDescription> classInformation)
     {
         _typeInformation = typeInformation;
+
+        Queue<ObjectClassDescription> processing = new(classInformation.Values);
+        while (processing.Count > 0)
+        {
+            ObjectClassDescription desc = processing.Dequeue();
+            bool ready = true;
+
+            List<ObjectClass> superTypes = new();
+            List<string> must = new();
+            List<string> may = new();
+            foreach (string superType in desc.SuperTypes)
+            {
+                if (_classInformation.ContainsKey(superType))
+                {
+                    ObjectClass super = _classInformation[superType];
+                    superTypes.Add(super);
+                    must.AddRange(super.Must);
+                    may.AddRange(super.May);
+                }
+                else
+                {
+                    ready = false;
+                    break;
+                }
+            }
+
+            if (ready)
+            {
+                must.AddRange(desc.Must);
+                may.AddRange(desc.May);
+                string className = desc.Names[0];
+                _classInformation[className] = new(className, superTypes.ToArray(), must.ToArray(), may.ToArray());
+
+                // Store this info in the global state if this class hasn't been cached yet. This is used for the
+                // property argument completer.
+                if (!GlobalState.ClassDefintions.ContainsKey(className))
+                {
+                    GlobalState.ClassDefintions[className] = _classInformation[className];
+                }
+            }
+            else
+            {
+                processing.Enqueue(desc);
+            }
+        }
     }
 
     public void RegisterTransformer(string attribute, DefaultOverrider.CustomTransform transformer)
         => DefaultOverrider.Overrides[attribute] = transformer;
 
-    public (PSObject[], bool) Transform(string attribute, IList<byte[]> value, PSCmdlet? cmdlet)
+    public ObjectClass GetClassInformation(string name)
+    {
+        return _classInformation[name];
+    }
+
+    public (PSObject[], bool) TransformAttributeValue(string attribute, IList<byte[]> value, PSCmdlet? cmdlet)
     {
         AttributeTypeDescription? attrInfo = null;
         if (_typeInformation.ContainsKey(attribute))
             attrInfo = _typeInformation[attribute];
 
-        string oidSyntax = attrInfo?.Syntax ?? "Unknown";
+        // Default to DirectoryString for unknown attributes.
+        string oidSyntax = attrInfo?.Syntax ?? "1.3.6.1.4.1.1466.115.121.1.15";
 
         DefaultOverrider.CustomTransform? customTransform = null;
         if (DefaultOverrider.Overrides.ContainsKey(attribute))
@@ -116,7 +185,7 @@ internal sealed class AttributeTransformer
                 }
 
                 parsed = PSObject.AsPSObject(raw);
-                parsed.Properties.Add(new PSNoteProperty("RawValue", val));
+
             }
             catch (Exception e)
             {
@@ -124,9 +193,10 @@ internal sealed class AttributeTransformer
                 rec.ErrorDetails = new($"Failed to parse {attribute} (OID '{oidSyntax}') - {e.Message}");
                 cmdlet?.WriteError(rec);
 
-                parsed = PSObject.AsPSObject(val);
+                parsed = new PSObject();
             }
 
+            parsed.Properties.Add(new PSNoteProperty("RawValue", val));
             processed.Add(parsed);
         }
 

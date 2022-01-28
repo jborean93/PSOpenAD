@@ -55,6 +55,11 @@ public abstract class Acl : IList<Ace>
                 AceType.SystemAlarmObject, AceType.SystemMandatoryLabel };
     }
 
+    public override string ToString()
+    {
+        return string.Format("{0} {1} AceCount {2}", GetType().Name, Revision, Count);
+    }
+
     public IEnumerator<Ace> GetEnumerator()
     {
         return _aces.GetEnumerator();
@@ -107,14 +112,14 @@ public abstract class Acl : IList<Ace>
     }
 }
 
-public class DiscretionaryAcl : Acl
+public sealed class DiscretionaryAcl : Acl
 {
     internal override AceType[] AllowedAceTypes => new[] { AceType.AccessAllowed, AceType.AccessAllowedCallback,
         AceType.AccessAllowedCallbackObject, AceType.AccessAllowedCompound, AceType.AccessAllowedObject,
         AceType.AccessDenied, AceType.AccessDeniedCallback, AceType.AccessDeniedCallbackObject,
         AceType.AccessDeniedObject };
 
-    protected DiscretionaryAcl(AclRevision revision) : base(revision) { }
+    public DiscretionaryAcl(AclRevision revision) : base(revision) { }
 
     internal static DiscretionaryAcl ParseAcl(ReadOnlySpan<byte> data, out int bytesConsumed)
     {
@@ -137,13 +142,13 @@ public class DiscretionaryAcl : Acl
     }
 }
 
-public class SystemAcl : Acl
+public sealed class SystemAcl : Acl
 {
     internal override AceType[] AllowedAceTypes => new[] { AceType.SystemAudit, AceType.SystemAuditObject,
         AceType.SystemAuditCallback, AceType.SystemAuditCallbackObject, AceType.SystemMandatoryLabel,
         AceType.SystemResourceAttribute, AceType.SystemScopedPolicyId };
 
-    protected SystemAcl(AclRevision revision) : base(revision) { }
+    public SystemAcl(AclRevision revision) : base(revision) { }
 
     internal static SystemAcl ParseAcl(ReadOnlySpan<byte> data, out int bytesConsumed)
     {

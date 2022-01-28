@@ -2,6 +2,137 @@ using System;
 
 namespace PSOpenAD.Security;
 
+/// <summary>
+/// The System.DirectoryServices.ActiveDirectoryRights enumeration specifies the access rights that are assigned to an
+/// Active Directory Domain Services object.
+/// </summary>
+[Flags]
+public enum ObjectAceRights : uint
+{
+    /// <summary>
+    /// The right to create children of the object.
+    /// ADS_RIGHT_DS_CREATE_CHILD
+    /// </summary>
+    CreateChild = 0x00000001,
+
+    /// <summary>
+    /// The right to delete children of the object.
+    /// ADS_RIGHT_DS_DELETE_CHILD
+    /// </summary>
+    DeleteChild = 0x00000002,
+
+    /// <summary>
+    /// The right to list children of this object. For more information about this right, see the topic
+    /// "Controlling Object Visibility" in the MSDN Library http://msdn.microsoft.com/library.
+    /// ADS_RIGHT_ACTRL_DS_LIST
+    /// </summary>
+    ListChildren = 0x00000004,
+
+    /// <summary>
+    /// The right to perform an operation that is controlled by a validated write access right.
+    /// ADS_RIGHT_DS_SELF
+    /// </summary>
+    Self = 0x00000008,
+
+    /// <summary>
+    /// The right to read properties of the object.
+    /// ADS_RIGHT_DS_READ_PROP
+    /// </summary>
+    ReadProperty = 0x00000010,
+
+    /// <summary>
+    /// The right to write properties of the object.
+    /// ADS_RIGHT_DS_WRITE_PROP
+    /// </summary>
+    WriteProperty = 0x00000020,
+
+    /// <summary>
+    /// The right to delete all children of this object, regardless of the permissions of the children.
+    /// ADS_RIGHT_DS_DELETE_TREE
+    /// </summary>
+    DeleteTree = 0x00000040,
+
+    /// <summary>
+    /// The right to list a particular object. For more information about this right, see the topic
+    /// "Controlling Object Visibility" in the MSDN Library at http://msdn.microsoft.com/library.
+    /// ADS_RIGHT_DS_LIST_OBJECT
+    /// </summary>
+    ListObject = 0x00000080,
+
+    /// <summary>
+    /// A customized control access right. For a list of possible extended rights, see the topic "Extended Rights" in
+    /// the MSDN Library at http://msdn.microsoft.com. For more information about extended rights, see the topic
+    /// "Control Access Rights" in the MSDN Library at http://msdn.microsoft.com.
+    /// ADS_RIGHT_DS_CONTROL_ACCESS
+    /// </summary>
+    ExtendedRight = 0x00000100,
+
+    /// <summary>
+    /// The right to delete the object.
+    /// ADS_RIGHT_DELETE
+    /// </summary>
+    Delete = 0x00010000,
+
+    /// <summary>
+    /// The right to read data from the security descriptor of the object, not including the data in the SACL.
+    /// ADS_RIGHT_READ_CONTROL
+    /// </summary>
+    ReadControl = 0x00020000,
+
+    /// <summary>
+    /// The right to read permissions on, and list the contents of, a container object.
+    /// ADS_RIGHT_GENERIC_EXECUTE
+    /// </summary>
+    GenericExecute = 0x00020004,
+
+    /// <summary>
+    /// The right to read permissions on this object, write all the properties on this object, and perform all
+    /// validated writes to this object.
+    /// ADS_RIGHT_GENERIC_WRITE
+    /// </summary>
+    GenericWrite = 0x00020028,
+
+    /// <summary>
+    /// The right to read permissions on this object, read all the properties on this object, list this object name
+    /// when the parent container is listed, and list the contents of this object if it is a container.
+    /// ADS_RIGHT_GENERIC_READ
+    /// </summary>
+    GenericRead = 0x00020094,
+
+    /// <summary>
+    /// The right to modify the DACL in the object security descriptor.
+    /// ADS_RIGHT_WRITE_DAC
+    /// </summary>
+    WriteDacl = 0x00040000,
+
+    /// <summary>
+    /// The right to assume ownership of the object. The user must be an object trustee. The user cannot transfer the
+    /// ownership to other users.
+    /// ADS_RIGHT_WRITE_OWNER
+    /// </summary>
+    WriteOwner = 0x00080000,
+
+    /// <summary>
+    /// The right to create or delete children, delete a subtree, read and write properties, examine children and the
+    /// object itself, add and remove the object from the directory, and read or write with an extended right.
+    /// ADS_RIGHT_GENERIC_ALL
+    /// </summary>
+    GenericAll = 0x000F01FF,
+
+    /// <summary>
+    /// The right to use the object for synchronization. This right enables a thread to wait until that object is in
+    /// the signaled state.
+    /// ADS_RIGHT_SYNCHRONIZE
+    /// </summary>
+    Synchronize = 0x00100000,
+
+    /// <summary>
+    /// The right to get or set the SACL in the object security descriptor.
+    /// ADS_RIGHT_ACCESS_SYSTEM_SECURITY
+    /// </summary>
+    AccessSystemSecurity = 0x01000000
+}
+
 public enum AceType : byte
 {
     /// <summary>
@@ -248,6 +379,11 @@ public class Ace
         ApplicationData = applicationData;
     }
 
+    public override string ToString()
+    {
+        return string.Format("{0} {1} - 0x{2:X8} {3}", AceType, AceFlags, AccessMask, Sid.Value);
+    }
+
     internal static Ace ParseAce(ReadOnlySpan<byte> data, out int bytesConsumed)
     {
         AceType aceType = (AceType)data[0];
@@ -280,7 +416,7 @@ public class Ace
                 offset += 16;
             }
 
-            SecurityIdentifier sid = new (data[offset..]);
+            SecurityIdentifier sid = new(data[offset..]);
             data = data[(offset + sid.BinaryLength)..];
 
             ace = new ObjectAce(aceType, aceFlags, accessMask, sid, null, objectAceFlags, objectType,

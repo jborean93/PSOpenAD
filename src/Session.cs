@@ -63,10 +63,10 @@ public sealed class OpenADSession
 
     internal LDAPSession Ldap => Connection.Session;
 
-    internal AttributeTransformer AttributeTransformer { get; }
+    internal SchemaMetadata SchemaMetadata { get; }
 
     internal OpenADSession(OpenADConnection connection, Uri uri, AuthenticationMethod auth,
-        bool isSigned, bool isEncrypted, string defaultNamingContext, AttributeTransformer transformer)
+        bool isSigned, bool isEncrypted, string defaultNamingContext, SchemaMetadata schema)
     {
         Connection = connection;
         Uri = uri;
@@ -74,7 +74,7 @@ public sealed class OpenADSession
         IsSigned = isSigned;
         IsEncrypted = isEncrypted;
         DefaultNamingContext = defaultNamingContext;
-        AttributeTransformer = transformer;
+        SchemaMetadata = schema;
     }
 
     internal void Close()
@@ -168,11 +168,10 @@ internal sealed class OpenADSessionFactory
 
             // Attempt to get the schema info of the host so the code can parse the raw LDAP attribute values into
             // the required PowerShell type.
-            AttributeTransformer attrInfo = QueryAttributeTypes(connection, subschemaSubentry, sessionOptions,
-                cancelToken, cmdlet);
+            SchemaMetadata schema = QuerySchema(connection, subschemaSubentry, sessionOptions, cancelToken, cmdlet);
 
             return new OpenADSession(connection, uri, auth, transportIsTls || connection.Sign,
-                transportIsTls || connection.Encrypt, defaultNamingContext, attrInfo);
+                transportIsTls || connection.Encrypt, defaultNamingContext, schema);
         }
         catch
         {
@@ -514,42 +513,37 @@ internal sealed class OpenADSessionFactory
     /// <param name="cancelToken">Token to cancel any network IO waits</param>
     /// <param name="cmdlet">PSCmdlet used to write verbose records.</param>
     /// <returns>The attribute information from the parse schema information.</returns>
-    private static AttributeTransformer QueryAttributeTypes(OpenADConnection connection, string subschemaSubentry,
+    private static SchemaMetadata QuerySchema(OpenADConnection connection, string subschemaSubentry,
         OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
     {
         Dictionary<string, AttributeTypeDescription> attrInfo = new();
+        Dictionary<string, ObjectClassDescription> classInfo = new();
 
         foreach (SearchResultEntry result in Operations.LdapSearchRequest(connection, subschemaSubentry,
             SearchScope.Base, 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
-            new string[] { "attributeTypes" }, null, cancelToken, cmdlet))
+            new string[] { "attributeTypes", "objectClasses" }, null, cancelToken, cmdlet))
         {
-            PartialAttribute? attribute = result.Attributes.First(a => a.Name == "attributeTypes");
-            if (attribute != null)
+            foreach (PartialAttribute attribute in result.Attributes)
             {
                 foreach (byte[] value in attribute.Values)
                 {
                     string rawValue = Encoding.UTF8.GetString(value);
 
-                    // Neither Syntax or Name should be undefined but they are technically optional in the spec.
-                    // Write a verbose entry to help with future debugging if this becomes more of an issue.
-                    AttributeTypeDescription attrTypes = new(rawValue);
-                    if (String.IsNullOrEmpty(attrTypes.Syntax))
+                    if (attribute.Name == "attributeTypes")
                     {
-                        cmdlet?.WriteVerbose($"Failed to parse SYNTAX: '{rawValue}'");
-                        continue;
+                        AttributeTypeDescription attrTypes = new(rawValue);
+                        attrInfo[attrTypes.Names[0]] = attrTypes;
                     }
-                    if (String.IsNullOrEmpty(attrTypes.Names[0]))
+                    else if (attribute.Name == "objectClasses")
                     {
-                        cmdlet?.WriteVerbose($"Failed to parse NAME: '{rawValue}'");
-                        continue;
+                        ObjectClassDescription objClass = new(rawValue);
+                        classInfo[objClass.Names[0]] = objClass;
                     }
-
-                    attrInfo[attrTypes.Names[0]] = attrTypes;
                 }
             }
         }
 
-        return new AttributeTransformer(attrInfo);
+        return new SchemaMetadata(attrInfo, classInfo);
     }
 }
 
@@ -563,6 +557,8 @@ internal static class GlobalState
     public static Dictionary<string, OpenADSession> ImplicitSessions = new(StringComparer.OrdinalIgnoreCase);
 
     public static bool GssapiIsHeimdal;
+
+    public static Dictionary<string, ObjectClass> ClassDefintions = new();
 
     public static void AddSession(string id, OpenADSession session)
     {

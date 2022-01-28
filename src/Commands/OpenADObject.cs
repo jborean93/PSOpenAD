@@ -84,10 +84,10 @@ public abstract class GetOpenADOperation : PSCmdlet
 
     #region Common Parameters
 
-    // FIXME: Auto completion with known list
     [Parameter()]
     [Alias("Properties")]
     [ValidateNotNullOrEmpty]
+    [ArgumentCompleter(typeof(PropertyCompleter))]
     public string[]? Property { get; set; }
 
     #endregion
@@ -186,8 +186,8 @@ public abstract class GetOpenADOperation : PSCmdlet
                 Dictionary<string, (PSObject[], bool)> props = new();
                 foreach (PartialAttribute attribute in result.Attributes)
                 {
-                    props[attribute.Name] = Session.AttributeTransformer.Transform(attribute.Name, attribute.Values,
-                        this);
+                    props[attribute.Name] = Session.SchemaMetadata.TransformAttributeValue(attribute.Name,
+                        attribute.Values, this);
                 }
 
                 OpenADObject adObj = CreateADObject(props);
@@ -207,8 +207,7 @@ public abstract class GetOpenADOperation : PSCmdlet
                     (object value, bool isSingleValue) = props[p];
                     if (isSingleValue)
                     {
-                        if (ParameterSetName.EndsWith("Identity") && outputResult)
-                            value = ((IList<PSObject>)value)[0];
+                        value = ((IList<PSObject>)value)[0];
                     }
 
                     adPSObj.Properties.Add(new PSNoteProperty(p, value));
