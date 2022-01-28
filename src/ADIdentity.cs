@@ -1,4 +1,5 @@
 using PSOpenAD.LDAP;
+using PSOpenAD.Security;
 using System;
 using System.Text.RegularExpressions;
 

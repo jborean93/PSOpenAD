@@ -1,8 +1,8 @@
+using PSOpenAD.Security;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using System.Text.RegularExpressions;
 
 namespace PSOpenAD;
 
@@ -184,74 +184,6 @@ public class OpenADGroup : OpenADPrincipal
                 break;
         }
     }
-}
-
-public sealed class SecurityIdentifier
-{
-    private readonly byte _revision;
-    private readonly UInt64 _identifierAuthority;
-    private readonly uint[] _subAuthorities;
-
-    public int BinaryLength => 8 + (_subAuthorities.Length * 4);
-
-    public string Value => ToString();
-
-    public SecurityIdentifier(string sid)
-    {
-        Match m = Regex.Match(sid, @"^S-(?<revision>\d)-(?<authority>\d+)(?:-\d+){1,15}$");
-        if (m.Success)
-        {
-            _revision = byte.Parse(m.Groups["revision"].Value);
-            _identifierAuthority = UInt64.Parse(m.Groups["authority"].Value);
-            string[] sidSplit = sid.Split('-');
-
-            _subAuthorities = new uint[sidSplit.Length - 3];
-            for (int i = 3; i < sidSplit.Length; i++)
-            {
-                _subAuthorities[i - 3] = uint.Parse(sidSplit[i]);
-            }
-        }
-        else
-        {
-            throw new ArgumentException(nameof(sid));
-        }
-    }
-
-    public SecurityIdentifier(byte[] binaryForm, int offset)
-    {
-        _revision = binaryForm[offset];
-
-        byte[] rawAuthority = new byte[8];
-        Array.Copy(binaryForm, offset + 2, rawAuthority, 2, 6);
-        Array.Reverse(rawAuthority);
-        _identifierAuthority = BitConverter.ToUInt64(rawAuthority);
-
-        _subAuthorities = new uint[binaryForm[offset + 1]];
-        for (int i = 0; i < _subAuthorities.Length; i++)
-        {
-            byte[] idBytes = new byte[4];
-            Array.Copy(binaryForm, offset + 8 + (i * 4), idBytes, 0, idBytes.Length);
-            _subAuthorities[i] = BitConverter.ToUInt32(idBytes);
-        }
-    }
-
-    public void GetBinaryForm(byte[] binaryForm, int offset)
-    {
-        binaryForm[offset] = _revision;
-        binaryForm[offset + 1] = (byte)_subAuthorities.Length;
-
-        byte[] authority = BitConverter.GetBytes(_identifierAuthority);
-        Array.Reverse(authority);
-        Array.Copy(authority, 2, binaryForm, offset + 2, 6);
-
-        for (int i = 0; i < _subAuthorities.Length; i++)
-        {
-            byte[] rawRid = BitConverter.GetBytes(_subAuthorities[i]);
-            Array.Copy(rawRid, 0, binaryForm, offset + 8 + (i * 4), rawRid.Length);
-        }
-    }
-
-    public override string ToString() => $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities);
 }
 
 [Flags]

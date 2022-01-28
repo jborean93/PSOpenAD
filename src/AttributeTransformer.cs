@@ -1,4 +1,5 @@
 using PSOpenAD.LDAP;
+using PSOpenAD.Security;
 using System;
 using System.Collections.Generic;
 using System.Management.Automation;
@@ -44,7 +45,7 @@ internal static class DefaultOverrider
                 (_, v) => (SupportedEncryptionTypes)(int)SyntaxDefinition.ReadInteger(v)
             ) },
             { "objectGUID", (_, v) => new Guid(v) },
-            { "objectSid", (_, v) => new SecurityIdentifier(v.ToArray(), 0) },
+            { "objectSid", (_, v) => new SecurityIdentifier(v) },
             { "priorSetTime", (_, v) => ParseFileTimeValue(v) },
             { "pwdLastSet", (_, v) => ParseFileTimeValue(v) },
             { "pwdProperties", (_, v) => (PasswordProperties)(int)SyntaxDefinition.ReadInteger(v) },
@@ -202,7 +203,7 @@ internal sealed class AttributeTransformer
         "1.2.840.113556.1.4.904" => SyntaxDefinition.ReadDirectoryString(value), // DNWithString
         "1.2.840.113556.1.4.905" => SyntaxDefinition.ReadDirectoryString(value), // OR-Name
         "1.2.840.113556.1.4.906" => (Int64)SyntaxDefinition.ReadInteger(value), // Large-Integer
-        "1.2.840.113556.1.4.907" => SyntaxDefinition.ReadOctetString(value), // Object-Security-Descriptor
+        "1.2.840.113556.1.4.907" => new CommonSecurityDescriptor(value), // Object-Security-Descriptor
         "1.2.840.113556.1.4.1221" => SyntaxDefinition.ReadDirectoryString(value), // CaseIgnoreString
         "1.2.840.113556.1.4.1362" => SyntaxDefinition.ReadDirectoryString(value), // CaseExactString
         "OctetString" => SyntaxDefinition.ReadOctetString(value), // Weird syntax but AD does send this
