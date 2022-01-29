@@ -5,7 +5,7 @@ using System.IO.Pipelines;
 
 namespace PSOpenAD.LDAP;
 
-internal enum SessionState
+public enum SessionState
 {
     /// <summary>Connection has not been opened, bind still needs to be done.</summary>
     BeforeOpen,

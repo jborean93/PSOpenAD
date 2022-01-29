@@ -1,7 +1,6 @@
 using PSOpenAD.LDAP;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Language;
@@ -33,11 +32,11 @@ public abstract class GetOpenADOperation : PSCmdlet
         Mandatory = true,
         ParameterSetName = "SessionLDAPFilter"
     )]
-    public OpenADSession Session { get; set; } = null!;
+    public OpenADSession? Session { get; set; }
 
-    // FIXME: auto complete with existing server cache
     [Parameter(ParameterSetName = "ServerIdentity")]
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
+    [ArgumentCompleter(typeof(ServerCompleter))]
     public string Server { get; set; } = "";
 
     [Parameter(ParameterSetName = "ServerIdentity")]
@@ -94,93 +93,76 @@ public abstract class GetOpenADOperation : PSCmdlet
 
     protected override void ProcessRecord()
     {
+        if (_ldapFilter == null)
+        {
+            try
+            {
+                _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter);
+            }
+            catch (InvalidLDAPFilterException e)
+            {
+                ErrorRecord rec = new(
+                    e,
+                    "InvalidLDAPFilterException",
+                    ErrorCategory.ParserError,
+                    LDAPFilter);
+
+                rec.ErrorDetails = new($"Failed to parse LDAP Filter: {e.Message}");
+
+                // By setting the InvocationInfo we get a nice error description in PowerShell with positional
+                // details. Unfortunately this is not publicly settable so we have to use reflection.
+                if (!string.IsNullOrWhiteSpace(e.Filter))
+                {
+                    ScriptPosition start = new("", 1, e.StartPosition + 1, e.Filter);
+                    ScriptPosition end = new("", 1, e.EndPosition + 1, e.Filter);
+                    InvocationInfo info = InvocationInfo.Create(
+                        MyInvocation.MyCommand,
+                        new ScriptExtent(start, end));
+                    rec.GetType().GetField(
+                        "_invocationInfo",
+                        BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(rec, info);
+                }
+
+                ThrowTerminatingError(rec);
+                return; // Satisfies nullability checks
+            }
+        }
+        LDAPFilter finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
+
+        StringComparer comparer = StringComparer.OrdinalIgnoreCase;
+        HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
+        string[] explicitProperties = Property ?? Array.Empty<string>();
+        bool showAll = false;
+        foreach (string prop in explicitProperties)
+        {
+            if (prop == "*") { showAll = true; }
+            requestedProperties.Add(prop);
+        }
+
+        List<LDAPControl>? serverControls = null;
+        if (_includeDeleted)
+        {
+            serverControls = new();
+            serverControls.Add(new("1.2.840.113556.1.4.417", false, null)); // LDAP_SERVER_SHOW_DELETED_OID
+            serverControls.Add(new("1.2.840.113556.1.4.2065", false, null)); // LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID
+        }
+
         using (CurrentCancelToken = new CancellationTokenSource())
         {
-            if (_ldapFilter == null)
+            if (Session == null)
             {
-                try
-                {
-                    _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter);
-                }
-                catch (InvalidLDAPFilterException e)
-                {
-                    ErrorRecord rec = new(
-                        e,
-                        "InvalidLDAPFilterException",
-                        ErrorCategory.ParserError,
-                        LDAPFilter);
-
-                    rec.ErrorDetails = new($"Failed to parse LDAP Filter: {e.Message}");
-
-                    // By setting the InvocationInfo we get a nice error description in PowerShell with positional
-                    // details. Unfortunately this is not publicly settable so we have to use reflection.
-                    if (!string.IsNullOrWhiteSpace(e.Filter))
-                    {
-                        ScriptPosition start = new("", 1, e.StartPosition + 1, e.Filter);
-                        ScriptPosition end = new("", 1, e.EndPosition + 1, e.Filter);
-                        InvocationInfo info = InvocationInfo.Create(
-                            MyInvocation.MyCommand,
-                            new ScriptExtent(start, end));
-                        rec.GetType().GetField(
-                            "_invocationInfo",
-                            BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(rec, info);
-                    }
-
-                    ThrowTerminatingError(rec);
-                    return; // Satisfies nullability checks
-                }
+                Session = OpenADSessionFactory.CreateOrUseDefault(Server, Credential, AuthType, StartTLS,
+                    SessionOption, CurrentCancelToken.Token, this);
             }
 
-            StringComparer comparer = StringComparer.OrdinalIgnoreCase;
-            HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
-            string[] explicitProperties = Property ?? Array.Empty<string>();
-            bool showAll = false;
-            foreach (string prop in explicitProperties)
-            {
-                if (prop == "*") { showAll = true; }
-                requestedProperties.Add(prop);
-            }
-
-            List<LDAPControl>? serverControls = null;
-            if (_includeDeleted)
-            {
-                serverControls = new();
-                serverControls.Add(new("1.2.840.113556.1.4.417", false, null)); // LDAP_SERVER_SHOW_DELETED_OID
-                serverControls.Add(new("1.2.840.113556.1.4.2065", false, null)); // LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID
-            }
-
-            if (ParameterSetName.StartsWith("Server"))
-            {
-                Uri ldapUri;
-                if (string.IsNullOrEmpty(Server))
-                {
-                    if (string.IsNullOrEmpty(GlobalState.DefaultRealm))
-                    {
-                        return;
-                    }
-
-                    ldapUri = new Uri($"ldap://{GlobalState.DefaultRealm}:389/");
-                }
-                else if (Server.StartsWith("ldap://", true, CultureInfo.InvariantCulture) ||
-                    Server.StartsWith("ldaps://", true, CultureInfo.InvariantCulture))
-                {
-                    ldapUri = new Uri(Server);
-                }
-                else
-                {
-                    ldapUri = new Uri($"ldap://{Server}:389/");
-                }
-
-                Session = OpenADSessionFactory.CreateOrUseDefault(ldapUri, Credential, AuthType,
-                    StartTLS, SessionOption, cancelToken: CurrentCancelToken.Token, cmdlet: this);
-            }
+            if (Session == null)
+                return; // Failed to create session - error records have already been written.
 
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
-            LDAPFilter finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
             bool outputResult = false;
 
             foreach (SearchResultEntry result in Operations.LdapSearchRequest(Session.Connection, searchBase,
-                SearchScope, 0, 0, finalFilter, requestedProperties.ToArray(), serverControls,
+                SearchScope, 0, Session.OperationTimeout, finalFilter, requestedProperties.ToArray(), serverControls,
                 CurrentCancelToken.Token, this))
             {
                 Dictionary<string, (PSObject[], bool)> props = new();

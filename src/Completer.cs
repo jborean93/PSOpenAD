@@ -7,6 +7,27 @@ using System.Management.Automation.Language;
 
 namespace PSOpenAD;
 
+internal class ServerCompleter : IArgumentCompleter
+{
+    public IEnumerable<CompletionResult> CompleteArgument(string commandName, string parameterName,
+        string wordToComplete, CommandAst commandAst, IDictionary fakeBoundParameters)
+    {
+        if (String.IsNullOrWhiteSpace(wordToComplete))
+            wordToComplete = "";
+
+        HashSet<Uri> emitted = new();
+        foreach (OpenADSession session in GlobalState.Sessions)
+        {
+            if ((session.Uri.ToString().StartsWith(wordToComplete, true, CultureInfo.InvariantCulture) ||
+                session.Uri.Host.StartsWith(wordToComplete, true, CultureInfo.InvariantCulture)) &&
+                emitted.Add(session.Uri))
+            {
+                yield return new CompletionResult(session.Uri.ToString());
+            }
+        }
+    }
+}
+
 internal class PropertyCompleter : IArgumentCompleter
 {
     public IEnumerable<CompletionResult> CompleteArgument(string commandName, string parameterName,

@@ -55,6 +55,15 @@ public sealed class AuthenticationProvider
     }
 }
 
+internal enum GssapiProvider
+{
+    None,
+    Mit,
+    Heimdal,
+    GSSFramework,
+    SSPI,
+}
+
 [Flags]
 internal enum SASLSecurityFlags : byte
 {
@@ -106,16 +115,20 @@ internal class GssapiContext : SecurityContext
         _mech = method == AuthenticationMethod.Negotiate ? GSSAPI.SPNEGO : GSSAPI.KERBEROS;
         _targetSpn = GSSAPI.ImportName(target, GSSAPI.GSS_C_NT_HOSTBASED_SERVICE);
 
-        // FIXME: Determine the rules for Heimdal, should I also specify NTLM.
         List<byte[]> mechList;
-        if (GlobalState.GssapiIsHeimdal)
-        {
-            mechList = new List<byte[]>() { GSSAPI.KERBEROS };
-        }
-        else
+        if (GlobalState.GssapiProvider == GssapiProvider.Mit)
         {
             mechList = new List<byte[]>() { _mech };
         }
+        else
+        {
+            mechList = new List<byte[]>() { GSSAPI.KERBEROS };
+            if (method == AuthenticationMethod.Negotiate)
+            {
+                mechList.Add(GSSAPI.NTLM);
+            }
+        }
+
         if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
         {
             using SafeGssapiName name = GSSAPI.ImportName(username, GSSAPI.GSS_C_NT_USER_NAME);

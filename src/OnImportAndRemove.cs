@@ -87,6 +87,9 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
         LibraryInfo? krb5Lib = null;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
+            // FUTURE: Only set this if the actual path wasn't overriden.
+            GlobalState.GssapiProvider = GssapiProvider.GSSFramework;
+
             gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "/System/Library/Frameworks/GSS.framework/GSS");
             krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5,
                 "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal");
@@ -107,6 +110,8 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
+            GlobalState.GssapiProvider = GssapiProvider.SSPI;
+
             GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
                 true, true, "");
             GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
@@ -116,6 +121,11 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
         }
         else
         {
+            if (GlobalState.GssapiProvider == GssapiProvider.None && gssapiLib != null)
+            {
+                GlobalState.GssapiProvider = GssapiProvider.Mit;
+            }
+
             foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
             {
                 { AuthenticationMethod.Kerberos, "GSSAPI" },
@@ -142,7 +152,7 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
             if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
             {
                 if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
-                    GlobalState.GssapiIsHeimdal = true;
+                    GlobalState.GssapiProvider = GssapiProvider.Heimdal;
 
                 using SafeKrb5Context ctx = Kerberos.InitContext();
                 try
@@ -156,9 +166,10 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
 
     public void OnRemove(PSModuleInfo module)
     {
-        foreach (OpenADSession session in GlobalState.ImplicitSessions.Values)
+        foreach (OpenADSession session in GlobalState.Sessions)
             session.Close();
 
+        GlobalState.Sessions = new();
         Resolver?.Dispose();
     }
 }

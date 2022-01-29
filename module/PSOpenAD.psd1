@@ -59,7 +59,7 @@
     # TypesToProcess = @()
 
     # Format files (.ps1xml) to be loaded when importing this module
-    FormatsToProcess = @(
+    FormatsToProcess       = @(
         'PSOpenAD.Format.ps1xml'
     )
 
@@ -75,6 +75,7 @@
         'Get-OpenADComputer'
         'Get-OpenADGroup'
         'Get-OpenADObject'
+        'Get-OpenADSession'
         'Get-OpenADUser'
         'Get-OpenADWhoami'
         'New-OpenADSession'

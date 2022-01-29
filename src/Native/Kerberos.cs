@@ -120,13 +120,13 @@ internal class SafeKrb5Realm : SafeHandle
     protected override bool ReleaseHandle()
     {
         // Heimdal does not include krb5_free_default_realm and instead uses krb5_xfree.
-        if (GlobalState.GssapiIsHeimdal)
+        if (GlobalState.GssapiProvider == GssapiProvider.Mit)
         {
-            Kerberos.krb5_xfree(handle);
+            Kerberos.krb5_free_default_realm(Context, handle);
         }
         else
         {
-            Kerberos.krb5_free_default_realm(Context, handle);
+            Kerberos.krb5_xfree(handle);
         }
 
         return true;

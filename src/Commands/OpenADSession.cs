@@ -1,10 +1,24 @@
-using PSOpenAD.LDAP;
 using System;
+using System.Linq;
 using System.Management.Automation;
-using System.Security.Authentication;
 using System.Threading;
 
 namespace PSOpenAD.Commands;
+
+[Cmdlet(
+    VerbsCommon.Get, "OpenADSession"
+)]
+[OutputType(typeof(OpenADSession))]
+public class GetOpenADSession : PSCmdlet
+{
+    protected override void EndProcessing()
+    {
+        foreach (OpenADSession session in GlobalState.Sessions)
+        {
+            WriteObject(session);
+        }
+    }
+}
 
 [Cmdlet(
     VerbsCommon.New, "OpenADSession",
@@ -19,7 +33,7 @@ public class NewOpenADSession : PSCmdlet
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "Uri"
     )]
-    public Uri Uri { get; set; } = new Uri("ldap://default"); // dummy value used to satisfy the null reference warnings
+    public Uri? Uri { get; set; }
 
     [Parameter(
         Mandatory = true,
@@ -58,7 +72,7 @@ public class NewOpenADSession : PSCmdlet
 
     protected override void ProcessRecord()
     {
-        if (ParameterSetName == "ComputerName")
+        if (Uri == null)
         {
             string scheme = UseSSL ? "ldaps" : "ldap";
             int port = Port != 0 ? Port : (UseSSL ? 636 : 389);
@@ -67,24 +81,12 @@ public class NewOpenADSession : PSCmdlet
 
         using (CurrentCancelToken = new CancellationTokenSource())
         {
-            try
+            OpenADSession? session = OpenADSessionFactory.CreateOrUseDefault(Uri.ToString(), Credential, AuthType,
+                StartTLS, SessionOption, CurrentCancelToken.Token, this, skipCache: true);
+
+            if (session != null)
             {
-                OpenADSession session = OpenADSessionFactory.Create(Uri, Credential, AuthType, StartTLS,
-                    SessionOption, CurrentCancelToken.Token, cmdlet: this);
-                GlobalState.AddSession(Uri.ToString(), session);
                 WriteObject(session);
-            }
-            catch (LDAPException e)
-            {
-                WriteError(new ErrorRecord(e, "LDAPError", ErrorCategory.ProtocolError, null));
-            }
-            catch (AuthenticationException e)
-            {
-                WriteError(new ErrorRecord(e, "AuthError", ErrorCategory.AuthenticationError, null));
-            }
-            catch (ArgumentException e)
-            {
-                WriteError(new ErrorRecord(e, "InvalidParameter", ErrorCategory.InvalidArgument, null));
             }
         }
     }
@@ -115,5 +117,9 @@ public class RemoveOpenADSession : PSCmdlet
             WriteVerbose($"Closing connection to {s.Uri}");
             s.Close();
         }
+
+        GlobalState.Sessions = GlobalState.Sessions
+            .Where(x => !Session.Any(y => y.Id == x.Id))
+            .ToList();
     }
 }
