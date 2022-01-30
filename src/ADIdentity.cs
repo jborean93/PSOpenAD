@@ -38,22 +38,6 @@ public class ADObjectIdentity
         }
     }
 
-    internal bool TryParseDN(string value, out LDAPFilter filter)
-    {
-        filter = new FilterPresent("");
-
-        // FIXME: Update regex here
-        if (Regex.Match(value, "^((CN=([^,]*)),)?((((?:CN|OU)=[^,]+,?)+),)?((DC=[^,]+,?)+)$").Success)
-        {
-            filter = new FilterEquality("distinguishedName", LDAPFilter.EncodeSimpleFilterValue(value));
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
     internal LDAPFilter ObjectGUIDFilter(Guid objectGuid)
     {
         return new FilterEquality("objectGUID", objectGuid.ToByteArray());
@@ -66,8 +50,6 @@ public class ADPrincipalIdentity : ADObjectIdentity
     {
         if (TryParseGuid(value, out var filter))
             LDAPFilter = filter;
-        else if (TryParseDN(value, out filter))
-            LDAPFilter = filter;
         else if (TryParseUPN(value, out filter))
             LDAPFilter = filter;
         else if (TryParseSamAccountName(value, out filter))
@@ -75,7 +57,7 @@ public class ADPrincipalIdentity : ADObjectIdentity
         else if (TryParseSecurityIdentifier(value, out filter))
             LDAPFilter = filter;
         else
-            throw new ArgumentException(nameof(value));
+            LDAPFilter = new FilterEquality("distinguishedName", LDAPFilter.EncodeSimpleFilterValue(value));
     }
 
     public ADPrincipalIdentity(SecurityIdentifier sid) => LDAPFilter = ObjectSidFilter(sid);

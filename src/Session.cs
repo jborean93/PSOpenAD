@@ -109,7 +109,7 @@ internal sealed class OpenADSessionFactory
         Uri ldapUri;
         if (string.IsNullOrEmpty(server))
         {
-            if (string.IsNullOrEmpty(GlobalState.DefaultRealm))
+            if (GlobalState.DefaultDC == null)
             {
                 cmdlet.WriteError(new ErrorRecord(
                     new ArgumentException("Cannot determine default realm for implicit domain controller."),
@@ -119,7 +119,7 @@ internal sealed class OpenADSessionFactory
                 return null;
             }
 
-            ldapUri = new Uri($"ldap://{GlobalState.DefaultRealm}:389/");
+            ldapUri = GlobalState.DefaultDC;
         }
         else if (server.StartsWith("ldap://", true, CultureInfo.InvariantCulture) ||
             server.StartsWith("ldaps://", true, CultureInfo.InvariantCulture))
@@ -621,5 +621,6 @@ internal static class GlobalState
     /// <summary>The GSSAPI/SSPI provider that is used.</summary>
     public static GssapiProvider GssapiProvider;
 
-    public static string? DefaultRealm;
+    /// <summary>The default domain controller hostname to use when none was provided.</summary>
+    public static Uri? DefaultDC;
 }

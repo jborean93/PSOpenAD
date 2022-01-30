@@ -201,9 +201,9 @@ public abstract class GetOpenADOperation : PSCmdlet
 
             if (ParameterSetName.EndsWith("Identity") && !outputResult)
             {
-                string msg = $"Cannot find an object with identity filter: '{_ldapFilter}' under: '{searchBase}'";
+                string msg = $"Cannot find an object with identity filter: '{finalFilter}' under: '{searchBase}'";
                 ErrorRecord rec = new(new ItemNotFoundException(msg), "IdentityNotFound",
-                    ErrorCategory.ObjectNotFound, _ldapFilter.ToString());
+                    ErrorCategory.ObjectNotFound, finalFilter.ToString());
                 WriteError(rec);
             }
         }

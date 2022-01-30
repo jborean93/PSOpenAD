@@ -1,6 +1,8 @@
+using DnsClient;
 using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -154,12 +156,28 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
                 if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
                     GlobalState.GssapiProvider = GssapiProvider.Heimdal;
 
+                string defaultRealm = "";
                 using SafeKrb5Context ctx = Kerberos.InitContext();
                 try
                 {
-                    GlobalState.DefaultRealm = Kerberos.GetDefaultRealm(ctx);
+                    defaultRealm = Kerberos.GetDefaultRealm(ctx);
                 }
                 catch (KerberosException) { }
+
+                if (!string.IsNullOrWhiteSpace(defaultRealm))
+                {
+                    // _ldap._tcp.dc._msdcs.domain.com
+                    string baseDomain = $"dc._msdcs.{defaultRealm}";
+                    LookupClient dnsLookup = new();
+                    ServiceHostEntry[] res = dnsLookup.ResolveService(baseDomain, "ldap",
+                        System.Net.Sockets.ProtocolType.Tcp);
+
+                    ServiceHostEntry? first = res.OrderByDescending(r => r.Weight).FirstOrDefault();
+                    if (first != null)
+                    {
+                        GlobalState.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");
+                    }
+                }
             }
         }
     }
