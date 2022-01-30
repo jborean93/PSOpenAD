@@ -58,7 +58,7 @@ public sealed class AuthenticationProvider
 internal enum GssapiProvider
 {
     None,
-    Mit,
+    MIT,
     Heimdal,
     GSSFramework,
     SSPI,
@@ -116,7 +116,7 @@ internal class GssapiContext : SecurityContext
         _targetSpn = GSSAPI.ImportName(target, GSSAPI.GSS_C_NT_HOSTBASED_SERVICE);
 
         List<byte[]> mechList;
-        if (GlobalState.GssapiProvider == GssapiProvider.Mit)
+        if (GlobalState.GssapiProvider == GssapiProvider.MIT)
         {
             mechList = new List<byte[]>() { _mech };
         }

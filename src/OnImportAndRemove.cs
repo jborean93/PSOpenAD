@@ -40,18 +40,21 @@ internal sealed class NativeResolver : IDisposable
         AssemblyLoadContext.Default.ResolvingUnmanagedDll += ImportResolver;
     }
 
-    public LibraryInfo? CacheLibrary(string id, string path)
+    public LibraryInfo? CacheLibrary(string id, string[] paths)
     {
         string? envOverride = Environment.GetEnvironmentVariable(id.ToUpperInvariant().Replace(".", "_"));
         if (!String.IsNullOrWhiteSpace(envOverride))
-            path = envOverride;
+            paths = new[] { envOverride };
 
-        try
+        foreach (string libPath in paths)
         {
-            NativeHandles[id] = new LibraryInfo(id, path);
-            return NativeHandles[id];
+            try
+            {
+                NativeHandles[id] = new LibraryInfo(id, libPath);
+                return NativeHandles[id];
+            }
+            catch (DllNotFoundException) { }
         }
-        catch (DllNotFoundException) { }
 
         return null;
     }
@@ -77,34 +80,17 @@ internal sealed class NativeResolver : IDisposable
 
 public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemblyCleanup
 {
+    internal const string MACOS_GSS_FRAMEWORK = "/System/Library/Frameworks/GSS.framework/GSS";
+
     internal NativeResolver? Resolver;
 
     public void OnImport()
     {
         Resolver = new NativeResolver();
 
-        // GSSAPI is needed for Negotiate or Kerberos auth while Krb5 is used on non-Windows to locate the default
-        // realm when setting up an implicit connection.
-        LibraryInfo? gssapiLib = null;
-        LibraryInfo? krb5Lib = null;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            // FUTURE: Only set this if the actual path wasn't overriden.
-            GlobalState.GssapiProvider = GssapiProvider.GSSFramework;
-
-            gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "/System/Library/Frameworks/GSS.framework/GSS");
-            krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5,
-                "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal");
-        }
-        else if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, "libgssapi_krb5.so.2");
-            krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, "libkrb5.so");
-        }
-
         // While channel binding isn't technically done by both these methods an Active Directory implementation
         // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
-        // server end.true
+        // server end.
         GlobalState.Providers[AuthenticationMethod.Anonymous] = new(AuthenticationMethod.Anonymous, "ANONYMOUS",
             true, false, "");
         GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
@@ -112,8 +98,8 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
+            // Windows always has SSPI available.
             GlobalState.GssapiProvider = GssapiProvider.SSPI;
-
             GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
                 true, true, "");
             GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
@@ -131,59 +117,71 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
         }
         else
         {
-            if (GlobalState.GssapiProvider == GssapiProvider.None && gssapiLib != null)
+            GlobalState.GssapiProvider = GssapiProvider.None;
+            LibraryInfo? gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, new[] {
+                MACOS_GSS_FRAMEWORK, // macOS GSS Framework (technically Heimdal)
+                "libgssapi_krb5.so", // MIT krb5
+                "libgssapi.so", // Heimdal
+            });
+            LibraryInfo? krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, new[] {
+                "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal", // macOS Heimdal Framework
+                "libkrb5.so", // Both MIT and Heimdal use the same lib name
+            });
+
+            if (gssapiLib == null)
             {
-                GlobalState.GssapiProvider = GssapiProvider.Mit;
+                GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos,
+                    "GSSAPI", false, false, "GSSAPI library not found");
+                GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+                    "GSS-SPNEGO", false, false, "GSSAPI library not found");
             }
-
-            foreach (KeyValuePair<AuthenticationMethod, string> kvp in new Dictionary<AuthenticationMethod, string>()
+            else
             {
-                { AuthenticationMethod.Kerberos, "GSSAPI" },
-                { AuthenticationMethod.Negotiate, "GSS-SPNEGO" },
-            })
-            {
-                bool present = false;
-                bool canSign = false;
-                string details = "";
+                GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos,
+                    "GSSAPI", true, true, "");
+                GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+                    "GSS-SPNEGO", true, true, "");
 
-                if (gssapiLib != null)
+                if (gssapiLib.Path == MACOS_GSS_FRAMEWORK)
                 {
-                    present = canSign = true;
+                    GlobalState.GssapiProvider = GssapiProvider.GSSFramework;
+                }
+                else if (NativeLibrary.TryGetExport(gssapiLib.Handle, "krb5_xfree", out var _))
+                {
+                    // While technically exported by the krb5 lib the Heimdal GSSAPI lib depends on it so the same
+                    // symbol will be exported there and we can use that to detect if Heimdal is in use.
+                    GlobalState.GssapiProvider = GssapiProvider.Heimdal;
                 }
                 else
                 {
-                    details = "GSSAPI library not found";
+                    GlobalState.GssapiProvider = GssapiProvider.MIT;
                 }
 
-                GlobalState.Providers[kvp.Key] = new(kvp.Key, kvp.Value, present, canSign, details);
-            }
-
-            // If the krb5 API is available, attempt to get the default realm used when creating an implicit session.
-            if (GlobalState.Providers[AuthenticationMethod.Negotiate].Available && krb5Lib != null)
-            {
-                if (NativeLibrary.TryGetExport(krb5Lib.Handle, "krb5_xfree", out var _))
-                    GlobalState.GssapiProvider = GssapiProvider.Heimdal;
-
-                string defaultRealm = "";
-                using SafeKrb5Context ctx = Kerberos.InitContext();
-                try
+                // If the krb5 API is available, attempt to get the default realm used when creating an implicit
+                // session.
+                if (krb5Lib != null)
                 {
-                    defaultRealm = Kerberos.GetDefaultRealm(ctx);
-                }
-                catch (KerberosException) { }
-
-                if (!string.IsNullOrWhiteSpace(defaultRealm))
-                {
-                    // _ldap._tcp.dc._msdcs.domain.com
-                    string baseDomain = $"dc._msdcs.{defaultRealm}";
-                    LookupClient dnsLookup = new();
-                    ServiceHostEntry[] res = dnsLookup.ResolveService(baseDomain, "ldap",
-                        System.Net.Sockets.ProtocolType.Tcp);
-
-                    ServiceHostEntry? first = res.OrderByDescending(r => r.Weight).FirstOrDefault();
-                    if (first != null)
+                    string defaultRealm = "";
+                    using SafeKrb5Context ctx = Kerberos.InitContext();
+                    try
                     {
-                        GlobalState.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");
+                        defaultRealm = Kerberos.GetDefaultRealm(ctx);
+                    }
+                    catch (KerberosException) { }
+
+                    if (!string.IsNullOrWhiteSpace(defaultRealm))
+                    {
+                        // _ldap._tcp.dc._msdcs.domain.com
+                        string baseDomain = $"dc._msdcs.{defaultRealm}";
+                        LookupClient dnsLookup = new();
+                        ServiceHostEntry[] res = dnsLookup.ResolveService(baseDomain, "ldap",
+                            System.Net.Sockets.ProtocolType.Tcp);
+
+                        ServiceHostEntry? first = res.OrderByDescending(r => r.Weight).FirstOrDefault();
+                        if (first != null)
+                        {
+                            GlobalState.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");
+                        }
                     }
                 }
             }
