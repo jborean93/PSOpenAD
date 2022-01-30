@@ -119,7 +119,15 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
             GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
                 "GSS-SPNEGO", true, true, "");
 
-            // FUTURE: Add ad lookup.
+            // FIXME: Run on non-domain joined host to see what error to catch.
+            const GetDcFlags getDcFlags = GetDcFlags.DS_IS_DNS_NAME | GetDcFlags.DS_ONLY_LDAP_NEEDED |
+                GetDcFlags.DS_RETURN_DNS_NAME | GetDcFlags.DS_WRITABLE_REQUIRED;
+            DCInfo dcInfo = NetApi32.DsGetDcName(null, null, null, getDcFlags, null);
+            if (!string.IsNullOrWhiteSpace(dcInfo.Name))
+            {
+                string dcName = dcInfo.Name.TrimStart('\\');
+                GlobalState.DefaultDC = new($"ldap://{dcName}:389/");
+            }
         }
         else
         {
