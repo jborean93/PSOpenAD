@@ -19,6 +19,8 @@ Remove-OpenADSession [-Session] <OpenADSession[]> [<CommonParameters>]
 ## DESCRIPTION
 Disconnects an LDAP/AD session and marks the session object as closed.
 
+Once closed the sesion is removed from the process wide connection pool.
+
 ## EXAMPLES
 
 ### Example 1
@@ -58,5 +60,6 @@ The session(s) to disconnect.
 
 ### None
 ## NOTES
+Once the session has been closed it will be removed from the pool and cannot be used for any future operations.
 
 ## RELATED LINKS

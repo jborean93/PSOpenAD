@@ -43,6 +43,7 @@ samba-tool domain provision \
     --dns-backend=SAMBA_INTERNAL \
     --adminpass="${AD_PASSWORD}" \
     --option="ldap server require strong auth = allow_sasl_over_tls" \
+    --option="ldap ssl = start tls" \
     --option="vfs objects = acl_xattr xattr_tdb" \
     --option="idmap config * : range = 655-65533"
 

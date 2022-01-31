@@ -43,18 +43,17 @@ The details of each authentication object. This object has the following propert
 
 + `Method`: The authentication method
 
++ `SaslId`: The SASL mechanism name that this provider represents
+
 + `Available`: Whether this authentication method can be used by the client
 
 + `CanSign`: Whether this authentication method can sign or encrypt data over a non-TLS connection
 
-+ `SupportsCB`: Whether this authentication method supports channel binding over a TLS connection
-
-+ `Details`: Extra details on why a feature may not be available or why signing/encryption/channel binding support isn't available
++ `Details`: Extra details on why a feature may not be available
 
 ## NOTES
 The `Anonymous` and `Simple` authentication methods are always available to the client.
 These methods do not support signatures or encryption over a non-TLS connection so should be avoided in those scenarios.
-The `Negotiate` and `Kerberos` methods are reliant on the client having both `SASL` and `GSSAPI` installed on the host.
-Depending on the version of OpenLDAP or SASL that is installed it may not support channel binding which could be enforced by an active directory server.
+The `Negotiate` and `Kerberos` methods are always available on Windows but relies on a working `GSSAPI` library on non-Windows hosts.
 
 ## RELATED LINKS
