@@ -98,8 +98,8 @@ public enum ControlFlags : ushort
 
 public sealed class CommonSecurityDescriptor
 {
-    public int BinaryLength => 20 + (Owner?.BinaryLength + Group?.BinaryLength + SystemAcl?.BinaryLength +
-        DiscretionaryAcl?.BinaryLength) ?? 0;
+    public int BinaryLength => 20 + ((Owner?.BinaryLength + Group?.BinaryLength + SystemAcl?.BinaryLength +
+        DiscretionaryAcl?.BinaryLength) ?? 0);
 
     public byte Revision { get; }
 
@@ -114,6 +114,13 @@ public sealed class CommonSecurityDescriptor
     public SystemAcl? SystemAcl { get; set; }
 
     public DiscretionaryAcl? DiscretionaryAcl { get; set; }
+
+    public CommonSecurityDescriptor()
+    {
+        Revision = 1;
+        ResourceManagerFlags = 0;
+        Flags = ControlFlags.None;
+    }
 
     public CommonSecurityDescriptor(ReadOnlySpan<byte> data)
     {
@@ -154,7 +161,7 @@ public sealed class CommonSecurityDescriptor
 
     internal void WriteBinaryForm(Span<byte> data)
     {
-        if (data.Length < BinaryLength)
+        if (data.Length < 2)
             throw new ArgumentException("Destination array was not large enough.");
 
         data[0] = Revision;

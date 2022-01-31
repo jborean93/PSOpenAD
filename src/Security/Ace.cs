@@ -368,7 +368,7 @@ public class Ace
     public SecurityIdentifier Sid { get; set; }
     public byte[]? ApplicationData { get; set; }
 
-    public virtual int BinaryLength => ApplicationData?.Length ?? 0 + Sid.BinaryLength + 8;
+    public virtual int BinaryLength => (ApplicationData?.Length ?? 0) + Sid.BinaryLength + 8;
 
     public Ace(AceType aceType, AceFlags flags, ActiveDirectoryRights accessMask, SecurityIdentifier sid,
         byte[]? applicationData)
@@ -388,7 +388,7 @@ public class Ace
 
     internal virtual void WriteBinaryForm(Span<byte> data)
     {
-        if (data.Length < BinaryLength)
+        if (data.Length < 2)
             throw new ArgumentException("Destination array was not large enough.");
 
         data[0] = (byte)AceType;
@@ -409,7 +409,7 @@ public class Ace
 
     public override string ToString()
     {
-        return string.Format("{0} {1} - 0x{2:X8} {3}", AceType, AceFlags, AccessMask, Sid.Value);
+        return string.Format("{0} {1} - {2} {3}", AceType, AceFlags, AccessMask, Sid.Value);
     }
 
     internal static Ace ParseAce(ReadOnlySpan<byte> data, out int bytesConsumed)
@@ -508,7 +508,7 @@ public sealed class ObjectAce : Ace
 
     internal override void WriteBinaryForm(Span<byte> data)
     {
-        if (data.Length < BinaryLength)
+        if (data.Length < 2)
             throw new ArgumentException("Destination array was not large enough.");
 
         data[0] = (byte)AceType;
@@ -519,7 +519,10 @@ public sealed class ObjectAce : Ace
         if (!BitConverter.TryWriteBytes(data[4..], (UInt32)AccessMask))
             throw new ArgumentException("Destination array was not large enough.");
 
-        data = data[8..];
+        if (!BitConverter.TryWriteBytes(data[8..], (UInt32)ObjectAceFlags))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        data = data[12..];
         if ((ObjectAceFlags & ObjectAceFlags.ObjectAceTypePresent) != 0)
         {
             if (!ObjectAceType.TryWriteBytes(data))

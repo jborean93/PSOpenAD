@@ -41,7 +41,7 @@ public sealed class SecurityIdentifier
         _revision = data[0];
 
         Span<byte> rawAuthority = stackalloc byte[8];
-        data[2..6].CopyTo(rawAuthority[2..]);
+        data[2..8].CopyTo(rawAuthority[2..]);
         if (BitConverter.IsLittleEndian)
             rawAuthority.Reverse();
         _identifierAuthority = BitConverter.ToUInt64(rawAuthority);
@@ -79,6 +79,23 @@ public sealed class SecurityIdentifier
 
             data = data[4..];
         }
+    }
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is SecurityIdentifier)
+        {
+            return Value == ((SecurityIdentifier)obj).Value;
+        }
+        else
+        {
+            return base.Equals(obj);
+        }
+    }
+
+    public override int GetHashCode()
+    {
+        return Value.GetHashCode();
     }
 
     public override string ToString() => $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities);

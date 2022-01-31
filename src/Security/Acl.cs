@@ -80,15 +80,7 @@ public abstract class Acl : IList<Ace>
 
     public bool Contains(Ace item) => _aces.Contains(item);
 
-    public void CopyTo(Ace[] array, int arrayIndex)
-    {
-        foreach (Ace ace in array)
-        {
-            ValidateAceType(ace);
-        }
-
-        _aces.CopyTo(array, arrayIndex);
-    }
+    public void CopyTo(Ace[] array, int arrayIndex) => _aces.CopyTo(array, arrayIndex);
 
     public bool Remove(Ace item) => _aces.Remove(item);
 
@@ -110,7 +102,7 @@ public abstract class Acl : IList<Ace>
 
     internal void WriteBinaryForm(Span<byte> data)
     {
-        if (data.Length < BinaryLength)
+        if (data.Length < 2)
             throw new ArgumentException("Destination array was not large enough.");
 
         data[0] = (byte)Revision;
@@ -119,6 +111,9 @@ public abstract class Acl : IList<Ace>
             throw new ArgumentException("Destination array was not large enough.");
 
         if (!BitConverter.TryWriteBytes(data[4..], (UInt16)Count))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        if (data.Length < 8)
             throw new ArgumentException("Destination array was not large enough.");
         data[7] = 0;
         data[8] = 0;
@@ -135,8 +130,7 @@ public abstract class Acl : IList<Ace>
     {
         if (!AllowedAceTypes.Contains(ace.AceType) || !_allowedRevisionAceTypes.Contains(ace.AceType))
         {
-            throw new InvalidOperationException(
-               $"The {this.GetType().Name} ACL does not support an ACE type of {ace.AceType}");
+            throw new ArgumentException($"The {GetType().Name} ACL does not support an ACE type of {ace.AceType}");
         }
     }
 }
