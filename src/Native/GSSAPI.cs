@@ -86,7 +86,7 @@ internal class GssapiCredential
                 Helpers.gss_OID_set_desc* set = (Helpers.gss_OID_set_desc*)mechanisms.DangerousGetHandle();
                 Mechanisms = new List<byte[]>((int)set->count);
 
-                if (GSSAPI.MACOS_PACKED_STRUCT)
+                if (GSSAPI.IsIntelMacOS())
                 {
                     Span<Helpers.gss_OID_desc_macos> oids = new(set->elements.ToPointer(), (int)set->count);
                     foreach (Helpers.gss_OID_desc_macos memers in oids)
@@ -172,16 +172,6 @@ internal static class GSSAPI
     public static byte[] GSS_KRB5_CRED_NO_CI_FLAGS_X = new byte[] {
         0x2A, 0x85, 0x70, 0x2B, 0x0D, 0x1D
     }; // 1.2.752.43.13.29
-
-    // macOS on x86_64 need to use a specially packed structure, this just simplifies the check.
-    public static bool MACOS_PACKED_STRUCT = (
-        RuntimeInformation.IsOSPlatform(OSPlatform.OSX) &&
-        (
-            // Doesn't apply to arm64 runtimes.
-            RuntimeInformation.ProcessArchitecture == Architecture.X86 ||
-            RuntimeInformation.ProcessArchitecture == Architecture.X64
-        )
-    );
 
     [DllImport(LIB_GSSAPI)]
     public static unsafe extern int gss_add_oid_set_member(
@@ -528,7 +518,7 @@ internal static class GSSAPI
             {
                 unsafe
                 {
-                    if (MACOS_PACKED_STRUCT)
+                    if (IsIntelMacOS())
                     {
                         var actualMech = (Helpers.gss_OID_desc_macos*)actualMechBuffer.ToPointer();
                         actualMechType = new byte[actualMech->length];
@@ -697,7 +687,7 @@ internal static class GSSAPI
         if (bindings == null)
             return new SafeMemoryBuffer();
 
-        if (MACOS_PACKED_STRUCT)
+        if (IsIntelMacOS())
         {
             // Need the pack 2 structure to properly set this up.
             SafeMemoryBuffer buffer = new(Marshal.SizeOf<Helpers.gss_channel_bindings_struct_macos>());
@@ -737,7 +727,7 @@ internal static class GSSAPI
         if (oid == null)
             return new SafeMemoryBuffer();
 
-        if (MACOS_PACKED_STRUCT)
+        if (IsIntelMacOS())
         {
             // Need the pack 2 structure to properly set this up.
             SafeMemoryBuffer buffer = new(Marshal.SizeOf<Helpers.gss_OID_desc_macos>());
@@ -787,6 +777,15 @@ internal static class GSSAPI
         }
 
         return setBuffer;
+    }
+
+    internal static bool IsIntelMacOS()
+    {
+        // macOS on x86_64 need to use a specially packed structure when using GSS.Framework.
+        return GlobalState.GssapiProvider == GssapiProvider.GSSFramework && (
+            RuntimeInformation.ProcessArchitecture == Architecture.X86 ||
+            RuntimeInformation.ProcessArchitecture == Architecture.X64
+        );
     }
 }
 

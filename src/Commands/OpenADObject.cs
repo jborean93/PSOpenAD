@@ -93,7 +93,8 @@ public abstract class GetOpenADOperation : PSCmdlet
 
     protected override void ProcessRecord()
     {
-        if (_ldapFilter == null)
+        LDAPFilter finalFilter;
+        if (ParameterSetName.EndsWith("LDAPFilter"))
         {
             try
             {
@@ -126,8 +127,17 @@ public abstract class GetOpenADOperation : PSCmdlet
                 ThrowTerminatingError(rec);
                 return; // Satisfies nullability checks
             }
+
+            finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
         }
-        LDAPFilter finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
+        else if (_ldapFilter != null)
+        {
+            finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
+        }
+        else
+        {
+            finalFilter = FilteredClass;
+        }
 
         StringComparer comparer = StringComparer.OrdinalIgnoreCase;
         HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
@@ -223,14 +233,12 @@ public abstract class GetOpenADOperation : PSCmdlet
 public class GetOpenADObject : GetOpenADOperation
 {
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "ServerIdentity"
     )]
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
@@ -257,14 +265,12 @@ public class GetOpenADObject : GetOpenADOperation
 public class GetOpenADComputer : GetOpenADOperation
 {
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "ServerIdentity"
     )]
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
@@ -289,14 +295,12 @@ public class GetOpenADComputer : GetOpenADOperation
 public class GetOpenADUser : GetOpenADOperation
 {
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "ServerIdentity"
     )]
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
@@ -321,14 +325,12 @@ public class GetOpenADUser : GetOpenADOperation
 public class GetOpenADGroup : GetOpenADOperation
 {
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "ServerIdentity"
     )]
     [Parameter(
-        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
@@ -343,4 +345,34 @@ public class GetOpenADGroup : GetOpenADOperation
 
     internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
         => new OpenADGroup(attributes);
+}
+
+[Cmdlet(
+    VerbsCommon.Get, "OpenADServiceAccount",
+    DefaultParameterSetName = "ServerIdentity"
+)]
+[OutputType(typeof(OpenADServiceAccount))]
+public class GetOpenADServiceAccount : GetOpenADOperation
+{
+    [Parameter(
+        Position = 0,
+        ValueFromPipeline = true,
+        ValueFromPipelineByPropertyName = true,
+        ParameterSetName = "ServerIdentity"
+    )]
+    [Parameter(
+        Position = 0,
+        ValueFromPipeline = true,
+        ValueFromPipelineByPropertyName = true,
+        ParameterSetName = "SessionIdentity"
+    )]
+    public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
+
+    internal override (string, bool)[] DefaultProperties => OpenADServiceAccount.DEFAULT_PROPERTIES;
+
+    internal override LDAPFilter FilteredClass
+        => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("msDS-GroupManagedServiceAccount"));
+
+    internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
+        => new OpenADServiceAccount(attributes);
 }

@@ -102,6 +102,35 @@ public abstract class Acl : IList<Ace>
 
     public void RemoveAt(int index) => _aces.RemoveAt(index);
 
+    public void GetBinaryForm(byte[] binaryForm, int offset)
+    {
+        Span<byte> data = binaryForm.AsSpan()[offset..];
+        WriteBinaryForm(data);
+    }
+
+    internal void WriteBinaryForm(Span<byte> data)
+    {
+        if (data.Length < BinaryLength)
+            throw new ArgumentException("Destination array was not large enough.");
+
+        data[0] = (byte)Revision;
+        data[1] = 0;
+        if (!BitConverter.TryWriteBytes(data[2..], (UInt16)BinaryLength))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        if (!BitConverter.TryWriteBytes(data[4..], (UInt16)Count))
+            throw new ArgumentException("Destination array was not large enough.");
+        data[7] = 0;
+        data[8] = 0;
+        data = data[8..];
+
+        foreach (Ace ace in this)
+        {
+            ace.WriteBinaryForm(data);
+            data = data[ace.BinaryLength..];
+        }
+    }
+
     private void ValidateAceType(Ace ace)
     {
         if (!AllowedAceTypes.Contains(ace.AceType) || !_allowedRevisionAceTypes.Contains(ace.AceType))

@@ -75,6 +75,7 @@
         'Get-OpenADComputer'
         'Get-OpenADGroup'
         'Get-OpenADObject'
+        'Get-OpenADServiceAccount'
         'Get-OpenADSession'
         'Get-OpenADUser'
         'Get-OpenADWhoami'

@@ -2,6 +2,7 @@ using DnsClient;
 using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Management.Automation;
 using System.Reflection;
@@ -105,13 +106,23 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
             GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
                 "GSS-SPNEGO", true, true, "");
 
-            // FIXME: Run on non-domain joined host to see what error to catch.
             const GetDcFlags getDcFlags = GetDcFlags.DS_IS_DNS_NAME | GetDcFlags.DS_ONLY_LDAP_NEEDED |
                 GetDcFlags.DS_RETURN_DNS_NAME | GetDcFlags.DS_WRITABLE_REQUIRED;
-            DCInfo dcInfo = NetApi32.DsGetDcName(null, null, null, getDcFlags, null);
-            if (!string.IsNullOrWhiteSpace(dcInfo.Name))
+            string? dcName;
+            try
             {
-                string dcName = dcInfo.Name.TrimStart('\\');
+                DCInfo dcInfo = NetApi32.DsGetDcName(null, null, null, getDcFlags, null);
+                dcName = dcInfo.Name?.TrimStart('\\');
+            }
+            catch (Win32Exception e) when (e.NativeErrorCode == 1355) // ERROR_NO_SUCH_DOMAIN
+            {
+                // While it's questionable why you would use this module if it hasn't been joined to a domain it's
+                // still possible to use this for any LDAP server on Windows so just ignore the default DC setup.
+                dcName = null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dcName))
+            {
                 GlobalState.DefaultDC = new($"ldap://{dcName}:389/");
             }
         }
@@ -177,7 +188,7 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
                         ServiceHostEntry[] res = dnsLookup.ResolveService(baseDomain, "ldap",
                             System.Net.Sockets.ProtocolType.Tcp);
 
-                        ServiceHostEntry? first = res.OrderByDescending(r => r.Weight).FirstOrDefault();
+                        ServiceHostEntry? first = res.OrderBy(r => r.Priority).ThenBy(r => r.Weight).FirstOrDefault();
                         if (first != null)
                         {
                             GlobalState.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");

@@ -37,9 +37,11 @@ When creating an `OpenAD` session, PowerShell will:
 
 + Get the default naming context from the Root DSE used for subsequent queries on that connection
 
-+ Get the schema attribute information used to parse the raw data returned by the server
++ Get the schema attribute and class object information used to parse the raw data returned by the server
 
 When the session is no longer needed, dispose of the connection using `Remove-OpenADSession`.
+
+For more information on Open AD sessions, see [about_OpenADSessions](./about_OpenADSessions.md).
 
 ## EXAMPLES
 
@@ -133,6 +135,7 @@ Accept wildcard characters: False
 
 ### -ComputerName
 The LDAP/AD host to connect to.
+This should be just the hostname, use `-ConnectionUri` to connect with a full LDAP URI.
 
 ```yaml
 Type: String
@@ -263,6 +266,8 @@ The LDAP/AD server name to connect to.
 ### PSOpenAD.OpenADSession
 The connected AD session that can be used as an explicit connection on the various `OpenAD` cmdlets. This object contains the following properties:
 
++ `Id`: The unique identifier for this session in the process
+
 + `Uri`: The full URI used to connect to the host
 
 + `Authentication`: The authentication method used
@@ -270,6 +275,8 @@ The connected AD session that can be used as an explicit connection on the vario
 + `IsSigned`: Whether the data on this connection will be signed
 
 + `IsEncrypted`: Whether the data on this connection will be encrypted
+
++ `OperationTimeout`: The timeout, in milliseconds, that set the maximum time to wait for a response for each LDAP operation
 
 + `DefaultNamingContext`: The default naming context of the connected LDAP host used as the search base for future queries
 

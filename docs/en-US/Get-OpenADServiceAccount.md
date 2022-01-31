@@ -1,52 +1,52 @@
 ---
 external help file: PSOpenAD.dll-Help.xml
 Module Name: PSOpenAD
-online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADGroup.md
+online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADServiceAccount.md
 schema: 2.0.0
 ---
 
-# Get-OpenADGroup
+# Get-OpenADServiceAccount
 
 ## SYNOPSIS
-Gets one or more Active Directory groups.
+Gets one or more Active Directory managed service accounts or group managed service accounts.
 
 ## SYNTAX
 
 ### ServerIdentity (Default)
 ```
-Get-OpenADGroup [[-Identity] <ADPrincipalIdentity>] [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-Property <String[]>]
- [<CommonParameters>]
+Get-OpenADServiceAccount [[-Identity] <ADPrincipalIdentity>] [-Server <String>]
+ [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>] [-StartTLS]
+ [-Credential <PSCredential>] [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADGroup [[-Identity] <ADPrincipalIdentity>] -Session <OpenADSession> [-Property <String[]>]
+Get-OpenADServiceAccount [[-Identity] <ADPrincipalIdentity>] -Session <OpenADSession> [-Property <String[]>]
  [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
 ```
-Get-OpenADGroup -Session <OpenADSession> -LDAPFilter <String> [-SearchBase <String>]
+Get-OpenADServiceAccount -Session <OpenADSession> -LDAPFilter <String> [-SearchBase <String>]
  [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### ServerLDAPFilter
 ```
-Get-OpenADGroup [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>]
- [-StartTLS] [-Credential <PSCredential>] -LDAPFilter <String> [-SearchBase <String>]
- [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
+Get-OpenADServiceAccount [-Server <String>] [-AuthType <AuthenticationMethod>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] -LDAPFilter <String>
+ [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-The `Get-OpenADGroup` cmdlet gets a group or perforams a search to retrieve multiple groups.
-Specifying no `-Identity` or `-LDAPFilter` parameter will result in a query of just `(objectCategory=group)`.
-Otherwise that will be be used as an AND condition of the query specified by the caller, e.g. `(&(objectCategory=group)(...))`.
+The `Get-OpenADServiceAccount` cmdlet gets a service account or perforams a search to retrieve multiple service accounts.
+Specifying no `-Identity` or `-LDAPFilter` parameter will result in a query of just `(objectCategory=msDS-GroupManagedServiceAccount)`.
+Otherwise that will be be used as an AND condition of the query specified by the caller, e.g. `(&(objectCategory=msDS-GroupManagedServiceAccount)(...))`.
 
-The `-Identity` parameter specifies the Active Directory group to retrieve.
-You can identify a group by its distinguished name, GUID, security identifier, user principal name, or SAM account name.
+The `-Identity` parameter specifies the Active Directory service account to retrieve.
+You can identify a service account by its distinguished name, GUID, security identifier, user principal name, or SAM account name.
 
-The `-LDAPFilter` parameter can be used to retrieve multiple group objects using the filter required.
+The `-LDAPFilter` parameter can be used to retrieve multiple service account objects using the filter required.
 The LDAP filter value is in the form of an LDAP filter string.
 
 The cmdlet communicates with the LDAP server in one of three ways:
@@ -59,46 +59,46 @@ The cmdlet communicates with the LDAP server in one of three ways:
 
 For more information on Open AD sessions, see [about_OpenADSessions](./about_OpenADSessions.md).
 
-The output for each group retrieves a default set of group object properties as documented in the `OUTPUT` section.
+The output for each service account retrieves a default set of service account object properties as documented in the `OUTPUT` section.
 Any additional properties can be requested with the `-Property` parameter in the form of the LDAP property name desired.
 
 ## EXAMPLES
 
-### Example 1: Get all groups in the target LDAP connection
+### Example 1: Get all service accounts in the target LDAP connection
 ```powershell
-PS C:\> Get-OpenADGroup
+PS C:\> Get-OpenADServiceAccount
 ```
 
-This command retrieves all AD groups objects (`(objectCategory=group)`) in the implicit AD connection.
+This command retrieves all AD service account objects (`(objectCategory=msDS-GroupManagedServiceAccount)`) in the implicit AD connection.
 
-### Example 2: Get specific group from a specific LDAP instance using the distinguished name
+### Example 2: Get specific service account from a specific LDAP instance using the distinguished name
 ```powershell
-PS C:\> Get-OpenADGroup -Identity "CN=Domain Admins,CN=Users,DC=domain,DC=test" -Server dc.domain.test
+PS C:\> Get-OpenADServiceAccount -Identity "CN=mygMSA,CN=Managed Service Accounts,DC=domain,DC=test" -Server dc.domain.test
 ```
 
-This command retrieves the AD group object `Domain Admins` under `CN=Users,DC=domain,DC=test` from the specific LDAP server `dc.domain.test`.
+This command retrieves the AD service account object `Workstation` under `OU=City,DC=domain,DC=test` from the specific LDAP server `dc.domain.test`.
 
-### Example 3: Get all groups with a name starting with APP
+### Example 3: Get all service accounts with a name starting with APP
 ```powershell
-PS C:\> Get-OpenADGroup -LDAPFilter "(name=APP*)"
+PS C:\> Get-OpenADServiceAccount -LDAPFilter "(name=APP*)"
 ```
 
-This commands gets all the groups that have the `name` LDAP attribute that starts with `APP`.
+This commands gets all the service accounts that have the `name` LDAP attribute that starts with `APP`.
 
-### Example 4: Get extra properties for a group
+### Example 4: Get extra properties for a service account
 ```powershell
-PS C:\> $filter = "(&(SAMAccountName=*TEST*)(adminCount>=5))"
-PS C:\> Get-OpenADGroup -LDAPFilter $filter -Property adminCount, description
+PS C:\> $filter = "(&(sAMAccountName=*APP*)(logonCount>=1))"
+PS C:\> Get-OpenADServiceAccount -LDAPFilter $filter -Property whenCreated, userAccountControl
 ```
 
-This command gets all groups that match the filter and also gets the LDAP attributes `adminCount` and `description` in addition to the default properties.
+This command gets all service accounts that match the filter and also gets the LDAP attributes `whenCreated` and `userAccountControl` in addition to the default properties.
 
-### Example 5: Get all properties for a group
+### Example 5: Get all properties for a service account
 ```powershell
-PS C:\> Get-OpenADGroup -Property *
+PS C:\> Get-OpenADServiceAccount -Property *
 ```
 
-This command get all the group objects in addition to all the properties that have a value set.
+This command get all the service account objects in addition to all the properties that have a value set.
 
 ## PARAMETERS
 
@@ -136,7 +136,7 @@ Accept wildcard characters: False
 ```
 
 ### -Identity
-Specifies the Active Directory group object to search for using one fo the following formats:
+Specifies the Active Directory service account object to search for using one fo the following formats:
 
 + `DistinguishedName`
 
@@ -149,7 +149,7 @@ Specifies the Active Directory group object to search for using one fo the follo
 + `SamAccountName`
 
 The cmdlet writes an error if no, or multiple, objects are found based on the identity specified.
-In addition the identity is filtered by the LDAP filter `(objectCategory=group)` to restrict only group objects from being searched.
+In addition the identity is filtered by the LDAP filter `(objectCategory=msDS-GroupManagedServiceAccount)` to restrict only service account objects from being searched.
 The `-LDAPFilter` parameter can be used instead to query for multiple objects.
 
 ```yaml
@@ -165,8 +165,8 @@ Accept wildcard characters: False
 ```
 
 ### -LDAPFilter
-Used instead of `-Identity` to specify an LDAP query used to filter group objects.
-The filter specified here will be used with an `AND` condition to `(objectCategory=group)`.
+Used instead of `-Identity` to specify an LDAP query used to filter service account objects.
+The filter specified here will be used with an `AND` condition to `(objectCategory=msDS-GroupManagedServiceAccount)`.
 
 ```yaml
 Type: String
@@ -181,7 +181,7 @@ Accept wildcard characters: False
 ```
 
 ### -Property
-The attributes to retrieve for each group object returned.
+The attributes to retrieve for each service account object returned.
 The values of each attribute is in the form of an LDAP attribute name and are case insensitive.
 When no properties are specified the following attributes are retrieved:
 
@@ -197,7 +197,9 @@ When no properties are specified the following attributes are retrieved:
 
 + `objectSid`
 
-+ `groupType`
++ `userPrincipalName`
+
++ `servicePrincipalName`
 
 Any attributes specified by this parameter will be added to the list above.
 Specify `*` to display all attributes that are set on the object.
@@ -205,7 +207,7 @@ Any attributes on the object that do not have a value set will not be returned w
 These unset attributes must be explicitly defined for it to return on the output object.
 
 If there has been a successful connection to any LDAP server this option supports tab completion.
-The possible properties shown in the tab completion are based on the schema returned by the server for the `group` object class.
+The possible properties shown in the tab completion are based on the schema returned by the server for the `msDS-GroupManagedServiceAccount` object class.
 If no connection has been created by the client then there is no tab completion available.
 
 ```yaml
@@ -341,8 +343,8 @@ The identity in it's various forms can be piped into the cmdlet.
 
 ## OUTPUTS
 
-### PSOpenAD.OpenADGroup
-The `OpenADGroup` representing the object(s) found. This object will always have the following properties set:
+### PSOpenAD.OpenADServiceAccount
+The `OpenADServiceAccount` representing the object(s) found. This object will always have the following properties set:
 
 + `DistinguishedName`
 
@@ -356,15 +358,17 @@ The `OpenADGroup` representing the object(s) found. This object will always have
 
 + `SID`
 
-+ `GroupCategory`
++ `Enabled`
 
-+ `GroupScope`
++ `UserPrincipalName`
+
++ `ServicePrincipalNames`
 
 Any explicit attributes requested through `-Property` are also present on the object.
 
 ## NOTES
-Unlike `Get-ADGroup`, if a group object cannot be found based on the `-Identity` requested this cmdlet will emit an error record.
-Setting `-ErrorAction Stop` on the call can turn this error into an exception and have it act like `Get-ADGroup`.
+Unlike `Get-OpenADServiceAccount`, if a service account object cannot be found based on the `-Identity` requested this cmdlet will emit an error record.
+Setting `-ErrorAction Stop` on the call can turn this error into an exception and have it act like `Get-OpenADServiceAccount`.
 
 ## RELATED LINKS
 

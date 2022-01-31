@@ -10,8 +10,8 @@
 
   <ItemGroup>
     <PackageReference Include="DnsClient" Version="1.5.0" />
-    <PackageReference Include="System.Management.Automation" Version="7.0.0" PrivateAssets="all" />
-    <PackageReference Include="System.Formats.Asn1" Version="6.0.0" PrivateAssets="all" />
     <PackageReference Include="System.IO.Pipelines" Version="6.0.1" />
+    <PackageReference Include="System.Formats.Asn1" Version="6.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.Management.Automation" Version="7.0.0" PrivateAssets="all" />
   </ItemGroup>
 </Project>

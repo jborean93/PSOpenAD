@@ -51,6 +51,10 @@ internal class PropertyCompleter : IArgumentCompleter
                 className = "group";
                 break;
 
+            case "Get-OpenADServiceAccount":
+                className = "msDS-GroupManagedServiceAccount";
+                break;
+
             default:
                 className = "top";
                 break;

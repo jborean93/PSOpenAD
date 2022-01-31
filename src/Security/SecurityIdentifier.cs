@@ -42,7 +42,8 @@ public sealed class SecurityIdentifier
 
         Span<byte> rawAuthority = stackalloc byte[8];
         data[2..6].CopyTo(rawAuthority[2..]);
-        rawAuthority.Reverse();
+        if (BitConverter.IsLittleEndian)
+            rawAuthority.Reverse();
         _identifierAuthority = BitConverter.ToUInt64(rawAuthority);
 
         _subAuthorities = new uint[data[1]];
@@ -55,17 +56,28 @@ public sealed class SecurityIdentifier
 
     public void GetBinaryForm(byte[] binaryForm, int offset)
     {
-        binaryForm[offset] = _revision;
-        binaryForm[offset + 1] = (byte)_subAuthorities.Length;
+        Span<byte> data = binaryForm.AsSpan()[offset..];
 
-        byte[] authority = BitConverter.GetBytes(_identifierAuthority);
-        Array.Reverse(authority);
-        Array.Copy(authority, 2, binaryForm, offset + 2, 6);
+        WriteBinaryForm(data);
+    }
 
-        for (int i = 0; i < _subAuthorities.Length; i++)
+    internal void WriteBinaryForm(Span<byte> data)
+    {
+        if (!BitConverter.TryWriteBytes(data, _identifierAuthority))
+            throw new ArgumentException("Destination array was not large enough.");
+        if (BitConverter.IsLittleEndian)
+            data[..8].Reverse();
+
+        data[0] = _revision;
+        data[1] = (byte)_subAuthorities.Length;
+        data = data[8..];
+
+        foreach (uint subAuthority in _subAuthorities)
         {
-            byte[] rawRid = BitConverter.GetBytes(_subAuthorities[i]);
-            Array.Copy(rawRid, 0, binaryForm, offset + 8 + (i * 4), rawRid.Length);
+            if (!BitConverter.TryWriteBytes(data, subAuthority))
+                throw new ArgumentException("Destination array was not large enough.");
+
+            data = data[4..];
         }
     }
 

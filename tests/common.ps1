@@ -20,6 +20,7 @@ class PSOpenADSettings {
     [bool]$TlsAvailable = $false
     [bool]$TlsTrusted = $false
     [bool]$SupportsNegotiateAuth = $false
+    [bool]$ImplicitServerAvailable = $false
 }
 
 if (-not $global:PSOpenADSettings) {
@@ -40,12 +41,13 @@ if (-not $global:PSOpenADSettings) {
             })
 
         $global:PSOpenADSettings = [PSOpenADSettings]@{
-            Server                = $settingsRaw.server
-            Credentials           = $credentials
-            DefaultCredsAvailable = $cached
-            TlsAvailable          = ([bool]$settingsRaw.tls)
-            TlsTrusted            = $settingsRaw.tls.trusted
-            SupportsNegotiateAuth = $settingsRaw.features.negotiate_auth
+            Server                  = $settingsRaw.server
+            Credentials             = $credentials
+            DefaultCredsAvailable   = $cached
+            TlsAvailable            = ([bool]$settingsRaw.tls)
+            TlsTrusted              = $settingsRaw.tls.trusted
+            SupportsNegotiateAuth   = $settingsRaw.features.negotiate_auth
+            ImplicitServerAvailable = $settingsRaw.features.implicit_server
         }
     }
     else {

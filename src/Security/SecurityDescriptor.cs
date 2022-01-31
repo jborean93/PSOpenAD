@@ -101,6 +101,10 @@ public sealed class CommonSecurityDescriptor
     public int BinaryLength => 20 + (Owner?.BinaryLength + Group?.BinaryLength + SystemAcl?.BinaryLength +
         DiscretionaryAcl?.BinaryLength) ?? 0;
 
+    public byte Revision { get; }
+
+    public byte ResourceManagerFlags { get; }
+
     public ControlFlags Flags { get; set; }
 
     public SecurityIdentifier? Owner { get; set; }
@@ -113,8 +117,9 @@ public sealed class CommonSecurityDescriptor
 
     public CommonSecurityDescriptor(ReadOnlySpan<byte> data)
     {
+        Revision = data[0];
+        ResourceManagerFlags = data[1];
         Flags = (ControlFlags)BitConverter.ToUInt16(data[2..4]);
-
         UInt32 offsetOwner = BitConverter.ToUInt32(data[4..8]);
         UInt32 offsetGroup = BitConverter.ToUInt32(data[8..12]);
         UInt32 offsetSacl = BitConverter.ToUInt32(data[12..16]);
@@ -139,5 +144,63 @@ public sealed class CommonSecurityDescriptor
         {
             DiscretionaryAcl = DiscretionaryAcl.ParseAcl(data[(int)offsetDacl..], out var _);
         }
+    }
+
+    public void GetBinaryForm(byte[] binaryForm, int offset)
+    {
+        Span<byte> data = binaryForm.AsSpan()[offset..];
+        WriteBinaryForm(data);
+    }
+
+    internal void WriteBinaryForm(Span<byte> data)
+    {
+        if (data.Length < BinaryLength)
+            throw new ArgumentException("Destination array was not large enough.");
+
+        data[0] = Revision;
+        data[1] = ResourceManagerFlags;
+        if (!BitConverter.TryWriteBytes(data[2..], (UInt16)Flags))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        int offset = 20;
+        int offsetOwner = 0;
+        if (Owner != null)
+        {
+            offsetOwner = offset;
+            offset += Owner.BinaryLength;
+            Owner.WriteBinaryForm(data[offsetOwner..]);
+        }
+        if (!BitConverter.TryWriteBytes(data[4..], offsetOwner))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        int offsetGroup = 0;
+        if (Group != null)
+        {
+            offsetGroup = offset;
+            offset += Group.BinaryLength;
+            Group.WriteBinaryForm(data[offsetGroup..]);
+        }
+        if (!BitConverter.TryWriteBytes(data[8..], offsetGroup))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        int offsetSacl = 0;
+        if (SystemAcl != null)
+        {
+            offsetSacl = offset;
+            offset += SystemAcl.BinaryLength;
+            SystemAcl.WriteBinaryForm(data[offsetSacl..]);
+        }
+        if (!BitConverter.TryWriteBytes(data[12..], offsetSacl))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        int offsetDacl = 0;
+        if (DiscretionaryAcl != null)
+        {
+            offsetDacl = offset;
+            offset += DiscretionaryAcl.BinaryLength;
+            DiscretionaryAcl.WriteBinaryForm(data[offsetDacl..]);
+        }
+        if (!BitConverter.TryWriteBytes(data[16..], offsetDacl))
+            throw new ArgumentException("Destination array was not large enough.");
     }
 }

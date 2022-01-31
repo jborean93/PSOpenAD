@@ -14,14 +14,14 @@ Get one or more Active Directory computers.
 
 ### ServerIdentity (Default)
 ```
-Get-OpenADComputer [-Identity] <ADPrincipalIdentity> [-Server <String>] [-AuthType <AuthenticationMethod>]
+Get-OpenADComputer [[-Identity] <ADPrincipalIdentity>] [-Server <String>] [-AuthType <AuthenticationMethod>]
  [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-Property <String[]>]
  [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADComputer [-Identity] <ADPrincipalIdentity> -Session <OpenADSession> [-Property <String[]>]
+Get-OpenADComputer [[-Identity] <ADPrincipalIdentity>] -Session <OpenADSession> [-Property <String[]>]
  [<CommonParameters>]
 ```
 
@@ -40,20 +40,71 @@ Get-OpenADComputer [-Server <String>] [-AuthType <AuthenticationMethod>]
 
 ## DESCRIPTION
 The `Get-OpenADComputer` cmdlet gets a computer or perforams a search to retrieve multiple computers.
+Specifying no `-Identity` or `-LDAPFilter` parameter will result in a query of just `(objectCategory=computer)`.
+Otherwise that will be be used as an AND condition of the query specified by the caller, e.g. `(&(objectCategory=computer)(...))`.
+
+The `-Identity` parameter specifies the Active Directory computer to retrieve.
+You can identify a computer by its distinguished name, GUID, security identifier, user principal name, or SAM account name.
+
+The `-LDAPFilter` parameter can be used to retrieve multiple computer objects using the filter required.
+The LDAP filter value is in the form of an LDAP filter string.
+
+The cmdlet communicates with the LDAP server in one of three ways:
+
++ Using the implicit AD connection based on the current environment
+
++ Using the `-Session` object specified
+
++ Using a new or cached connection to the `-Server` specified
+
+For more information on Open AD sessions, see [about_OpenADSessions](./about_OpenADSessions.md).
+
+The output for each computer retrieves a default set of computer object properties as documented in the `OUTPUT` section.
+Any additional properties can be requested with the `-Property` parameter in the form of the LDAP property name desired.
 
 ## EXAMPLES
 
-### Example 1
+### Example 1: Get all computers in the target LDAP connection
 ```powershell
-PS C:\> {{ Add example code here }}
+PS C:\> Get-OpenADComputer
 ```
 
-{{ Add example description here }}
+This command retrieves all AD computer objects (`(objectCategory=computer)`) in the implicit AD connection.
+
+### Example 2: Get specific computer from a specific LDAP instance using the distinguished name
+```powershell
+PS C:\> Get-OpenADComputer -Identity "DN=Workstation,OU=City,DC=domain,DC=test" -Server dc.domain.test
+```
+
+This command retrieves the AD computer object `Workstation` under `OU=City,DC=domain,DC=test` from the specific LDAP server `dc.domain.test`.
+
+### Example 3: Get all computers with a name starting with APP
+```powershell
+PS C:\> Get-OpenADComputer -LDAPFilter "(name=APP*)"
+```
+
+This commands gets all the computers that have the `name` LDAP attribute that starts with `APP`.
+
+### Example 4: Get extra properties for a computer
+```powershell
+PS C:\> $filter = "(&(sAMAccountName=*SERVER*)(logonCount>=1))"
+PS C:\> Get-OpenADComputer -LDAPFilter $filter -Property operatingSystem, 'msDS-SupportedEncryptionTypes'
+```
+
+This command gets all computers that match the filter and also gets the LDAP attributes `operatingSystem` and `msDS-SupportedEncryptionTypes` in addition to the default properties.
+
+### Example 5: Get all properties for a computer
+```powershell
+PS C:\> Get-OpenADComputer -Property *
+```
+
+This command get all the computer objects in addition to all the properties that have a value set.
 
 ## PARAMETERS
 
 ### -AuthType
-{{ Fill AuthType Description }}
+The authentication type to use when creating the `OpenAD` session.
+This is used when the cmdlet creates a new connection to the `-Server` specified`.
 
 ```yaml
 Type: AuthenticationMethod
@@ -63,13 +114,14 @@ Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos
 
 Required: False
 Position: Named
-Default value: None
+Default value: Default
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -Credential
-{{ Fill Credential Description }}
+The explicit credentials to use when creating the `OpenAD` session.
+This is used when the cmdlet creates a new connection to the `-Server` specified.
 
 ```yaml
 Type: PSCredential
@@ -84,14 +136,28 @@ Accept wildcard characters: False
 ```
 
 ### -Identity
-{{ Fill Identity Description }}
+Specifies the Active Directory computer object to search for using one fo the following formats:
+
++ `DistinguishedName`
+
++ `ObjectGUID`
+
++ `ObjectSID`
+
++ `UserPrincipalName`
+
++ `SamAccountName`
+
+The cmdlet writes an error if no, or multiple, objects are found based on the identity specified.
+In addition the identity is filtered by the LDAP filter `(objectCategory=computer)` to restrict only computer objects from being searched.
+The `-LDAPFilter` parameter can be used instead to query for multiple objects.
 
 ```yaml
 Type: ADPrincipalIdentity
 Parameter Sets: ServerIdentity, SessionIdentity
 Aliases:
 
-Required: True
+Required: False
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName, ByValue)
@@ -99,7 +165,8 @@ Accept wildcard characters: False
 ```
 
 ### -LDAPFilter
-{{ Fill LDAPFilter Description }}
+Used instead of `-Identity` to specify an LDAP query used to filter computer objects.
+The filter specified here will be used with an `AND` condition to `(objectCategory=computer)`.
 
 ```yaml
 Type: String
@@ -114,7 +181,34 @@ Accept wildcard characters: False
 ```
 
 ### -Property
-{{ Fill Property Description }}
+The attributes to retrieve for each computer object returned.
+The values of each attribute is in the form of an LDAP attribute name and are case insensitive.
+When no properties are specified the following attributes are retrieved:
+
++ `distinguishedName`
+
++ `name`
+
++ `objectClass`
+
++ `objectGUID`
+
++ `sAMAccountName`
+
++ `objectSid`
+
++ `userPrincipalName`
+
++ `dNSHostName`
+
+Any attributes specified by this parameter will be added to the list above.
+Specify `*` to display all attributes that are set on the object.
+Any attributes on the object that do not have a value set will not be returned with `*`.
+These unset attributes must be explicitly defined for it to return on the output object.
+
+If there has been a successful connection to any LDAP server this option supports tab completion.
+The possible properties shown in the tab completion are based on the schema returned by the server for the `computer` object class.
+If no connection has been created by the client then there is no tab completion available.
 
 ```yaml
 Type: String[]
@@ -129,7 +223,9 @@ Accept wildcard characters: False
 ```
 
 ### -SearchBase
-{{ Fill SearchBase Description }}
+The base Active Directory path to search the object for.
+This defaults to the `defaultNamingContext` of the session connection which is typically the root of the domain.
+Combine this with `-SearchScope` to limit searches to a smaller subset of the domain.
 
 ```yaml
 Type: String
@@ -144,7 +240,14 @@ Accept wildcard characters: False
 ```
 
 ### -SearchScope
-{{ Fill SearchScope Description }}
+Specifies the scope of an Active Directory search.
+This can be set to
+
++ `Base` - Only searches the object at the `-SearchBase` path specified
+
++ `OneLevel` - Searches the immediate children of `-SearchBase`
+
++ `Subtree` (default) - Searches the children of `-SearchBase` and subsquent children of them
 
 ```yaml
 Type: SearchScope
@@ -154,13 +257,19 @@ Accepted values: Base, OneLevel, Subtree
 
 Required: False
 Position: Named
-Default value: None
+Default value: Subtree
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -Server
-{{ Fill Server Description }}
+The Active Directory server to connect to.
+This can either be the name of the server or the LDAP connection uri starting with `ldap://` or `ldaps://`.
+The derived URI of this value is used to find any existing connections that are available for use or will be used to create a new session if no cached session exists.
+If both `-Server` and `-Session` are not specified then the default Kerberos realm is used if available otherwise it will generate an error.
+This option supports tab completion based on the existing OpenADSessions that have been created.
+
+This option is mutually exclusive with `-Session`.
 
 ```yaml
 Type: String
@@ -175,7 +284,10 @@ Accept wildcard characters: False
 ```
 
 ### -Session
-{{ Fill Session Description }}
+The `OpenAD` session to use for the query rather than trying to create a new connection or reuse a cached connection.
+This session is generated by `New-OpenADSession` and can be used in situations where the global defaults should not be used.
+
+This option is mutually exclusive with `-Server`.
 
 ```yaml
 Type: OpenADSession
@@ -190,7 +302,8 @@ Accept wildcard characters: False
 ```
 
 ### -SessionOption
-{{ Fill SessionOption Description }}
+Advanced session options used when creating a new session with `-Server`.
+These options can be generated with `New-OpenADSessionOption`.
 
 ```yaml
 Type: OpenADSessionOptions
@@ -205,7 +318,7 @@ Accept wildcard characters: False
 ```
 
 ### -StartTLS
-{{ Fill StartTLS Description }}
+Use `StartTLS` when creating a new session with `-Server`.
 
 ```yaml
 Type: SwitchParameter
@@ -226,9 +339,38 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ### PSOpenAD.ADPrincipalIdentity
 ### System.String
+The identity in it's various forms can be piped into the cmdlet.
+
 ## OUTPUTS
 
 ### PSOpenAD.OpenADComputer
+The `OpenADComputer` representing the object(s) found. This object will always have the following properties set:
+
++ `DistinguishedName`
+
++ `Name`
+
++ `ObjectClass`
+
++ `ObjectGuid`
+
++ `SamAccountName`
+
++ `SID`
+
++ `Enabled`
+
++ `UserPrincipalName`
+
++ `DNSHostName`
+
+Any explicit attributes requested through `-Property` are also present on the object.
+
 ## NOTES
+Unlike `Get-ADComputer`, if an computer object cannot be found based on the `-Identity` requested this cmdlet will emit an error record.
+Setting `-ErrorAction Stop` on the call can turn this error into an exception and have it act like `Get-ADComputer`.
 
 ## RELATED LINKS
+
+[Active Directory: LDAP Syntax Filters](https://social.technet.microsoft.com/wiki/contents/articles/5392.active-directory-ldap-syntax-filters.aspx)
+[LDAP Filters](https://ldap.com/ldap-filters/)

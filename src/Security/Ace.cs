@@ -3,11 +3,11 @@ using System;
 namespace PSOpenAD.Security;
 
 /// <summary>
-/// The System.DirectoryServices.ActiveDirectoryRights enumeration specifies the access rights that are assigned to an
-/// Active Directory Domain Services object.
+/// The ActiveDirectoryRights enumeration specifies the access rights that are assigned to an Active Directory
+/// Security Descriptor object.
 /// </summary>
 [Flags]
-public enum ObjectAceRights : uint
+public enum ActiveDirectoryRights : uint
 {
     /// <summary>
     /// The right to create children of the object.
@@ -80,26 +80,6 @@ public enum ObjectAceRights : uint
     ReadControl = 0x00020000,
 
     /// <summary>
-    /// The right to read permissions on, and list the contents of, a container object.
-    /// ADS_RIGHT_GENERIC_EXECUTE
-    /// </summary>
-    GenericExecute = 0x00020004,
-
-    /// <summary>
-    /// The right to read permissions on this object, write all the properties on this object, and perform all
-    /// validated writes to this object.
-    /// ADS_RIGHT_GENERIC_WRITE
-    /// </summary>
-    GenericWrite = 0x00020028,
-
-    /// <summary>
-    /// The right to read permissions on this object, read all the properties on this object, list this object name
-    /// when the parent container is listed, and list the contents of this object if it is a container.
-    /// ADS_RIGHT_GENERIC_READ
-    /// </summary>
-    GenericRead = 0x00020094,
-
-    /// <summary>
     /// The right to modify the DACL in the object security descriptor.
     /// ADS_RIGHT_WRITE_DAC
     /// </summary>
@@ -113,13 +93,6 @@ public enum ObjectAceRights : uint
     WriteOwner = 0x00080000,
 
     /// <summary>
-    /// The right to create or delete children, delete a subtree, read and write properties, examine children and the
-    /// object itself, add and remove the object from the directory, and read or write with an extended right.
-    /// ADS_RIGHT_GENERIC_ALL
-    /// </summary>
-    GenericAll = 0x000F01FF,
-
-    /// <summary>
     /// The right to use the object for synchronization. This right enables a thread to wait until that object is in
     /// the signaled state.
     /// ADS_RIGHT_SYNCHRONIZE
@@ -130,7 +103,34 @@ public enum ObjectAceRights : uint
     /// The right to get or set the SACL in the object security descriptor.
     /// ADS_RIGHT_ACCESS_SYSTEM_SECURITY
     /// </summary>
-    AccessSystemSecurity = 0x01000000
+    AccessSystemSecurity = 0x01000000,
+
+    /// <summary>
+    /// The right to read permissions on this object, read all the properties on this object, list this object name
+    /// when the parent container is listed, and list the contents of this object if it is a container.
+    /// ADS_RIGHT_GENERIC_READ
+    /// </summary>
+    GenericRead = 0x80000000,
+
+    /// <summary>
+    /// The right to read permissions on this object, write all the properties on this object, and perform all
+    /// validated writes to this object.
+    /// ADS_RIGHT_GENERIC_WRITE
+    /// </summary>
+    GenericWrite = 0x40000000,
+
+    /// <summary>
+    /// The right to read permissions on, and list the contents of, a container object.
+    /// ADS_RIGHT_GENERIC_EXECUTE
+    /// </summary>
+    GenericExecute = 0x20000000,
+
+    /// <summary>
+    /// The right to create or delete children, delete a subtree, read and write properties, examine children and the
+    /// object itself, add and remove the object from the directory, and read or write with an extended right.
+    /// ADS_RIGHT_GENERIC_ALL
+    /// </summary>
+    GenericAll = 0x10000000,
 }
 
 public enum AceType : byte
@@ -362,7 +362,7 @@ public enum ObjectAceFlags
 
 public class Ace
 {
-    public int AccessMask { get; set; }
+    public ActiveDirectoryRights AccessMask { get; set; }
     public AceFlags AceFlags { get; set; }
     public AceType AceType { get; }
     public SecurityIdentifier Sid { get; set; }
@@ -370,13 +370,41 @@ public class Ace
 
     public virtual int BinaryLength => ApplicationData?.Length ?? 0 + Sid.BinaryLength + 8;
 
-    public Ace(AceType aceType, AceFlags flags, int accessMask, SecurityIdentifier sid, byte[]? applicationData)
+    public Ace(AceType aceType, AceFlags flags, ActiveDirectoryRights accessMask, SecurityIdentifier sid,
+        byte[]? applicationData)
     {
         AceType = aceType;
         AceFlags = flags;
         AccessMask = accessMask;
         Sid = sid;
         ApplicationData = applicationData;
+    }
+
+    public virtual void GetBinaryForm(byte[] binaryForm, int offset)
+    {
+        Span<byte> data = binaryForm.AsSpan()[offset..];
+        WriteBinaryForm(data);
+    }
+
+    internal virtual void WriteBinaryForm(Span<byte> data)
+    {
+        if (data.Length < BinaryLength)
+            throw new ArgumentException("Destination array was not large enough.");
+
+        data[0] = (byte)AceType;
+        data[1] = (byte)AceFlags;
+        if (!BitConverter.TryWriteBytes(data[2..], (UInt16)BinaryLength))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        if (!BitConverter.TryWriteBytes(data[4..], (UInt32)AccessMask))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        Sid.WriteBinaryForm(data[8..]);
+
+        if (ApplicationData?.Length > 0)
+        {
+            ApplicationData.AsSpan().CopyTo(data[(8 + Sid.BinaryLength)..]);
+        }
     }
 
     public override string ToString()
@@ -391,7 +419,7 @@ public class Ace
         UInt16 aceSize = BitConverter.ToUInt16(data[2..4]);
         data = data[..aceSize];
         bytesConsumed = aceSize;
-        int accessMask = BitConverter.ToInt32(data[4..8]);
+        ActiveDirectoryRights accessMask = (ActiveDirectoryRights)BitConverter.ToInt32(data[4..8]);
 
         Ace ace;
         if (aceType == AceType.AccessAllowedObject || aceType == AceType.AccessDeniedObject ||
@@ -442,7 +470,7 @@ public class Ace
     }
 }
 
-public class ObjectAce : Ace
+public sealed class ObjectAce : Ace
 {
     public Guid InheritedObjectAceType { get; set; }
     public ObjectAceFlags ObjectAceFlags { get; set; }
@@ -463,12 +491,56 @@ public class ObjectAce : Ace
         }
     }
 
-    public ObjectAce(AceType aceType, AceFlags flags, int accessMask, SecurityIdentifier sid, byte[]? applicationData,
-        ObjectAceFlags objectAceFlags, Guid objectAceType, Guid inheritedObjectAceType)
+    public ObjectAce(AceType aceType, AceFlags flags, ActiveDirectoryRights accessMask, SecurityIdentifier sid,
+        byte[]? applicationData, ObjectAceFlags objectAceFlags, Guid objectAceType, Guid inheritedObjectAceType)
         : base(aceType, flags, accessMask, sid, applicationData)
     {
         ObjectAceFlags = objectAceFlags;
         ObjectAceType = objectAceType;
         InheritedObjectAceType = inheritedObjectAceType;
+    }
+
+    public override void GetBinaryForm(byte[] binaryForm, int offset)
+    {
+        Span<byte> data = binaryForm.AsSpan()[offset..];
+        WriteBinaryForm(data);
+    }
+
+    internal override void WriteBinaryForm(Span<byte> data)
+    {
+        if (data.Length < BinaryLength)
+            throw new ArgumentException("Destination array was not large enough.");
+
+        data[0] = (byte)AceType;
+        data[1] = (byte)AceFlags;
+        if (!BitConverter.TryWriteBytes(data[2..], (UInt16)BinaryLength))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        if (!BitConverter.TryWriteBytes(data[4..], (UInt32)AccessMask))
+            throw new ArgumentException("Destination array was not large enough.");
+
+        data = data[8..];
+        if ((ObjectAceFlags & ObjectAceFlags.ObjectAceTypePresent) != 0)
+        {
+            if (!ObjectAceType.TryWriteBytes(data))
+                throw new ArgumentException("Destination array was not large enough.");
+
+            data = data[16..];
+        }
+
+        if ((ObjectAceFlags & ObjectAceFlags.InheritedObjectAceTypePresent) != 0)
+        {
+            if (!InheritedObjectAceType.TryWriteBytes(data))
+                throw new ArgumentException("Destination array was not large enough.");
+
+            data = data[16..];
+        }
+
+        Sid.WriteBinaryForm(data);
+
+        if (ApplicationData?.Length > 0)
+        {
+            ApplicationData.AsSpan().CopyTo(data[Sid.BinaryLength..]);
+        }
     }
 }

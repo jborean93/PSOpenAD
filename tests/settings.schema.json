@@ -151,6 +151,17 @@
                         true,
                         false
                     ]
+                },
+                "implicit_server": {
+                    "$id": "#/properties/features/properties/implicit_server",
+                    "type": "boolean",
+                    "title": "Implicit Server Lookup",
+                    "description": "Whether the client can lookup the LDAP URI based on the environment.",
+                    "default": false,
+                    "examples": [
+                        true,
+                        false
+                    ]
                 }
             }
         }
