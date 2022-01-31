@@ -373,7 +373,7 @@ internal sealed class OpenADSessionFactory
         {
             string msg = $"Authentication {selectedAuth.Method} is not available";
             if (!string.IsNullOrWhiteSpace(selectedAuth.Details))
-                msg += $" - ${selectedAuth.Details}";
+                msg += $" - {selectedAuth.Details}";
             throw new ArgumentException(msg);
         }
 

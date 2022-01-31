@@ -23,23 +23,25 @@ public static class DiscretionaryAclTests
 
         Assert.IsType<Ace>(actual[0]);
         Ace ace1 = actual[0];
-        Assert.True(actual.Contains(ace1));
+        bool contains = actual.Contains(ace1);
+        Assert.True(contains);
         Assert.Equal(0, actual.IndexOf(ace1));
         Assert.Equal(512, (int)ace1.AccessMask);
         Assert.Equal(AceFlags.ContainerInherit | AceFlags.NoPropagateInherit, ace1.AceFlags);
         Assert.Equal(AceType.AccessDenied, ace1.AceType);
         Assert.Equal(new SecurityIdentifier("S-1-5-18"), ace1.Sid);
-        Assert.Equal(null, ace1.ApplicationData);
+        Assert.Null(ace1.ApplicationData);
 
         Assert.IsType<ObjectAce>(actual[1]);
         ObjectAce ace2 = (ObjectAce)actual[1];
-        Assert.True(actual.Contains(ace2));
+        contains = actual.Contains(ace2);
+        Assert.True(contains);
         Assert.Equal(1, actual.IndexOf(ace2));
         Assert.Equal(ActiveDirectoryRights.ExtendedRight, ace2.AccessMask);
         Assert.Equal(AceFlags.ContainerInherit | AceFlags.NoPropagateInherit, ace2.AceFlags);
         Assert.Equal(AceType.AccessAllowedObject, ace2.AceType);
         Assert.Equal(new SecurityIdentifier("S-1-5-19"), ace2.Sid);
-        Assert.Equal(null, ace2.ApplicationData);
+        Assert.Null(ace2.ApplicationData);
         Assert.Equal(ObjectAceFlags.ObjectAceTypePresent | ObjectAceFlags.InheritedObjectAceTypePresent,
             ace2.ObjectAceFlags);
         Assert.Equal(new Guid("5e4c0080-090d-4544-b19a-96752b9c1c93"), ace2.ObjectAceType);
@@ -107,11 +109,11 @@ public static class DiscretionaryAclTests
         DiscretionaryAcl acl = new(AclRevision.Revision);
         acl.Add(ace);
 
-        Assert.Equal(1, acl.Count);
+        Assert.Single(acl);
 
         acl.Clear();
 
-        Assert.Equal(0, acl.Count);
+        Assert.Empty(acl);
     }
 
     [Fact]
@@ -122,11 +124,11 @@ public static class DiscretionaryAclTests
         DiscretionaryAcl acl = new(AclRevision.Revision);
         acl.Add(ace);
 
-        Assert.Equal(1, acl.Count);
+        Assert.Single(acl);
 
         acl.Remove(ace);
 
-        Assert.Equal(0, acl.Count);
+        Assert.Empty(acl);
     }
 
     [Fact]
@@ -137,11 +139,11 @@ public static class DiscretionaryAclTests
         DiscretionaryAcl acl = new(AclRevision.Revision);
         acl.Add(ace);
 
-        Assert.Equal(1, acl.Count);
+        Assert.Single(acl);
 
         acl.RemoveAt(0);
 
-        Assert.Equal(0, acl.Count);
+        Assert.Empty(acl);
     }
 
     [Fact]
