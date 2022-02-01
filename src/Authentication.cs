@@ -103,7 +103,7 @@ internal class GssapiContext : SecurityContext
     private readonly SafeGssapiCred? _credential;
     private readonly SafeGssapiName _targetSpn;
     private readonly ChannelBindings? _bindingData;
-    private readonly byte[] _mech;
+    private readonly byte[]? _mech;
     private readonly GssapiContextFlags _flags = GssapiContextFlags.GSS_C_MUTUAL_FLAG |
         GssapiContextFlags.GSS_C_SEQUENCE_FLAG;
     private SafeGssapiSecContext? _context;
@@ -115,18 +115,11 @@ internal class GssapiContext : SecurityContext
         _mech = method == AuthenticationMethod.Negotiate ? GSSAPI.SPNEGO : GSSAPI.KERBEROS;
         _targetSpn = GSSAPI.ImportName(target, GSSAPI.GSS_C_NT_HOSTBASED_SERVICE);
 
-        List<byte[]> mechList;
-        if (GlobalState.GssapiProvider == GssapiProvider.MIT)
+        bool isHeimdal = GlobalState.GssapiProvider != GssapiProvider.MIT;
+        List<byte[]> mechList = new() { _mech };
+        if (isHeimdal && method == AuthenticationMethod.Negotiate)
         {
-            mechList = new List<byte[]>() { _mech };
-        }
-        else
-        {
-            mechList = new List<byte[]>() { GSSAPI.KERBEROS };
-            if (method == AuthenticationMethod.Negotiate)
-            {
-                mechList.Add(GSSAPI.NTLM);
-            }
+            mechList.AddRange(new[] { GSSAPI.KERBEROS, GSSAPI.NTLM });
         }
 
         if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
@@ -134,6 +127,11 @@ internal class GssapiContext : SecurityContext
             using SafeGssapiName name = GSSAPI.ImportName(username, GSSAPI.GSS_C_NT_USER_NAME);
             _credential = GSSAPI.AcquireCredWithPassword(name, password, 0, mechList,
                 GssapiCredUsage.GSS_C_INITIATE).Creds;
+
+            if (GlobalState.GssapiProvider != GssapiProvider.MIT)
+            {
+                _mech = null;
+            }
         }
         else
         {

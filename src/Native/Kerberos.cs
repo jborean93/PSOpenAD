@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Security.Authentication;
 
-namespace PSOpenAD;
+namespace PSOpenAD.Native;
 
 internal static class Kerberos
 {

@@ -1,5 +1,10 @@
 # Changelog for PSOpenAD
 
-## v0.1.0 - TBD
+## v0.1.0-preview2 - TBD
 
-* Initial version of the `PSOpenAD` module
++ Improve GSSAPI and Kebreros library loading
++ Change `-UseSSL` to `-UseTLS`
+
+## v0.1.0-preview1 - 2022-02-1
+
++ Initial version of the `PSOpenAD` module

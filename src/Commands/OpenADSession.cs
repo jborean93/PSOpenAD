@@ -54,7 +54,7 @@ public class NewOpenADSession : PSCmdlet
     [Parameter(
         ParameterSetName = "ComputerName"
     )]
-    public SwitchParameter UseSSL { get; set; }
+    public SwitchParameter UseTLS { get; set; }
 
     [Parameter()]
     public PSCredential? Credential { get; set; }
@@ -74,8 +74,8 @@ public class NewOpenADSession : PSCmdlet
     {
         if (Uri == null)
         {
-            string scheme = UseSSL ? "ldaps" : "ldap";
-            int port = Port != 0 ? Port : (UseSSL ? 636 : 389);
+            string scheme = UseTLS ? "ldaps" : "ldap";
+            int port = Port != 0 ? Port : (UseTLS ? 636 : 389);
             Uri = new Uri($"{scheme}://{ComputerName}:{port}");
         }
 
