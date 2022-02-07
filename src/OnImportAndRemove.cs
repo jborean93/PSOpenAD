@@ -132,11 +132,12 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
             LibraryInfo? gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, new[] {
                 MACOS_GSS_FRAMEWORK, // macOS GSS Framework (technically Heimdal)
                 "libgssapi_krb5.so.2", // MIT krb5
-                "libgssapi.so", // Heimdal
+                "libgssapi.so.3", "libgssapi.so", // Heimdal
             });
             LibraryInfo? krb5Lib = Resolver.CacheLibrary(Kerberos.LIB_KRB5, new[] {
                 "/System/Library/PrivateFrameworks/Heimdal.framework/Heimdal", // macOS Heimdal Framework
-                "libkrb5.so", // Both MIT and Heimdal use the same lib name
+                "libkrb5.so.3", // MIT krb5
+                "libkrb5.so.26", "libkrb5.so", // Heimdal
             });
 
             if (gssapiLib == null)

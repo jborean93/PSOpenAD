@@ -33,13 +33,22 @@ jobs:
         - name: Fedora 35
           container: fedora:35
           os: ubuntu-latest
+          gssapi_provider: mit
+        - name: Fedora 35
+          container: fedora:35
+          os: ubuntu-latest
+          gssapi_provider: heimdal
 
     steps:
     - uses: actions/checkout@v2
 
     - name: Run Tests
       shell: bash
-      run: ./tools/run-ci.sh '${{ matrix.info.container }}' "${BUILD_CONFIGURATION}"
+      run: >-
+        ./tools/run-ci.sh
+        '${{ matrix.info.container }}'
+        '${{ matrix.info.gssapi_provider }}'
+        "${BUILD_CONFIGURATION}"
 
     - name: Upload Test Results
       if: always()

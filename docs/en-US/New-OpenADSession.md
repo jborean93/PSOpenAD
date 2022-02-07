@@ -14,7 +14,7 @@ Creates an authenticated connection to an AD/LDAP host.
 
 ### ComputerName (Default)
 ```
-New-OpenADSession [-ComputerName] <String> [-Port <Int32>] [-UseSSL] [-Credential <PSCredential>]
+New-OpenADSession [-ComputerName] <String> [-Port <Int32>] [-UseTLS] [-Credential <PSCredential>]
  [-AuthType <AuthenticationMethod>] [-StartTLS] [-SessionOption <OpenADSessionOptions>] [<CommonParameters>]
 ```
 
@@ -72,7 +72,7 @@ Because `StartTLS` is used, the SIMPLE auth exchange is encrypted and the creden
 
 ### Example 4: Create an LDAPS connection
 ```powershell
-PS C:\> $session = New-OpenADSession -ComputerName dc -UseSSL
+PS C:\> $session = New-OpenADSession -ComputerName dc -UseTLS
 ```
 
 Creates an `OpenAD` session using LDAPS.
@@ -220,7 +220,7 @@ Accept wildcard characters: False
 
 ### -Uri
 Connect using the full LDAP URI.
-This is mutually exclusive with the `-ComputerName`, `-Port`, and `-UseSSL` options.
+This is mutually exclusive with the `-ComputerName`, `-Port`, and `-UseTLS` options.
 
 ```yaml
 Type: Uri
@@ -234,7 +234,7 @@ Accept pipeline input: True (ByPropertyName)
 Accept wildcard characters: False
 ```
 
-### -UseSSL
+### -UseTLS
 Connect over LDAPS rather than standard LDAP.
 Either `StartTLS` or an LDAPS connection should be used when `-AuthType Simple` to ensure the data exchanged is encrypted and the server's identity is verified.
 

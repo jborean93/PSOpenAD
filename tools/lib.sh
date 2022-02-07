@@ -22,44 +22,62 @@ lib::setup::system_requirements() {
 lib::setup::system_requirements::el() {
     rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm
 
-    # krb5-libs - Provides the MIT GSSAPI/Krb5 Library
-    # krb5-workstation - Provides kinit for tests but not needed by PSOpenAD
-    dnf install -y \
-        --nogpgcheck \
-        --disablerepo=\*modul\* \
-        krb5-libs \
-        krb5-workstation \
-        dotnet-sdk-6.0 \
-        powershell
+    if [ x"${GSSAPI_PROVIDER}" = "xheimdal" ]; then
+        # heimdal-libs - Provides the Heimdal GSSAPI/Krb5 Library
+        # heimdal-path - Ensures the Heimdal libs come first in the PATH
+        # heimdal-workstation - Provides kinit for tests but not needed by PSOpenAD
+        dnf install -y \
+            --nogpgcheck \
+            --disablerepo=\*modul\* \
+            heimdal-libs \
+            heimdal-path \
+            heimdal-workstation \
+            dotnet-sdk-6.0 \
+            powershell
+
+        source /etc/profile.d/heimdal.sh
+
+        # Ugly hack but we can't uninstall MIT krb5 so to ensure our tests test
+        # against Heimdal we rename the MIT krb5 libs.
+        mv /lib64/libgssapi_krb5.so.2 /lib64/libgssapi_krb5.so.2.bak
+        mv /lib64/libgssapi_krb5.so.2.2 /lib64/libgssapi_krb5.so.2.2.bak
+        mv /lib64/libkrb5.so.3 /lib64/libkrb5.so.3.bak
+        mv /lib64/libkrb5.so.3.3 /lib64/libkrb5.so.3.3.bak
+
+    else
+        # krb5-libs - Provides the MIT GSSAPI/Krb5 Library
+        # krb5-workstation - Provides kinit for tests but not needed by PSOpenAD
+        dnf install -y \
+            --nogpgcheck \
+            --disablerepo=\*modul\* \
+            krb5-libs \
+            krb5-workstation \
+            dotnet-sdk-6.0 \
+            powershell
+    fi
 
     export PATH="~/.dotnet/tools:$PATH"
 }
 
 lib::setup::gssapi() {
-    # Wait for the DC to have been created and is ready for connections
-    pwsh -NoProfile -NoLogo -File ./tools/WaitSocket.ps1 -TargetHost dc.psopenad.test -Port 389 -Timeout 60000
-
     cat > /tmp/psopenad-krb5.conf << EOF
 [libdefaults]
-  rdns = no
+  rdns = false
   default_realm = ${AD_REALM^^}
-
-[realms]
-    ${AD_REALM^^} = {
-        kdc = dc.${AD_REALM,,}
-    }
-
-[domain_realm]
-  ${AD_REALM,,} = ${AD_REALM^^}
-  .${AD_REALM,,} = ${AD_REALM^^}
 EOF
 
     export KRB5_CONFIG="/tmp/psopenad-krb5.conf"
-    export KRB5CCNAME="DIR:/tmp/ccache-dir"
 
     echo "Getting Kerberos ticket for primary user"
-    echo "${AD_PASSWORD}" | kinit "Administrator@${AD_REALM^^}"
-    klist -l
+    if [ x"${GSSAPI_PROVIDER}" = "xheimdal" ]; then
+        echo "${AD_PASSWORD}" | kinit --password-file=STDIN "Administrator@${AD_REALM^^}"
+        klist
+
+    else
+        export KRB5CCNAME="DIR:/tmp/ccache-dir"
+        echo "${AD_PASSWORD}" | kinit "Administrator@${AD_REALM^^}"
+        klist -l
+    fi
 }
 
 lib::tests::run() {
@@ -80,10 +98,11 @@ ConvertTo-Json -InputObject ([Ordered]@{
         }
     )
     tls = [Ordered]@{
-        trusted = \$true
+        trusted = \$false
     }
     features = [Ordered]@{
         negotiate_auth = \$true
+        implicit_server = \$true
     }
 }) | Out-File ./test.settings.json
 
