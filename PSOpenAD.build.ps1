@@ -82,7 +82,7 @@ task CopyToRelease {
 }
 
 task Package {
-    $nupkgPath = [IO.Path]::Combine($BuildPath, "$ModuleName.$Version.nupkg")
+    $nupkgPath = [IO.Path]::Combine($BuildPath, "$ModuleName.$Version*.nupkg")
     if (Test-Path $nupkgPath) {
         Remove-Item $nupkgPath -Force
     }
