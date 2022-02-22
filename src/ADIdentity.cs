@@ -46,6 +46,8 @@ public class ADObjectIdentity
 
 public class ADPrincipalIdentity : ADObjectIdentity
 {
+    public virtual bool SamEndsWithDollar => false;
+
     public ADPrincipalIdentity(string value)
     {
         if (TryParseGuid(value, out var filter))
@@ -89,6 +91,10 @@ public class ADPrincipalIdentity : ADObjectIdentity
         if (m.Success)
         {
             string username = m.Groups["username"].Value;
+            if (SamEndsWithDollar && !username.EndsWith('$'))
+            {
+                username += "$";
+            }
             filter = new FilterEquality("sAMAccountName", LDAPFilter.EncodeSimpleFilterValue(username));
             return true;
         }
@@ -119,4 +125,17 @@ public class ADPrincipalIdentity : ADObjectIdentity
         sid.GetBinaryForm(sidBytes, 0);
         return new FilterEquality("objectSid", sidBytes);
     }
+}
+
+public class ADPrincipalIdentityWithDollar : ADPrincipalIdentity
+{
+    public override bool SamEndsWithDollar => true;
+
+    public ADPrincipalIdentityWithDollar(string value) : base(value) { }
+
+    public ADPrincipalIdentityWithDollar(SecurityIdentifier sid) : base(sid) { }
+
+    public ADPrincipalIdentityWithDollar(OpenADObject obj) : base(obj) { }
+
+    public ADPrincipalIdentityWithDollar(Guid objectGuid) : base(objectGuid) { }
 }
