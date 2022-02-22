@@ -9,9 +9,9 @@ using System.Threading;
 
 namespace PSOpenAD.Commands;
 
-public abstract class GetOpenADOperation : PSCmdlet
+public abstract class GetOpenADOperation<T> : PSCmdlet
+    where T : ADObjectIdentity
 {
-    internal LDAPFilter? _ldapFilter;
     internal bool _includeDeleted = false;
 
     private CancellationTokenSource? CurrentCancelToken { get; set; }
@@ -83,6 +83,20 @@ public abstract class GetOpenADOperation : PSCmdlet
 
     #region Common Parameters
 
+    [Parameter(
+        Position = 0,
+        ValueFromPipeline = true,
+        ValueFromPipelineByPropertyName = true,
+        ParameterSetName = "ServerIdentity"
+    )]
+    [Parameter(
+        Position = 0,
+        ValueFromPipeline = true,
+        ValueFromPipelineByPropertyName = true,
+        ParameterSetName = "SessionIdentity"
+    )]
+    public T? Identity { get; set; }
+
     [Parameter()]
     [Alias("Properties")]
     [ValidateNotNullOrEmpty]
@@ -96,9 +110,10 @@ public abstract class GetOpenADOperation : PSCmdlet
         LDAPFilter finalFilter;
         if (ParameterSetName.EndsWith("LDAPFilter"))
         {
+            LDAPFilter subFilter;
             try
             {
-                _ldapFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter);
+                subFilter = LDAP.LDAPFilter.ParseFilter(LDAPFilter);
             }
             catch (InvalidLDAPFilterException e)
             {
@@ -128,11 +143,11 @@ public abstract class GetOpenADOperation : PSCmdlet
                 return; // Satisfies nullability checks
             }
 
-            finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
+            finalFilter = new FilterAnd(new[] { FilteredClass, subFilter });
         }
-        else if (_ldapFilter != null)
+        else if (Identity != null)
         {
-            finalFilter = new FilterAnd(new[] { FilteredClass, _ldapFilter });
+            finalFilter = new FilterAnd(new[] { FilteredClass, Identity.LDAPFilter });
         }
         else
         {
@@ -230,22 +245,8 @@ public abstract class GetOpenADOperation : PSCmdlet
     DefaultParameterSetName = "ServerIdentity"
 )]
 [OutputType(typeof(OpenADObject))]
-public class GetOpenADObject : GetOpenADOperation
+public class GetOpenADObject : GetOpenADOperation<ADObjectIdentity>
 {
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "ServerIdentity"
-    )]
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "SessionIdentity"
-    )]
-    public ADObjectIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
-
     [Parameter()]
     public SwitchParameter IncludeDeletedObjects { get => _includeDeleted; set => _includeDeleted = value; }
 
@@ -262,22 +263,8 @@ public class GetOpenADObject : GetOpenADOperation
     DefaultParameterSetName = "ServerIdentity"
 )]
 [OutputType(typeof(OpenADComputer))]
-public class GetOpenADComputer : GetOpenADOperation
+public class GetOpenADComputer : GetOpenADOperation<ADPrincipalIdentityWithDollar>
 {
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "ServerIdentity"
-    )]
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "SessionIdentity"
-    )]
-    public ADPrincipalIdentityWithDollar Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
-
     internal override (string, bool)[] DefaultProperties => OpenADComputer.DEFAULT_PROPERTIES;
 
     internal override LDAPFilter FilteredClass
@@ -292,22 +279,8 @@ public class GetOpenADComputer : GetOpenADOperation
     DefaultParameterSetName = "ServerIdentity"
 )]
 [OutputType(typeof(OpenADUser))]
-public class GetOpenADUser : GetOpenADOperation
+public class GetOpenADUser : GetOpenADOperation<ADPrincipalIdentity>
 {
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "ServerIdentity"
-    )]
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "SessionIdentity"
-    )]
-    public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
-
     internal override (string, bool)[] DefaultProperties => OpenADUser.DEFAULT_PROPERTIES;
 
     internal override LDAPFilter FilteredClass
@@ -322,22 +295,8 @@ public class GetOpenADUser : GetOpenADOperation
     DefaultParameterSetName = "ServerIdentity"
 )]
 [OutputType(typeof(OpenADGroup))]
-public class GetOpenADGroup : GetOpenADOperation
+public class GetOpenADGroup : GetOpenADOperation<ADPrincipalIdentity>
 {
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "ServerIdentity"
-    )]
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "SessionIdentity"
-    )]
-    public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
-
     internal override (string, bool)[] DefaultProperties => OpenADGroup.DEFAULT_PROPERTIES;
 
     internal override LDAPFilter FilteredClass
@@ -352,22 +311,8 @@ public class GetOpenADGroup : GetOpenADOperation
     DefaultParameterSetName = "ServerIdentity"
 )]
 [OutputType(typeof(OpenADServiceAccount))]
-public class GetOpenADServiceAccount : GetOpenADOperation
+public class GetOpenADServiceAccount : GetOpenADOperation<ADPrincipalIdentityWithDollar>
 {
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "ServerIdentity"
-    )]
-    [Parameter(
-        Position = 0,
-        ValueFromPipeline = true,
-        ValueFromPipelineByPropertyName = true,
-        ParameterSetName = "SessionIdentity"
-    )]
-    public ADPrincipalIdentityWithDollar Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
-
     internal override (string, bool)[] DefaultProperties => OpenADServiceAccount.DEFAULT_PROPERTIES;
 
     internal override LDAPFilter FilteredClass

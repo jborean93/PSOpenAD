@@ -14,14 +14,14 @@ Gets one or more Active Directory users.
 
 ### ServerIdentity (Default)
 ```
-Get-OpenADUser [[-Identity] <ADPrincipalIdentity>] [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-Property <String[]>]
+Get-OpenADUser [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>]
+ [-StartTLS] [-Credential <PSCredential>] [[-Identity] <ADPrincipalIdentity>] [-Property <String[]>]
  [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADUser [[-Identity] <ADPrincipalIdentity>] -Session <OpenADSession> [-Property <String[]>]
+Get-OpenADUser -Session <OpenADSession> [[-Identity] <ADPrincipalIdentity>] [-Property <String[]>]
  [<CommonParameters>]
 ```
 

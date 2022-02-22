@@ -14,14 +14,14 @@ Gets one or more Active Directory groups.
 
 ### ServerIdentity (Default)
 ```
-Get-OpenADGroup [[-Identity] <ADPrincipalIdentity>] [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-Property <String[]>]
+Get-OpenADGroup [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>]
+ [-StartTLS] [-Credential <PSCredential>] [[-Identity] <ADPrincipalIdentity>] [-Property <String[]>]
  [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADGroup [[-Identity] <ADPrincipalIdentity>] -Session <OpenADSession> [-Property <String[]>]
+Get-OpenADGroup -Session <OpenADSession> [[-Identity] <ADPrincipalIdentity>] [-Property <String[]>]
  [<CommonParameters>]
 ```
 

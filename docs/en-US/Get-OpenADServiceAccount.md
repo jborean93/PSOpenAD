@@ -14,15 +14,15 @@ Gets one or more Active Directory managed service accounts or group managed serv
 
 ### ServerIdentity (Default)
 ```
-Get-OpenADServiceAccount [[-Identity] <ADPrincipalIdentity>] [-Server <String>]
- [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>] [-StartTLS]
- [-Credential <PSCredential>] [-Property <String[]>] [<CommonParameters>]
+Get-OpenADServiceAccount [-Server <String>] [-AuthType <AuthenticationMethod>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
+ [[-Identity] <ADPrincipalIdentityWithDollar>] [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADServiceAccount [[-Identity] <ADPrincipalIdentity>] -Session <OpenADSession> [-Property <String[]>]
- [<CommonParameters>]
+Get-OpenADServiceAccount -Session <OpenADSession> [[-Identity] <ADPrincipalIdentityWithDollar>]
+ [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
@@ -153,7 +153,7 @@ In addition the identity is filtered by the LDAP filter `(objectCategory=msDS-Gr
 The `-LDAPFilter` parameter can be used instead to query for multiple objects.
 
 ```yaml
-Type: ADPrincipalIdentity
+Type: ADPrincipalIdentityWithDollar
 Parameter Sets: ServerIdentity, SessionIdentity
 Aliases:
 

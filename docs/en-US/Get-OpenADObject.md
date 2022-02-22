@@ -14,14 +14,14 @@ Gets one or more Active Directory objects.
 
 ### ServerIdentity (Default)
 ```
-Get-OpenADObject [-Identity <ADObjectIdentity>] [-IncludeDeletedObjects] [-Server <String>]
- [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>] [-StartTLS]
- [-Credential <PSCredential>] [-Property <String[]>] [<CommonParameters>]
+Get-OpenADObject [-IncludeDeletedObjects] [-Server <String>] [-AuthType <AuthenticationMethod>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
+ [-Identity <ADObjectIdentity>] [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADObject [-Identity <ADObjectIdentity>] [-IncludeDeletedObjects] -Session <OpenADSession>
+Get-OpenADObject [-IncludeDeletedObjects] -Session <OpenADSession> [-Identity <ADObjectIdentity>]
  [-Property <String[]>] [<CommonParameters>]
 ```
 
