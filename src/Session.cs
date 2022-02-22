@@ -111,8 +111,13 @@ internal sealed class OpenADSessionFactory
         {
             if (GlobalState.DefaultDC == null)
             {
+                string msg = "Cannot determine default realm for implicit domain controller.";
+                if (!string.IsNullOrEmpty(GlobalState.DefaultDCError))
+                {
+                    msg += $" {GlobalState.DefaultDCError}";
+                }
                 cmdlet.WriteError(new ErrorRecord(
-                    new ArgumentException("Cannot determine default realm for implicit domain controller."),
+                    new ArgumentException(msg),
                     "NoImplicitDomainController",
                     ErrorCategory.InvalidArgument,
                     null));
@@ -623,4 +628,7 @@ internal static class GlobalState
 
     /// <summary>The default domain controller hostname to use when none was provided.</summary>
     public static Uri? DefaultDC;
+
+    /// <summary>If the default DC couldn't be detected this stores the details.</summary>
+    public static string? DefaultDCError;
 }

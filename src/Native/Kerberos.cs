@@ -48,7 +48,7 @@ internal static class Kerberos
     /// </remarks>
     /// <param name="context">The Kerberos context handle.</param>
     /// <returns>The the default realm.</returns>
-    /// <exception cref="KerberosException">Kerberos error reported, most likely no realm was found..</exception>
+    /// <exception cref="KerberosException">Kerberos error reported, most likely no realm was found.</exception>
     /// <see href="https://web.mit.edu/kerberos/krb5-latest/doc/appdev/refs/api/krb5_get_default_realm.html">krb5_get_default_realm</see>
     public static string GetDefaultRealm(SafeKrb5Context context)
     {
