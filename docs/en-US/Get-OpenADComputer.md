@@ -14,15 +14,15 @@ Get one or more Active Directory computers.
 
 ### ServerIdentity (Default)
 ```
-Get-OpenADComputer [[-Identity] <ADPrincipalIdentity>] [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-Property <String[]>]
- [<CommonParameters>]
+Get-OpenADComputer [-Server <String>] [-AuthType <AuthenticationMethod>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
+ [[-Identity] <ADPrincipalIdentityWithDollar>] [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADComputer [[-Identity] <ADPrincipalIdentity>] -Session <OpenADSession> [-Property <String[]>]
- [<CommonParameters>]
+Get-OpenADComputer -Session <OpenADSession> [[-Identity] <ADPrincipalIdentityWithDollar>]
+ [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
@@ -153,7 +153,7 @@ In addition the identity is filtered by the LDAP filter `(objectCategory=compute
 The `-LDAPFilter` parameter can be used instead to query for multiple objects.
 
 ```yaml
-Type: ADPrincipalIdentity
+Type: ADPrincipalIdentityWithDollar
 Parameter Sets: ServerIdentity, SessionIdentity
 Aliases:
 
