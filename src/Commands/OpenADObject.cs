@@ -276,7 +276,7 @@ public class GetOpenADComputer : GetOpenADOperation
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "SessionIdentity"
     )]
-    public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
+    public ADPrincipalIdentityWithDollar Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
 
     internal override (string, bool)[] DefaultProperties => OpenADComputer.DEFAULT_PROPERTIES;
 
@@ -366,7 +366,7 @@ public class GetOpenADServiceAccount : GetOpenADOperation
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "SessionIdentity"
     )]
-    public ADPrincipalIdentity Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
+    public ADPrincipalIdentityWithDollar Identity { get => null!; set => _ldapFilter = value.LDAPFilter; }
 
     internal override (string, bool)[] DefaultProperties => OpenADServiceAccount.DEFAULT_PROPERTIES;
 
