@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.1.0-preview2 - TBD
+## v0.1.0-preview2 - 2022-02-22
 
 + Improve GSSAPI and Kebreros library loading
 + Added error messages to describe why PSOpenAD failed to find the implicit DC host
