@@ -131,6 +131,25 @@ internal sealed class OpenADSessionFactory
         {
             ldapUri = new Uri(server);
         }
+        else if (server.Contains(":"))
+        {
+            string[] serverSplit = server.Split(':', 2);
+            if (int.TryParse(serverSplit[1], out var port))
+            {
+                string scheme = port == 636 || port == 3269 ? "ldaps" : "ldap";
+                ldapUri = new Uri($"{scheme}://{server}/");
+            }
+            else
+            {
+                string msg = "Expecting server in the format of hostname or hostname:port with port as an integer";
+                cmdlet.WriteError(new ErrorRecord(
+                    new ArgumentException(msg),
+                    "InvalidServerPort",
+                    ErrorCategory.InvalidArgument,
+                    null));
+                return null;
+            }
+        }
         else
         {
             ldapUri = new Uri($"ldap://{server}:389/");
