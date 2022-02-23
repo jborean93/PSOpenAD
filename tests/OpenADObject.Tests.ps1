@@ -10,7 +10,24 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     AfterAll {
-        $session | Remove-OpenADSession
+        Get-OpenADSession | Remove-OpenADSession
+    }
+
+    Context "Get-OpenADObject" {
+        It "Creates session using hostname" {
+            Get-OpenADObject -Server $PSOpenADSettings.Server | Out-Null
+        }
+
+        It "Creates sessoin using hostname:port" {
+            Get-OpenADObject -Server "$($PSOpenADSettings.Server):389" | Out-Null
+        }
+
+        It "Fails to create server with invalid hostname:port" {
+            $expected = "Expecting server in the format of hostname or hostname:port with port as an integer"
+            {
+                Get-OpenADObject -Server hostname:port -ErrorAction Stop
+            } | Should -Throw -ExceptionType ([ArgumentException]) -ExpectedMessage $expected
+        }
     }
 
     Context "Get-OpenADComputer" {

@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.1.0-preview3 - TBD
+
++ Allow using `hostname:port` syntax when using `-Server` rather than always requiring the full LDAP URI
+
 ## v0.1.0-preview2 - 2022-02-22
 
 + Improve GSSAPI and Kebreros library loading
