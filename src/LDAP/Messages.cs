@@ -126,7 +126,7 @@ internal abstract class LDAPMessage
                 AsnDecoder.ReadSequence(data, ruleSet, out var controlOffset, out var controlLength, out consumed,
                     expectedTag: nextTag);
 
-                ReadOnlySpan<byte> controlBuffer = data.Slice(controlOffset, controlOffset);
+                ReadOnlySpan<byte> controlBuffer = data.Slice(controlOffset, controlLength);
 
                 while (controlBuffer.Length > 0)
                 {
@@ -777,89 +777,6 @@ internal class LDAPResult
         }
 
         return new LDAPResult(resultCode, matchedDN, diagnosticsMessage, referrals?.ToArray());
-    }
-}
-
-/// <summary>LDAP Control information</summary>
-/// <remarks>
-/// <para>
-/// The ASN.1 structure is defined as
-/// </para>
-/// <para>
-///     Controls ::= SEQUENCE OF control Control
-///
-///     Control ::= SEQUENCE {
-///          controlType             LDAPOID,
-///          criticality             BOOLEAN DEFAULT FALSE,
-///          controlValue            OCTET STRING OPTIONAL }
-/// </para>
-/// </remarks>
-/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.1.11">4.1.11. Controls</see>
-internal class LDAPControl
-{
-    /// <summary>The OID of the control this entry represents.</summary>
-    public string ControlType { get; internal set; }
-
-    /// <summary>Whether the control must be understood by the peer or not.</summary>
-    public bool Criticality { get; internal set; }
-
-    /// <summary>The raw control value if one is defined.</summary>
-    public byte[]? Value { get; internal set; }
-
-    public LDAPControl(string controlType, bool criticality, byte[]? value)
-    {
-        ControlType = controlType;
-        Criticality = criticality;
-        Value = value;
-    }
-
-    public static LDAPControl FromBytes(ReadOnlySpan<byte> data, out int bytesConsumed,
-        AsnEncodingRules ruleSet = AsnEncodingRules.BER)
-    {
-        bytesConsumed = 0;
-
-        string controlType = Encoding.UTF8.GetString(AsnDecoder.ReadOctetString(data, ruleSet, out var consumed));
-        data = data[bytesConsumed..];
-        bytesConsumed += consumed;
-
-        bool criticality = false;
-        byte[]? value = null;
-        while (data.Length > 0)
-        {
-            Asn1Tag tag = Asn1Tag.Decode(data, out var tagConsumed);
-            if (tag.TagClass == TagClass.Universal && tag.TagValue == (int)UniversalTagNumber.Boolean)
-            {
-                criticality = AsnDecoder.ReadBoolean(data, ruleSet, out consumed, expectedTag: tag);
-                data = data[consumed..];
-                bytesConsumed += consumed;
-            }
-            else if (tag.TagClass == TagClass.Universal && tag.TagValue == (int)UniversalTagNumber.OctetString)
-            {
-                value = AsnDecoder.ReadOctetString(data, ruleSet, out consumed, expectedTag: tag);
-                data = data[consumed..];
-                bytesConsumed += consumed;
-            }
-            else
-            {
-                // In a peer is using a newer syntax with additional fields, just ignore them.
-                AsnDecoder.ReadEncodedValue(data, ruleSet, out var _1, out var _2, out consumed);
-                data = data[consumed..];
-                bytesConsumed += consumed;
-            }
-        }
-
-        return new LDAPControl(controlType, criticality, value);
-    }
-
-    public void ToBytes(AsnWriter writer)
-    {
-        using AsnWriter.Scope _1 = writer.PushSequence();
-        writer.WriteOctetString(Encoding.UTF8.GetBytes(ControlType));
-        writer.WriteBoolean(Criticality);
-        if (Value != null)
-        {
-            writer.WriteOctetString(Value);
-        }
     }
 }
 

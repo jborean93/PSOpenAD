@@ -168,8 +168,8 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
         if (_includeDeleted)
         {
             serverControls = new();
-            serverControls.Add(new("1.2.840.113556.1.4.417", false, null)); // LDAP_SERVER_SHOW_DELETED_OID
-            serverControls.Add(new("1.2.840.113556.1.4.2065", false, null)); // LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID
+            serverControls.Add(new ShowDeleted(false));
+            serverControls.Add(new ShowDeactivatedLink(false));
         }
 
         using (CurrentCancelToken = new CancellationTokenSource())
