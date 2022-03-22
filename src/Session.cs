@@ -2,6 +2,7 @@ using PSOpenAD.LDAP;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Management.Automation;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -76,8 +77,12 @@ public sealed class OpenADSession
     /// <summary>Schema metadata for this connection.</summary>
     internal SchemaMetadata SchemaMetadata { get; }
 
+    /// <summary>Extended control OIDs supported by the server.</summary>
+    internal string[] SupportedControls { get; }
+
     internal OpenADSession(OpenADConnection connection, Uri uri, AuthenticationMethod auth, bool isSigned,
-    bool isEncrypted, int operationTimeout, string defaultNamingContext, SchemaMetadata schema)
+        bool isEncrypted, int operationTimeout, string defaultNamingContext, SchemaMetadata schema,
+        string[] supportedControls)
     {
         Id = GlobalState.SessionCounter;
         GlobalState.SessionCounter++;
@@ -90,6 +95,7 @@ public sealed class OpenADSession
         OperationTimeout = operationTimeout;
         DefaultNamingContext = defaultNamingContext;
         SchemaMetadata = schema;
+        SupportedControls = supportedControls;
 
         GlobalState.Sessions.Add(this);
     }
@@ -229,9 +235,14 @@ internal sealed class OpenADSessionFactory
             // Attempt to get the default naming context.
             string defaultNamingContext = "";
             string subschemaSubentry = "";
+            string[] supportedControls = Array.Empty<string>();
+            string[] baseAttributes = new[]
+            {
+                "defaultNamingContext", "subschemaSubentry", "supportedControl",
+            };
             foreach (SearchResultEntry searchRes in Operations.LdapSearchRequest(connection, "", SearchScope.Base,
                 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
-                new string[] { "defaultNamingContext", "subschemaSubentry" }, null, cancelToken, cmdlet))
+                baseAttributes, null, cancelToken, cmdlet))
             {
                 foreach (PartialAttribute attribute in searchRes.Attributes)
                 {
@@ -243,6 +254,10 @@ internal sealed class OpenADSessionFactory
                     {
                         subschemaSubentry = Encoding.UTF8.GetString(attribute.Values[0]);
                     }
+                    else if (attribute.Name == "supportedControl")
+                    {
+                        supportedControls = attribute.Values.Select(v => Encoding.UTF8.GetString(v)).ToArray();
+                    }
                 }
             }
 
@@ -251,7 +266,8 @@ internal sealed class OpenADSessionFactory
             SchemaMetadata schema = QuerySchema(connection, subschemaSubentry, sessionOptions, cancelToken, cmdlet);
 
             return new OpenADSession(connection, uri, auth, transportIsTls || connection.Sign,
-                transportIsTls || connection.Encrypt, sessionOptions.OperationTimeout, defaultNamingContext, schema);
+                transportIsTls || connection.Encrypt, sessionOptions.OperationTimeout, defaultNamingContext, schema,
+                supportedControls);
         }
         catch
         {

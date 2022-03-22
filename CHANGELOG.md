@@ -3,6 +3,8 @@
 ## v0.1.0-preview3 - TBD
 
 + Allow using `hostname:port` syntax when using `-Server` rather than always requiring the full LDAP URI
++ Add pagination search control to search requests to retrieve large datasets back from the domain controller
++ Fix length calculation bug when parsing an LDAP control on a returned response
 
 ## v0.1.0-preview2 - 2022-02-22
 
