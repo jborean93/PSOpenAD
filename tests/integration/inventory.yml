@@ -1,0 +1,42 @@
+all:
+  children:
+    windows:
+      hosts:
+        DC01:
+          ansible_host: 192.168.2.10
+          vagrant_box: jborean93/WindowsServer2022
+        DC02:
+          ansible_host: 192.168.2.11
+          domain_name_prefix: foo.
+          vagrant_box: jborean93/WindowsServer2022
+        DC03:
+          ansible_host: 192.168.2.12
+          domain_name_prefix: bar.
+          vagrant_box: jborean93/WindowsServer2022
+        # APP01:
+        #   ansible_host: 192.168.2.13
+        #   vagrant_box: jborean93/WindowsServer2022
+      vars:
+        ansible_connection: winrm
+        ansible_winrm_transport: ntlm
+        ansible_port: 5985
+
+    # linux:
+    #   hosts:
+    #     DEBIAN11-MIT:
+    #       ansible_host: 192.168.2.14
+    #       vagrant_box: generic/debian11
+    #     DEBIAN11-HEIMDAL:
+    #       ansible_host: 192.168.2.14
+    #       vagrant_box: generic/debian11
+    #   vars:
+    #     ansible_ssh_common_args: -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+
+  vars:
+    ansible_user: vagrant
+    ansible_password: vagrant
+
+    domain_name: ldap.test
+    domain_username: ldap
+    domain_password: Password01
+    domain_user_upn: '{{ domain_username }}@{{ domain_name | upper }}'

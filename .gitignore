@@ -365,3 +365,5 @@ FodyWeavers.xsd
 output/
 tools/Modules
 test.settings.json
+tests/integration/.vagrant
+tests/integration/cert_setup

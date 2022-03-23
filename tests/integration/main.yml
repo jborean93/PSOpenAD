@@ -1,0 +1,187 @@
+- name: setup local configuration and scratch information
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+  - name: create cert output folder
+    file:
+      path: '{{ playbook_dir }}/cert_setup'
+      state: directory
+
+  - name: create generate_cert script
+    template:
+      src: generate_cert.sh.j2
+      dest: '{{ playbook_dir }}/cert_setup/generate_cert.sh'
+      mode: '700'
+
+  - name: generate CA and LDAPS certificates
+    shell: ./generate_cert.sh password
+    args:
+      creates: '{{ playbook_dir }}/cert_setup/complete.txt'
+      chdir: '{{ playbook_dir }}/cert_setup'
+
+- name: setup common Windows information
+  hosts: windows
+  gather_facts: no
+  tags:
+  - windows
+
+  tasks:
+  - name: get network connection names
+    win_shell: |
+      Get-CimInstance -ClassName Win32_NetworkAdapter -Filter "Netenabled='True'" | ForEach-Object -Process {
+        $config = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "Index='$($_.Index)'"
+        if ($config.IPAddress -contains '{{ ansible_host }}') {
+          $_.NetConnectionID
+        }
+      }
+    changed_when: false
+    register: raw_connection_name
+
+  - set_fact:
+      public_connection_name: '{{ raw_connection_name.stdout | trim }}'
+
+  - name: copy CA certificate
+    win_copy:
+      src: '{{ playbook_dir }}/cert_setup/ca.pem'
+      dest: C:\Windows\TEMP\ca.pem
+
+  - name: import CA certificate to trusted root CA
+    win_certificate_store:
+      path: C:\Windows\TEMP\ca.pem
+      state: present
+      store_location: LocalMachine
+      store_name: Root
+
+- name: create root domain controller
+  hosts: DC01
+  gather_facts: no
+  tags:
+  - windows
+
+  tasks:
+  - name: set the DNS for the internal adapters to localhost
+    win_dns_client:
+      adapter_names:
+      - '{{ public_connection_name }}'
+      dns_servers:
+      - 127.0.0.1
+
+  - name: ensure domain exists and DC is promoted as a domain controller
+    win_domain:
+      dns_domain_name: '{{ domain_name }}'
+      safe_mode_password: '{{ domain_password }}'
+    register: domain_setup_res
+
+  - name: reboot after DC install
+    win_reboot:
+    when: domain_setup_res.reboot_required
+
+  - name: create domain username
+    win_domain_user:
+      name: '{{ domain_username }}'
+      upn: '{{ domain_user_upn }}'
+      description: '{{ domain_username }} Domain Account'
+      password: '{{ domain_password }}'
+      password_never_expires: yes
+      update_password: when_changed
+      groups:
+      - Domain Admins
+      - Enterprise Admins
+      state: present
+
+  - name: copy LDAPS certificate
+    win_copy:
+      src: '{{ playbook_dir }}/cert_setup/dc01.pfx'
+      dest: C:\Windows\TEMP\ldaps.pfx
+
+  - name: import LDAPS certificate
+    win_certificate_store:
+      path: C:\Windows\TEMP\ldaps.pfx
+      password: password
+      key_exportable: no
+      key_storage: machine
+      state: present
+      store_type: service
+      store_location: NTDS
+      store_name: My
+    register: ldaps_cert_info
+
+  - name: register LDAPS certificate
+    win_shell: |
+      $dse = [adsi]'LDAP://localhost/rootDSE'
+      [void]$dse.Properties['renewServerCertificate'].Add(1)
+      $dse.CommitChanges()
+    when: ldaps_cert_info is changed
+    vars:
+      ansible_become: yes
+      ansible_become_method: runas
+      ansible_become_user: '{{ domain_user_upn }}'
+      ansible_become_pass: '{{ domain_password }}'
+
+- name: create sub domains
+  hosts: DC02,DC03
+  gather_facts: no
+  tags:
+  - windows
+
+  tasks:
+  - name: set DNS for the private adapter to point to the root domain
+    win_dns_client:
+      adapter_names:
+      - '{{ public_connection_name }}'
+      dns_servers:
+      - '{{ hostvars["DC01"]["ansible_host"] }}'
+
+  - name: ensure domain creation feature is installed
+    win_feature:
+      name:
+      - AD-Domain-Services
+      - RSAT-ADDS
+      state: present
+    register: domain_feature_install
+
+  - name: reboot if required by feature install
+    win_reboot:
+    when: domain_feature_install.reboot_required
+
+  - name: create sub domain
+    win_domain_child:
+      dns_domain_name: '{{ domain_name_prefix }}{{ domain_name }}'
+      domain_admin_username: '{{ domain_user_upn }}'
+      domain_admin_password: '{{ domain_password }}'
+      safe_mode_password: '{{ domain_password }}'
+    register: domain_create
+
+  - name: reboot after creating sub domain
+    win_reboot:
+    when: domain_create.reboot_required
+
+  - name: copy LDAPS certificate
+    win_copy:
+      src: '{{ playbook_dir }}/cert_setup/{{ inventory_hostname | lower }}.pfx'
+      dest: C:\Windows\TEMP\ldaps.pfx
+
+  - name: import LDAPS certificate
+    win_certificate_store:
+      path: C:\Windows\TEMP\ldaps.pfx
+      password: password
+      key_exportable: no
+      key_storage: machine
+      state: present
+      store_type: service
+      store_location: NTDS
+      store_name: My
+    register: ldaps_cert_info
+
+  - name: register LDAPS certificate
+    win_shell: |
+      $dse = [adsi]'LDAP://localhost/rootDSE'
+      [void]$dse.Properties['renewServerCertificate'].Add(1)
+      $dse.CommitChanges()
+    when: ldaps_cert_info is changed
+    vars:
+      ansible_become: yes
+      ansible_become_method: runas
+      ansible_become_user: '{{ domain_user_upn }}'
+      ansible_become_pass: '{{ domain_password }}'

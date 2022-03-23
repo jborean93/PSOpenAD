@@ -2,6 +2,9 @@
 
 ## v0.1.0-preview4 - TBD
 
++ Added error handling for search request that ends with a referral
+  + Currently the cmdlet will emit an error record with the referral URI which is similar to what the AD cmdlets do
+
 ## v0.1.0-preview3 - 2022-03-22
 
 + Allow using `hostname:port` syntax when using `-Server` rather than always requiring the full LDAP URI
