@@ -1,0 +1,35 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+require 'yaml'
+
+inventory = YAML.load_file('inventory.yml')
+
+Vagrant.configure("2") do |config|
+  inventory['all']['children'].each do |group,group_details|
+    group_details['hosts'].each do |server,details|
+
+      config.vm.define server do |srv|
+        srv.vm.box = details['vagrant_box']
+        srv.vm.hostname = server
+        srv.vm.network :private_network,
+            :ip => details['ansible_host'],
+            :libvirt__domain_name => inventory['all']['vars']['domain_name'],
+            :libvirt__network_name => 'PSOpenAD'
+
+        srv.vm.provider :libvirt do |l|
+          l.memory = 4096
+          l.cpus = 2
+        end
+
+        if group == "linux"
+          srv.vm.provision "shell", inline: <<-SHELL
+            sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+            systemctl restart sshd.service
+          SHELL
+        end
+      end
+
+    end
+  end
+end

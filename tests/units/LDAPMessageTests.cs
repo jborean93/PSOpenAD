@@ -4,7 +4,7 @@ using Xunit;
 
 namespace PSOpenADTests;
 
-public class LDAPMessageTests
+public static class LDAPMessageTests
 {
     [Fact]
     public static void SearchResponseDoneWithControl()
@@ -29,5 +29,22 @@ public class LDAPMessageTests
         Assert.False(pagedControl.Criticality);
         Assert.Equal(0, pagedControl.Size);
         Assert.Equal(704, pagedControl.Cookie?.Length);
+    }
+
+    [Fact]
+    public static void SearchResponseDoneWithReferral()
+    {
+        const string MESSAGE = "MIQAAADGAgEEZYQAAACMCgEKBAAEUjAwMDAyMDJCOiBSZWZFcnI6IERTSUQtMDMxMDA3OEEsIGRhdGEgMCwgMSBhY2Nlc3MgcG9pbnRzCglyZWYgMTogJ2Zvby5sZGFwLnRlc3QnCgCjhAAAAC0EK2xkYXA6Ly9mb28ubGRhcC50ZXN0L0RDPWZvbyxEQz1sZGFwLERDPXRlc3SghAAAACswhAAAACUEFjEuMi44NDAuMTEzNTU2LjEuNC4zMTkECzCEAAAABQIBAAQA";
+        LDAPSession session = new();
+
+        LDAPMessage? parsedMessage = session.ReceiveData(Convert.FromBase64String(MESSAGE), out var _);
+
+        Assert.NotNull(parsedMessage);
+        SearchResultDone actual = Assert.IsType<SearchResultDone>(parsedMessage);
+        Assert.Equal(LDAPResultCode.Referral, actual.Result.ResultCode);
+        Assert.Equal("0000202B: RefErr: DSID-0310078A, data 0, 1 access points\n\tref 1: 'foo.ldap.test'\n\0", actual.Result.DiagnosticsMessage);
+        Assert.Equal("", actual.Result.MatchedDN);
+        Assert.Single(actual.Result.Referrals);
+        Assert.Equal("ldap://foo.ldap.test/DC=foo,DC=ldap,DC=test", actual.Result.Referrals?[0]);
     }
 }

@@ -1,4 +1,5 @@
 using PSOpenAD.LDAP;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
@@ -46,8 +47,7 @@ internal static class Operations
             if (searchRes is SearchResultDone resultDone)
             {
                 PagedResultControl? paginateControl = resultDone.Controls?.OfType<PagedResultControl>().FirstOrDefault();
-                if (resultDone.Result.ResultCode == LDAPResultCode.Success && paginateControl != null &&
-                    paginateControl.Cookie?.Length > 0)
+                if (resultDone.Result.ResultCode == LDAPResultCode.Success && paginateControl?.Cookie?.Length > 0)
                 {
                     cmdlet?.WriteVerbose("Receive pagination result, sending new search request");
                     request = true;
@@ -55,14 +55,26 @@ internal static class Operations
 
                     continue;
                 }
-                else
+                else if (resultDone.Result.ResultCode == LDAPResultCode.SizeLimitExceeded)
                 {
-                    if (resultDone.Result.ResultCode == LDAPResultCode.SizeLimitExceeded)
-                    {
-                        cmdlet?.WriteWarning("Exceeded size limit of search request - results may be incomplete.");
-                    }
-                    break;
+                    cmdlet?.WriteWarning("Exceeded size limit of search request - results may be incomplete.");
                 }
+                else if (resultDone.Result.ResultCode == LDAPResultCode.Referral)
+                {
+                    // FUTURE: see if we can try and do the referral ourselves
+                    ErrorRecord error = new(
+                        new LDAPException(resultDone.Result),
+                        "LDAPReferral",
+                        ErrorCategory.ResourceUnavailable,
+                        null);
+
+                    string referralUris = string.Join("', '", resultDone.Result.Referrals ?? Array.Empty<string>());
+                    error.ErrorDetails = new(
+                        $"A referral was returned from the server that points to: '{referralUris}'");
+                    error.ErrorDetails.RecommendedAction = "Perform request on one of the referral URIs";
+                    cmdlet?.WriteError(error);
+                }
+                break;
             }
             else if (searchRes is SearchResultReference)
             {
