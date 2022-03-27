@@ -57,7 +57,7 @@ internal class OpenADConnection : IDisposable
             // The lock ensures that either the _taskFailure is set on a cancelled operation or the LDAP queue has
             // an entry and set to null for the check later on.
             if (_taskFailure != null)
-                throw _taskFailure;
+                throw new LDAPException($"Message recv failure: {_taskFailure.Message}", _taskFailure);
 
             queue = _messages.GetOrAdd(messageId,
                 new BlockingCollection<LDAPMessage>(new ConcurrentQueue<LDAPMessage>()));
@@ -67,7 +67,7 @@ internal class OpenADConnection : IDisposable
         {
             if (_taskFailure != null)
             {
-                throw _taskFailure;
+                throw new LDAPException($"Message recv failure: {_taskFailure.Message}", _taskFailure);
             }
             else
             {
