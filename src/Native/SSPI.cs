@@ -25,11 +25,11 @@ internal static partial class Helpers
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct SEC_WINNT_AUTH_IDENTITY_W
     {
-        public IntPtr User;
+        public unsafe char* User;
         public UInt32 UserLength;
-        public IntPtr Domain;
+        public unsafe char* Domain;
         public UInt32 DomainLength;
-        public IntPtr Password;
+        public unsafe char* Password;
         public UInt32 PasswordLength;
         public WinNTAuthIdentityFlags Flags;
     }
@@ -195,34 +195,30 @@ internal static class SSPI
     public static SspiCredential AcquireCredentialsHandle(string? principal, string package, CredentialUse usage,
         WinNTAuthIdentity? identity)
     {
-        byte[]? user = null;
-        byte[]? domain = null;
-        byte[]? pass = null;
+        string? user = identity?.Username;
+        string? domain = identity?.Domain;
+        string? pass = identity?.Password;
 
         unsafe
         {
-            Helpers.SEC_WINNT_AUTH_IDENTITY_W* authData = null;
-            if (identity != null)
-            {
-                user = identity.Username == null ? null : Encoding.UTF8.GetBytes(identity.Username);
-                domain = identity.Domain == null ? null : Encoding.UTF8.GetBytes(identity.Domain);
-                pass = identity.Password == null ? null : Encoding.UTF8.GetBytes(identity.Password);
-            }
-
-            fixed (byte* userPtr = user, domainPtr = domain, passPtr = pass)
+            Helpers.SEC_WINNT_AUTH_IDENTITY_W authData = new();
+            Helpers.SEC_WINNT_AUTH_IDENTITY_W* authDataPtr = null;
+            fixed (char* userPtr = user, domainPtr = domain, passPtr = pass)
             {
                 if (identity != null)
                 {
-                    authData->User = (IntPtr)userPtr;
-                    authData->UserLength = (UInt16)(identity.Username?.Length ?? 0);
-                    authData->Domain = (IntPtr)domainPtr;
-                    authData->DomainLength = (UInt16)(identity.Domain?.Length ?? 0);
-                    authData->Password = (IntPtr)passPtr;
-                    authData->PasswordLength = (UInt16)(identity.Password?.Length ?? 0);
+                    authDataPtr = &authData;
+                    authData.User = userPtr;
+                    authData.UserLength = (UInt16)(identity.Username?.Length ?? 0);
+                    authData.Domain = domainPtr;
+                    authData.DomainLength = (UInt16)(identity.Domain?.Length ?? 0);
+                    authData.Password = passPtr;
+                    authData.PasswordLength = (UInt16)(identity.Password?.Length ?? 0);
+                    authData.Flags = WinNTAuthIdentityFlags.SEC_WINNT_AUTH_IDENTITY_UNICODE;
                 }
 
                 SafeSspiCredentialHandle cred = new();
-                int res = AcquireCredentialsHandleW(principal, package, usage, IntPtr.Zero, authData, IntPtr.Zero,
+                int res = AcquireCredentialsHandleW(principal, package, usage, IntPtr.Zero, authDataPtr, IntPtr.Zero,
                     IntPtr.Zero, cred, out var expiryStruct);
 
                 if (res != 0)
