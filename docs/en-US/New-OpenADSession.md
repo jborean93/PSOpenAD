@@ -272,6 +272,8 @@ The connected AD session that can be used as an explicit connection on the vario
 
 + `Authentication`: The authentication method used
 
++ `DomainController`: The DNS hostname of the domain controller that the session is connected to
+
 + `IsSigned`: Whether the data on this connection will be signed
 
 + `IsEncrypted`: Whether the data on this connection will be encrypted
