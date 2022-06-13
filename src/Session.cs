@@ -220,8 +220,8 @@ internal sealed class OpenADSessionFactory
             throw new TimeoutException();
         connectTask.GetAwaiter().GetResult();
 
-        OpenADConnection connection = new(client, client.GetStream(), new LDAPSession(),
-            sessionOptions.OperationTimeout, sessionOptions.TracePath);
+        OpenADConnection connection = new(client, client.GetStream(), sessionOptions.OperationTimeout,
+            sessionOptions.TracePath);
         try
         {
             bool transportIsTls = false;
