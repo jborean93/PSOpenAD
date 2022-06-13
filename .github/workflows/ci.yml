@@ -87,9 +87,18 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    - name: Build module
+    - name: Build module - Debug
       shell: pwsh
       run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
+      if: ${{ env.BUILD_CONFIGURATION == 'Debug' }}
+
+    - name: Build module - Publish
+      shell: pwsh
+      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
+      if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
+      env:
+        PSMODULE_SIGNING_CERT: ${{ secrets.PSMODULE_SIGNING_CERT }}
+        PSMODULE_SIGNING_CERT_PASSWORD: ${{ secrets.PSMODULE_SIGNING_CERT_PASSWORD }}
 
     - name: Capture PowerShell Module
       uses: actions/upload-artifact@v2
@@ -117,6 +126,6 @@ jobs:
         dotnet nuget push '*.nupkg'
         --api-key $env:PSGALLERY_TOKEN
         --source 'https://www.powershellgallery.com/api/v2/package'
-        --no-symbols true
+        --no-symbols
       env:
         PSGALLERY_TOKEN: ${{ secrets.PSGALLERY_TOKEN }}
