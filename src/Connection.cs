@@ -7,6 +7,7 @@ using System.IO.Pipelines;
 using System.Linq;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,6 +22,8 @@ internal class OpenADConnection : IDisposable
     private readonly ManualResetEventSlim _tlsReplaceEvent = new(true);
     private readonly TcpClient _connection;
     private readonly int _waitTimeout;
+    private readonly StreamWriter? _traceWriter;
+    private readonly SemaphoreSlim? _traceLock;
     private bool _closed;
     private Stream _ioStream;
     private CancellationTokenSource _recvCancel = new();
@@ -33,10 +36,17 @@ internal class OpenADConnection : IDisposable
     public bool Encrypt { get; set; }
     public bool IsClosed => _taskFailure != null || _closed;
 
-    public OpenADConnection(TcpClient connection, Stream stream, LDAPSession session, int waitTimeout)
+    public OpenADConnection(TcpClient connection, Stream stream, LDAPSession session, int waitTimeout,
+        string? tracePath)
     {
         Session = session;
 
+        if (!string.IsNullOrWhiteSpace(tracePath))
+        {
+            _traceWriter = new(File.Open(tracePath, FileMode.Create, FileAccess.Write,
+                FileShare.ReadWrite | FileShare.Delete), new UTF8Encoding(false));
+            _traceLock = new(1, 1);
+        }
         _connection = connection;
         _ioStream = stream;
         _waitTimeout = waitTimeout;
@@ -141,11 +151,20 @@ internal class OpenADConnection : IDisposable
             byte[] wrappedData;
             if (buffer.IsSingleSegment)
             {
+                if (_traceWriter is not null)
+                {
+                    await TraceMsg("SEND", Convert.ToBase64String(buffer.FirstSpan));
+                }
                 wrappedData = SecurityContext.Wrap(buffer.FirstSpan, Encrypt);
             }
             else
             {
                 ReadOnlyMemory<byte> toWrap = buffer.ToArray();
+
+                if (_traceWriter is not null)
+                {
+                    await TraceMsg("SEND", Convert.ToBase64String(toWrap.Span));
+                }
                 wrappedData = SecurityContext.Wrap(toWrap.Span, Encrypt);
             }
 
@@ -169,6 +188,11 @@ internal class OpenADConnection : IDisposable
         else
         {
             ReadOnlyMemory<byte> data = buffer.ToArray();
+
+            if (_traceWriter is not null)
+            {
+                await TraceMsg("SEND", Convert.ToBase64String(data.Span));
+            }
             await _ioStream.WriteAsync(data);
         }
 
@@ -297,11 +321,20 @@ internal class OpenADConnection : IDisposable
                 }
                 else if (buffer.IsSingleSegment)
                 {
+                    if (_traceWriter is not null)
+                    {
+                        await TraceMsg("RECV", Convert.ToBase64String(buffer.FirstSpan));
+                    }
                     consumed = TryReadMessage(buffer.FirstSpan);
                 }
                 else
                 {
                     ReadOnlyMemory<byte> data = buffer.ToArray();
+
+                    if (_traceWriter is not null)
+                    {
+                        await TraceMsg("RECV", Convert.ToBase64String(data.Span));
+                    }
                     consumed = TryReadMessage(data.Span);
                 }
             }
@@ -413,6 +446,25 @@ internal class OpenADConnection : IDisposable
         }
     }
 
+    private async Task TraceMsg(string direction, string data)
+    {
+        if (_traceLock is null || _traceWriter is null)
+        {
+            return;
+        }
+
+        await _traceLock.WaitAsync();
+        try
+        {
+            await _traceWriter.WriteLineAsync($"{direction}: {data}");
+            await _traceWriter.FlushAsync();
+        }
+        finally
+        {
+            _traceLock.Release();
+        }
+    }
+
     public void Dispose()
     {
         // Cancel the recv so it doesn't fail with connection reset by peer
@@ -433,6 +485,8 @@ internal class OpenADConnection : IDisposable
         _ioStream.Dispose();
         _connection.Dispose();
         SecurityContext?.Dispose();
+        _traceWriter?.Dispose();
+        _traceLock?.Dispose();
 
         _closed = true;
 

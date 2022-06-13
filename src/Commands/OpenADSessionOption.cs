@@ -27,8 +27,17 @@ public class NewOpenADSessionOption : PSCmdlet
     [Parameter()]
     public Int32 OperationTimeout { get; set; } = 180000;
 
+    [Parameter()]
+    public string? TracePath { get; set; }
+
     protected override void EndProcessing()
     {
+        string? tracePath = null;
+        if (!string.IsNullOrWhiteSpace(TracePath))
+        {
+            tracePath = GetUnresolvedProviderPathFromPSPath(TracePath);
+        }
+
         WriteObject(new OpenADSessionOptions()
         {
             NoEncryption = NoEncryption,
@@ -37,6 +46,7 @@ public class NewOpenADSessionOption : PSCmdlet
             SkipCertificateCheck = SkipCertificateCheck,
             ConnectTimeout = ConnectTimeout,
             OperationTimeout = OperationTimeout,
+            TracePath = tracePath,
         });
     }
 }

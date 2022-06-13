@@ -6,6 +6,7 @@
   + Currently the cmdlet will emit an error record with the referral URI which is similar to what the AD cmdlets do
 + Have exceptions in the background recv thread tasks bubble up as inner exceptions to preserve the stack trace for better debugging
 + Fix authentication with explicit credential on Windows
++ Added `-TracePath` to `New-OpenADSessionOption` to help debug raw LDAP traffice exchanged in a session.
 
 ## v0.1.0-preview3 - 2022-03-22
 

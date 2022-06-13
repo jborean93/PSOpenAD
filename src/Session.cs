@@ -36,6 +36,9 @@ public sealed class OpenADSessionOptions
 
     /// <summary>The maximum time to wait, in milliseconds, to wait for a request to return.</summary>
     public Int32 OperationTimeout { get; set; } = 180000;
+
+    /// <summary>Local path that incoming and outgoing LDAP messages will be logged to.</summary>
+    public string? TracePath { get; set; }
 }
 
 /// <summary>The OpenADSession class used to encapsulate a session with the caller.</summary>
@@ -218,7 +221,7 @@ internal sealed class OpenADSessionFactory
         connectTask.GetAwaiter().GetResult();
 
         OpenADConnection connection = new(client, client.GetStream(), new LDAPSession(),
-            sessionOptions.OperationTimeout);
+            sessionOptions.OperationTimeout, sessionOptions.TracePath);
         try
         {
             bool transportIsTls = false;
