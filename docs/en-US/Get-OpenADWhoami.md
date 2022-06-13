@@ -1,7 +1,7 @@
 ---
 external help file: PSOpenAD.dll-Help.xml
 Module Name: PSOpenAD
-online version:
+online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADWhoami.md
 schema: 2.0.0
 ---
 
@@ -170,8 +170,20 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### None
 ## OUTPUTS
 
-### System.String
-The raw whoami response from the server as a string.
+### PSOpenAD.Commands.WhoamiResult
+The `WhoamiResult` object representing the result returned by the LDAP Whoami extended operation plus extra properties to provide extract context on the session. This object will always have the following properties set:
+
++ `UserName`: The username, typically in the netlogon form `DOMAIN\username`, of the authenticated session.
+
++ `Uri`: The LDAP URI used for the connection.
+
++ `DomainController`: The DNS hostname of the domain controller the session is connected to.
+
++ `Authentication`: The authentication method used to authenticate with the session.
+
++ `RawUserName`: The raw string returned from the LDAP whoami extended operation.
+
+The `RawUserName` is not part of the default property sets and will display unless explicitly requested with `Select-Object *` or accessed manually `$result.RawUserName`.
 
 ## NOTES
 

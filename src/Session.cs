@@ -71,6 +71,9 @@ public sealed class OpenADSession
     /// <summary>The LDAP session state.</summary>
     public LDAP.SessionState State => Connection.Session.State;
 
+    /// <summary>The domain controller DNS name that was used for the connection.</summary>
+    public string DomainController { get; }
+
     /// <summary>The connection used for this session.</summary>
     internal OpenADConnection Connection { get; }
 
@@ -85,7 +88,7 @@ public sealed class OpenADSession
 
     internal OpenADSession(OpenADConnection connection, Uri uri, AuthenticationMethod auth, bool isSigned,
         bool isEncrypted, int operationTimeout, string defaultNamingContext, SchemaMetadata schema,
-        string[] supportedControls)
+        string[] supportedControls, string dcDnsHostName)
     {
         Id = GlobalState.SessionCounter;
         GlobalState.SessionCounter++;
@@ -97,6 +100,7 @@ public sealed class OpenADSession
         IsEncrypted = isEncrypted;
         OperationTimeout = operationTimeout;
         DefaultNamingContext = defaultNamingContext;
+        DomainController = dcDnsHostName;
         SchemaMetadata = schema;
         SupportedControls = supportedControls;
 
@@ -237,11 +241,12 @@ internal sealed class OpenADSessionFactory
 
             // Attempt to get the default naming context.
             string defaultNamingContext = "";
+            string dnsHostName = "Unknown";
             string subschemaSubentry = "";
             string[] supportedControls = Array.Empty<string>();
             string[] baseAttributes = new[]
             {
-                "defaultNamingContext", "subschemaSubentry", "supportedControl",
+                "defaultNamingContext", "dnsHostName", "subschemaSubentry", "supportedControl",
             };
             foreach (SearchResultEntry searchRes in Operations.LdapSearchRequest(connection, "", SearchScope.Base,
                 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
@@ -252,6 +257,10 @@ internal sealed class OpenADSessionFactory
                     if (attribute.Name == "defaultNamingContext")
                     {
                         defaultNamingContext = Encoding.UTF8.GetString(attribute.Values[0]);
+                    }
+                    else if (attribute.Name == "dnsHostName")
+                    {
+                        dnsHostName = Encoding.UTF8.GetString(attribute.Values[0]);
                     }
                     else if (attribute.Name == "subschemaSubentry")
                     {
@@ -270,7 +279,7 @@ internal sealed class OpenADSessionFactory
 
             return new OpenADSession(connection, uri, auth, transportIsTls || connection.Sign,
                 transportIsTls || connection.Encrypt, sessionOptions.OperationTimeout, defaultNamingContext, schema,
-                supportedControls);
+                supportedControls, dnsHostName);
         }
         catch
         {
