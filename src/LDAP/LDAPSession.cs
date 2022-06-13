@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Formats.Asn1;
+using System.IO;
 using System.IO.Pipelines;
+using System.Threading;
 
 namespace PSOpenAD.LDAP;
 
@@ -23,6 +25,8 @@ public enum SessionState
 internal class LDAPSession
 {
     private readonly Pipe _outgoing = new();
+    private readonly StreamWriter? _logWriter;
+    private readonly SemaphoreSlim _logLock = new(1, 1);
 
     private int _messageCounter;
 
@@ -32,9 +36,10 @@ internal class LDAPSession
 
     public SessionState State { get; internal set; } = SessionState.BeforeOpen;
 
-    public LDAPSession(int version = 3)
+    public LDAPSession(int version = 3, StreamWriter? writer = null)
     {
         Version = version;
+        _logWriter = writer;
     }
 
     public void Close()
@@ -122,6 +127,8 @@ internal class LDAPSession
 
     public LDAPMessage? ReceiveData(ReadOnlySpan<byte> data, out int bytesConsumed)
     {
+        TraceMsg("RECV", data);
+
         if (!Asn1Helper.HasEnoughData(data))
         {
             bytesConsumed = 0;
@@ -158,6 +165,7 @@ internal class LDAPSession
         }
 
         Memory<byte> buffer = _outgoing.Writer.GetMemory(writer.GetEncodedLength());
+        TraceMsg("SEND", buffer.Span);
         int written = writer.Encode(buffer.Span);
         _outgoing.Writer.Advance(written);
 
@@ -170,5 +178,25 @@ internal class LDAPSession
         _messageCounter++;
 
         return messageId;
+    }
+
+    private void TraceMsg(string direction, ReadOnlySpan<byte> data)
+    {
+        if (_logWriter is null)
+        {
+            return;
+        }
+
+        string b64Data = Convert.ToBase64String(data);
+        _logLock.Wait();
+        try
+        {
+            _logWriter.WriteLine($"{direction}: {b64Data}");
+            _logWriter.Flush();
+        }
+        finally
+        {
+            _logLock.Release();
+        }
     }
 }
