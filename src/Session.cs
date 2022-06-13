@@ -39,6 +39,9 @@ public sealed class OpenADSessionOptions
 
     /// <summary>Local path that incoming and outgoing LDAP messages will be logged to.</summary>
     public string? TracePath { get; set; }
+
+    /// <summary>Used for TLS client certificate authentication.</summary>
+    public X509Certificate? ClientCertificate { get; set; }
 }
 
 /// <summary>The OpenADSession class used to encapsulate a session with the caller.</summary>
@@ -217,6 +220,12 @@ internal sealed class OpenADSessionFactory
     internal static OpenADSession Create(Uri uri, PSCredential? credential, AuthenticationMethod auth,
         bool startTls, OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet cmdlet)
     {
+        if (auth == AuthenticationMethod.Certificate && sessionOptions.ClientCertificate is null)
+        {
+            throw new ArgumentException(
+                "Certificate authentication is requested but ClientCertificate has not been set");
+        }
+
         cmdlet.WriteVerbose($"Connecting to {uri}");
         TcpClient client = new();
         Task connectTask = client.ConnectAsync(uri.DnsSafeHost, uri.Port);
@@ -234,6 +243,10 @@ internal sealed class OpenADSessionFactory
             {
                 transportIsTls = true;
                 channelBindings = ProcessTlsOptions(connection, uri, startTls, sessionOptions, cancelToken, cmdlet);
+            }
+            else if (auth == AuthenticationMethod.Certificate)
+            {
+                throw new ArgumentException("Certificate authentication is requested but TLS is not being used");
             }
 
             auth = Authenticate(connection, uri, auth, credential, channelBindings, transportIsTls, sessionOptions,
@@ -328,6 +341,11 @@ internal sealed class OpenADSessionFactory
             authOptions.RemoteCertificateValidationCallback = (_1, _2, _3, _4) => true;
         }
 
+        if (sessionOptions.ClientCertificate is not null)
+        {
+            authOptions.LocalCertificateSelectionCallback = (_1, _2, _3, _4, _5) => sessionOptions.ClientCertificate;
+        }
+
         SslStream tls = connection.SetTlsStream(authOptions, cancelToken);
 
         ChannelBindings? cbt = null;
@@ -406,10 +424,15 @@ internal sealed class OpenADSessionFactory
 
         if (auth == AuthenticationMethod.Default)
         {
-            // Always favour Negotiate auth if it is available, otherwise use Simple if both a credential and the
-            // exchange would be encrypted. If all else fails use an anonymous bind.
+            // Use Certificate if a client certitifcate is specified, otherwise favour Negotiate auth if it is
+            // available. Otherwise use Simple if both a credential and the exchange would be encrypted. If all else
+            // fails use an anonymous bind.
             AuthenticationProvider nego = GlobalState.Providers[AuthenticationMethod.Negotiate];
-            if (nego.Available)
+            if (sessionOptions.ClientCertificate is not null && transportIsTls)
+            {
+                auth = AuthenticationMethod.Certificate;
+            }
+            else if (nego.Available)
             {
                 auth = AuthenticationMethod.Negotiate;
             }
@@ -480,6 +503,22 @@ internal sealed class OpenADSessionFactory
             connection.Encrypt = confidentiality;
 
             cmdlet.WriteVerbose($"SASL auth complete - Will Sign {integrity} - Will Encrypt {confidentiality}");
+        }
+        else if (auth == AuthenticationMethod.Certificate)
+        {
+            // If using LDAPS then AD will automatically bind against the client certificate sent in the handshake.
+            // No extra SASL binds are needed, if you attempt to do so it will fail. When using StartTLS over LDAP an
+            // external bind must be done to tell the server to use the certificate exchanged in the TLS handshake.
+            // https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/8e73932f-70cf-46d6-88b1-8d9f86235e81
+            if (uri.Scheme.Equals("ldap", StringComparison.InvariantCultureIgnoreCase))
+            {
+                ExternalContext context = new();
+                SaslAuth(connection, context, selectedAuth.SaslId, false, false, cancelToken);
+            }
+            else
+            {
+                connection.Session.State = LDAP.SessionState.Opened;
+            }
         }
         else
         {

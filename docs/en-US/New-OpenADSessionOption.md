@@ -14,7 +14,8 @@ Creates an object that contains advanced options for an `OpenAD` session.
 
 ```
 New-OpenADSessionOption [-NoEncryption] [-NoSigning] [-NoChannelBinding] [-SkipCertificateCheck]
- [-ConnectTimeout <Int32>] [-OperationTimeout <Int32>] [-TracePath <String>] [<CommonParameters>]
+ [-ConnectTimeout <Int32>] [-OperationTimeout <Int32>] [-TracePath <String>]
+ [-ClientCertificate <X509Certificate>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -62,7 +63,38 @@ Creates an OpenAD session with trace message logging set to log the incoming and
 The path can be any location accessible by the `FileSystem` provider in PowerShell.
 The logs will continue to append until the OpenAD session is closed.
 
+### Example 5: Connect using Certificate authentication
+```powershell
+PS C:\> $cert = [System.Security.Cryptography.X509Certificates.X509Certificate]::new('Cert Path.pfx', $certPass)
+PS C:\> $so = New-OpenADSessionOption -ClientCertificate $cert
+PS C:\> $s = New-OpenADSession -ComputerName dc -SessionOption $so -UseTLS
+```
+
+Creates an OpenAD session to an `LDAPS` endpoint and authenticates using the client certificate provided.
+This certificate needs to be mapped to a user on the server for the authentication to occur.
+
 ## PARAMETERS
+
+### -ClientCertificate
+The X.509 certificate to be used for the TLS client authentication.
+This is used for the `Certificate` authentication mechanism with the LDAP server using `StartTLS` or over `LDAPS`.
+The certificate must have access to the private key for it to be used with authentication.
+See the [X509Certificate constructors](https://docs.microsoft.com/en-us/dotnet/api/system.security.cryptography.x509certificates.x509certificate.-ctor?view=net-6.0) to see how to create this object from a file.
+
+The certificate specified needs to be mapped to an account that is used for authorization checks.
+This mapping can be done either implicitly through a user cert requested by Active Directory Certificate Services (ADCS) or through an explicit mapping on the user object.
+
+```yaml
+Type: X509Certificate
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -ConnectTimeout
 The timeout in milliseconds that the client will wait to connect to the target host.

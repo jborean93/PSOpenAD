@@ -123,8 +123,8 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
 
         $logPath = "temp:/PSOpenAD-$([Guid]::NewGuid())"
         $sessionParams = @{
-            Uri        = "ldap://$($PSOpenADSettings.Server)"
-            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+            Uri           = "ldap://$($PSOpenADSettings.Server)"
+            Credential    = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
             SessionOption = (New-OpenADSessionOption -TracePath $logPath)
         }
 
@@ -143,6 +143,48 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
                 Remove-Item -LiteralPath $logPath -Force
             }
         }
+    }
+
+    It "Fails to create cert auth session without certificate set" {
+        $sessionParams = @{
+            ComputerName = $PSOpenADSettings.Server
+            AuthType     = "Certificate"
+        }
+        $result = New-OpenADSession @sessionParams -ErrorAction SilentlyContinue -ErrorVariable err
+        $result | Should -BeNullOrEmpty
+        $err.Count | Should -Be 1
+        $err[0].Exception.Message | Should -Be "Certificate authentication is requested but ClientCertificate has not been set"
+    }
+
+    It "Fails to create cert auth that's not using StartTLS or LDAP" {
+        $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPem(@'
+-----BEGIN CERTIFICATE-----
+MIICsDCCAhmgAwIBAgIJALwzrJEIBOaeMA0GCSqGSIb3DQEBBQUAMEUxCzAJBgNV
+BAYTAkFVMRMwEQYDVQQIEwpTb21lLVN0YXRlMSEwHwYDVQQKExhJbnRlcm5ldCBX
+aWRnaXRzIFB0eSBMdGQwHhcNMTEwOTMwMTUyNjM2WhcNMjEwOTI3MTUyNjM2WjBF
+MQswCQYDVQQGEwJBVTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50
+ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKB
+gQC88Ckwru9VR2p2KJ1WQyqesLzr95taNbhkYfsd0j8Tl0MGY5h+dczCaMQz0YY3
+xHXuU5yAQQTZjiks+D3KA3cx+iKDf2p1q77oXxQcx5CkrXBWTaX2oqVtHm3aX23B
+AIORGuPk00b4rT3cld7VhcEFmzRNbyI0EqLMAxIwceUKSQIDAQABo4GnMIGkMB0G
+A1UdDgQWBBSGmOdvSXKXclic5UOKPW35JLMEEjB1BgNVHSMEbjBsgBSGmOdvSXKX
+clic5UOKPW35JLMEEqFJpEcwRTELMAkGA1UEBhMCQVUxEzARBgNVBAgTClNvbWUt
+U3RhdGUxITAfBgNVBAoTGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZIIJALwzrJEI
+BOaeMAwGA1UdEwQFMAMBAf8wDQYJKoZIhvcNAQEFBQADgYEAcPfWn49pgAX54ji5
+SiUPFFNCuQGSSTHh2I+TMrs1G1Mb3a0X1dV5CNLRyXyuVxsqhiM/H2veFnTz2Q4U
+wdY/kPxE19Auwcz9AvCkw7ol1LIlLfJvBzjzOjEpZJNtkXTx8ROSooNrDeJl3HyN
+cciS5hf80XzIFqwhzaVS9gmiyM8=
+-----END CERTIFICATE-----
+'@)
+        $sessionParams = @{
+            ComputerName  = $PSOpenADSettings.Server
+            AuthType      = "Certificate"
+            SessionOption = (New-OpenADSessionOption -ClientCertificate $cert)
+        }
+        $result = New-OpenADSession @sessionParams -ErrorAction SilentlyContinue -ErrorVariable err
+        $result | Should -BeNullOrEmpty
+        $err.Count | Should -Be 1
+        $err[0].Exception.Message | Should -Be "Certificate authentication is requested but TLS is not being used"
     }
 }
 

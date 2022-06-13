@@ -24,6 +24,9 @@ public enum AuthenticationMethod
 
     /// <summary>GSSAPI/SSPI Kerberos (SASL GSSAPI) authentication</summary>
     Kerberos,
+
+    /// <summary>Authentication using a client provided X.509 Certificate for LDAP or StartTLS.</summary>
+    Certificate,
 }
 
 /// <summary>Details on an authentication mechanism for the local client.</summary>
@@ -96,6 +99,27 @@ internal abstract class SecurityContext : IDisposable
 
     public abstract void Dispose();
     ~SecurityContext() => Dispose();
+}
+
+internal class ExternalContext : SecurityContext
+{
+    private bool _called;
+
+    public override byte[] Step(byte[]? inputToken = null)
+    {
+        // No actual tokens are exchanged but we need to return at least 1 empty array and set it to be completed
+        // on the next call
+        Complete = _called;
+        _called = true; // Next call with set Complete = true
+
+        return Array.Empty<byte>();
+    }
+
+    public override byte[] Wrap(ReadOnlySpan<byte> data, bool encrypt) => Array.Empty<byte>();
+    public override byte[] Unwrap(ReadOnlySpan<byte> data) => Array.Empty<byte>();
+    public override uint MaxWrapSize(uint outputSize, bool confReq) => 0;
+    public override void Dispose()
+    { }
 }
 
 internal class GssapiContext : SecurityContext
