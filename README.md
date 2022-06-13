@@ -26,11 +26,13 @@ You can install this module by running;
 
 ```powershell
 # Install for only the current user
-Install-Module -Name PSOpenAD -Scope CurrentUser
+Install-Module -Name PSOpenAD -Scope CurrentUser -AllowPrerelease
 
 # Install for all users
-Install-Module -Name PSOpenAD -Scope AllUsers
+Install-Module -Name PSOpenAD -Scope AllUsers -AllowPrerelease
 ```
+
+_Note: The module is still in preview so the `-AllowPrerelease` parameter is required._
 
 ## Contributing
 

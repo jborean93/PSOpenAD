@@ -390,6 +390,11 @@ internal sealed class OpenADSessionFactory
         AuthenticationMethod auth, PSCredential? credential, ChannelBindings? channelBindings,
         bool transportIsTls, OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet cmdlet)
     {
+        if (credential == PSCredential.Empty)
+        {
+            credential = null;
+        }
+
         if (auth == AuthenticationMethod.Default)
         {
             // Always favour Negotiate auth if it is available, otherwise use Simple if both a credential and the

@@ -53,6 +53,7 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
 
     [Parameter(ParameterSetName = "ServerIdentity")]
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
+    [Credential()]
     public PSCredential? Credential { get; set; }
 
     #endregion

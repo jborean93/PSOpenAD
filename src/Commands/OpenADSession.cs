@@ -57,6 +57,7 @@ public class NewOpenADSession : PSCmdlet
     public SwitchParameter UseTLS { get; set; }
 
     [Parameter()]
+    [Credential()]
     public PSCredential? Credential { get; set; }
 
     [Parameter()]

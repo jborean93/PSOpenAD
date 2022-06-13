@@ -28,6 +28,7 @@ public class GetOpenADWhoami : PSCmdlet
     public SwitchParameter StartTLS { get; set; }
 
     [Parameter(ParameterSetName = "Server")]
+    [Credential()]
     public PSCredential? Credential { get; set; }
 
     private CancellationTokenSource? CurrentCancelToken { get; set; }
