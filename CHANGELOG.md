@@ -15,6 +15,7 @@
 + Added `-ClientCertificate` to `New-OpenADSessionOption` that is used to authenticate using a client X.509 certificate
 + Raise `UnpackLDAPMessageException` when failing to unpack a response from the server.
   + The exception contains the `LDAPMessage` property which is the raw byte string that was being unpacked.
++ Added the `DomainController` property to the results of any `Get-OpenAD*` objects to help identify what domain controller returned that information
 
 ## v0.1.0-preview3 - 2022-03-22
 

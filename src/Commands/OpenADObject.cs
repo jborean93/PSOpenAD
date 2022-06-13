@@ -205,8 +205,10 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
                 OpenADObject adObj = CreateADObject(props);
 
                 // This adds a note property for each explicitly requested property, excluding the ones the object
-                // naturally exposes.
+                // naturally exposes. Also adds the DomainController property to denote what DC the response came from.
                 PSObject adPSObj = PSObject.AsPSObject(adObj);
+                adPSObj.Properties.Add(new PSNoteProperty("DomainController", Session.DomainController));
+
                 List<string> orderedProps = props.Keys
                     .Where(v =>
                         (showAll || explicitProperties.Contains(v, comparer)) &&
