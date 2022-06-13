@@ -59,3 +59,14 @@ If the `default_realm` was successfully retrieved (or determined by the local ho
 If any records are returned the default DC is set to the record with the preferred property and weight.
 
 If any of these steps fail then no default DC is available and PSOpenAD is only able to create a connection when an explicit server or connection uri was provided.
+
+# TRACE LOGGING
+It is possible to do trace logging for the raw LDAP messages that are exchanged for debugging purposes.
+To enable trace logging use the `-TracePath` parameter with `New-OpenADSessionOption` when creating a new session.
+
+```powershell
+$so = New-OpenADSessionOption -TracePath temp:/PSOpenAD-trace.log
+Get-OpenADUser -Identity username -SessionOption $so
+```
+
+The trace will remain active for the lifetime of the session.

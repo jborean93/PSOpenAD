@@ -117,6 +117,33 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
             $s | Remove-OpenADSession
         }
     }
+
+    It "Creates session with trace logging" {
+        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
+
+        $logPath = "temp:/PSOpenAD-$([Guid]::NewGuid())"
+        $sessionParams = @{
+            Uri        = "ldap://$($PSOpenADSettings.Server)"
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+            SessionOption = (New-OpenADSessionOption -TracePath $logPath)
+        }
+
+        $s = New-OpenADSession @sessionParams
+        try {
+            Test-Path -LiteralPath $logPath | Should -BeTrue
+            $currentSize = (Get-Item -LiteralPath $logPath).Size
+            $currentSize | Should -BeGreaterThan 0
+
+            $null = Get-OpenADUser -Session $s
+            (Get-Item -LiteralPath $logPath).Size | Should -BeGreaterThan $currentSize
+        }
+        finally {
+            $s | Remove-OpenADSession
+            if (Test-Path -LiteralPath $logPath) {
+                Remove-Item -LiteralPath $logPath -Force
+            }
+        }
+    }
 }
 
 Describe "New-OpenADSession over StartTLS" -Skip:(-not $PSOpenADSettings.Server -or -not $PSOpenADSettings.TlsAvailable) {

@@ -14,7 +14,7 @@ Creates an object that contains advanced options for an `OpenAD` session.
 
 ```
 New-OpenADSessionOption [-NoEncryption] [-NoSigning] [-NoChannelBinding] [-SkipCertificateCheck]
- [-ConnectTimeout <Int32>] [-OperationTimeout <Int32>] [<CommonParameters>]
+ [-ConnectTimeout <Int32>] [-OperationTimeout <Int32>] [-TracePath <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -49,6 +49,18 @@ PS C:\> Get-OpenADUser -Server dc -SessionOption $so -Identity my-username
 
 Disables and encryption or signatures placed on the data exchanged with the LDAP server.
 Encryption and signing is used by auth mechanisms, like `Negotiate` and `Kerberos` to encrypt or sign the data exchanged on the network.
+
+### Example 4: Enable message trace logging
+```powershell
+PS C:\> $so = New-OpenADSessionOption -TracePath temp:/PSOpenAD-Trace.log
+PS C:\> $s = New-OpenADSession -ComputerName dc -SessionOption $so
+PS C:\> Get-OpenADUser -Session $s -Identity my-username
+PS C:\> $s | Remove-OpenADSession
+```
+
+Creates an OpenAD session with trace message logging set to log the incoming and outgoing LDAP messages to `temp:/PSOpenAD-Trace.log`.
+The path can be any location accessible by the `FileSystem` provider in PowerShell.
+The logs will continue to append until the OpenAD session is closed.
 
 ## PARAMETERS
 
@@ -147,6 +159,25 @@ This is useful when the server is using a self signed certificate for it's TLS c
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -TracePath
+The path to a local file where incoming and outgoing LDAP messages will be written to.
+Each line in this path starts with either `RECV: ` or `SEND: ` and the value being the base64 encoded string of the LDAP message.
+Opening a new session with a trace path will create the new file path and will overwrite the existing path if it already exists.
+The directory the file is located in must already exist or else the session creation will fail.
+The contents of the LDAP messages can contain sensitive values so use this only for debugging purposes.
+
+```yaml
+Type: String
 Parameter Sets: (All)
 Aliases:
 
