@@ -81,6 +81,31 @@ task CopyToRelease {
     }
 }
 
+task Sign {
+    $certPath = $env:PSMODULE_SIGNING_CERT
+    $certPassword = $env:PSMODULE_SIGNING_CERT_PASSWORD
+    if (-not $certPath -or -not $certPassword) {
+        return
+    }
+
+    [byte[]]$certBytes = [System.Convert]::FromBase64String($env:PSMODULE_SIGNING_CERT)
+    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certBytes, $certPassword)
+    $signParams = @{
+        Certificate     = $cert
+        TimestampServer = 'http://timestamp.digicert.com'
+        HashAlgorithm   = 'SHA256'
+    }
+
+    Get-ChildItem -LiteralPath $ReleasePath -Recurse -ErrorAction SilentlyContinue |
+        Where-Object Extension -in ".ps1", ".psm1", ".psd1", ".ps1xml", ".dll" |
+        ForEach-Object -Process {
+            $result = Set-AuthenticodeSignature -LiteralPath $_.FullName @signParams
+            if ($result.Status -ne "Valid") {
+                throw "Failed to sign $($_.FullName) - Status: $($result.Status) Message: $($result.StatusMessage)"
+            }
+        }
+}
+
 task Package {
     $nupkgPath = [IO.Path]::Combine($BuildPath, "$ModuleName.$Version*.nupkg")
     if (Test-Path $nupkgPath) {
@@ -211,7 +236,7 @@ task DoTest {
     }
 }
 
-task Build -Jobs Clean, BuildManaged, CopyToRelease, BuildDocs, Package
+task Build -Jobs Clean, BuildManaged, CopyToRelease, BuildDocs, Sign, Package
 
 # FIXME: Work out why we need the obj and bin folder for coverage to work
 task Test -Jobs BuildManaged, Analyze, DoUnitTest, DoTest
