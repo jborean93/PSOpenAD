@@ -15,10 +15,17 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
 
     Context "Get-OpenADObject" {
         It "Creates session using hostname" {
-            Get-OpenADObject -Server $PSOpenADSettings.Server | Out-Null
+            $actual = Get-OpenADObject -Server $PSOpenADSettings.Server
+            $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
+                $_.PSObject.Properties.Name | Should -Contain 'Name'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
+                $_.DomainController | Should -Be $PSOpenADSettings.Server
+            }
         }
 
-        It "Creates sessoin using hostname:port" {
+        It "Creates session using hostname:port" {
             Get-OpenADObject -Server "$($PSOpenADSettings.Server):389" | Out-Null
         }
 
@@ -42,6 +49,19 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual = Get-OpenADComputer -Session $session -Identity $dcName
             $actual.Name | Should -Be $dcName
             $actual.SamAccountName | Should -Be "$dcName$"
+
+            $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
+                $_.PSObject.Properties.Name | Should -Contain 'Name'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
+                $_.PSObject.Properties.Name | Should -Contain 'DNSHostName'
+                $_.PSObject.Properties.Name | Should -Contain 'Enabled'
+                $_.PSObject.Properties.Name | Should -Contain 'UserPrincipalName'
+                $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
+                $_.PSObject.Properties.Name | Should -Contain 'SID'
+                $_.DomainController | Should -Be $PSOpenADSettings.Server
+            }
         }
 
         It "Finds ADComputer by -Identity sAMAccountName" {
@@ -72,6 +92,37 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.Count | Should -Be 2
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADGroup])
             $actual[1] | Should -BeOfType ([PSOpenAD.OpenADGroup])
+
+            $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
+                $_.PSObject.Properties.Name | Should -Contain 'Name'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
+                $_.PSObject.Properties.Name | Should -Contain 'GroupCategory'
+                $_.PSObject.Properties.Name | Should -Contain 'GroupScope'
+                $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
+                $_.PSObject.Properties.Name | Should -Contain 'SID'
+                $_.DomainController | Should -Be $PSOpenADSettings.Server
+            }
+        }
+    }
+
+    Context "Get-OpenADUser" {
+        It "Finds ADUser" {
+            $actual = Get-OpenADUser -Session $session
+            $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
+                $_.PSObject.Properties.Name | Should -Contain 'Name'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
+                $_.PSObject.Properties.Name | Should -Contain 'GivenName'
+                $_.PSObject.Properties.Name | Should -Contain 'Surname'
+                $_.PSObject.Properties.Name | Should -Contain 'Enabled'
+                $_.PSObject.Properties.Name | Should -Contain 'UserPrincipalName'
+                $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
+                $_.PSObject.Properties.Name | Should -Contain 'SID'
+                $_.DomainController | Should -Be $PSOpenADSettings.Server
+            }
         }
 
         It "Uses default ldap filter with -SearchBase" {

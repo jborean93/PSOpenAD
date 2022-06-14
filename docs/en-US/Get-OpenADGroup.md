@@ -360,6 +360,8 @@ The `OpenADGroup` representing the object(s) found. This object will always have
 
 + `GroupScope`
 
++ `DomainController`: This is set to the domain controller that processed the request
+
 Any explicit attributes requested through `-Property` are also present on the object.
 
 ## NOTES
