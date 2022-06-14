@@ -28,6 +28,13 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 Get-OpenADObject -Server hostname:port -ErrorAction Stop
             } | Should -Throw -ExceptionType ([ArgumentException]) -ExpectedMessage $expected
         }
+
+        It "Uses default ldap filter with -SearchBase" {
+            $allObjects = Get-OpenADObject -Session $session
+            $searchObjects = Get-OpenADObject -Session $session -SearchBase $session.DefaultNamingContext
+
+            $allObjects.Count | Should -Be $searchObjects.Count
+        }
     }
 
     Context "Get-OpenADComputer" {
@@ -50,6 +57,13 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual[1] | Should -BeOfType ([PSOpenAD.OpenADComputer])
             $actual[0].ObjectGuid | Should -Be $actual[1].ObjectGuid
         }
+
+        It "Uses default ldap filter with -SearchBase" {
+            $allObjects = Get-OpenADComputer -Session $session
+            $searchObjects = Get-OpenADComputer -Session $session -SearchBase $session.DefaultNamingContext
+
+            $allObjects.Count | Should -Be $searchObjects.Count
+        }
     }
 
     Context "Get-OpenADGroup" {
@@ -58,6 +72,13 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.Count | Should -Be 2
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADGroup])
             $actual[1] | Should -BeOfType ([PSOpenAD.OpenADGroup])
+        }
+
+        It "Uses default ldap filter with -SearchBase" {
+            $allObjects = Get-OpenADGroup -Session $session
+            $searchObjects = Get-OpenADGroup -Session $session -SearchBase $session.DefaultNamingContext
+
+            $allObjects.Count | Should -Be $searchObjects.Count
         }
     }
 }
