@@ -47,4 +47,30 @@ public static class LDAPMessageTests
         Assert.Single(actual.Result.Referrals);
         Assert.Equal("ldap://foo.ldap.test/DC=foo,DC=ldap,DC=test", actual.Result.Referrals?[0]);
     }
+
+    [Fact]
+    public static void FailToUnpackMessageInvalidNotASequence()
+    {
+        const string MESSAGE = "BAR0ZXN0";
+        LDAPSession session = new();
+
+        var ex = Assert.Throws<UnpackLDAPMessageException>(() => session.ReceiveData(Convert.FromBase64String(MESSAGE), out var _));
+
+        Assert.Equal("Failed to unpack LDAP message: The provided data is tagged with 'Universal' class value '4', but it should have been 'Universal' class value '16'.",
+            ex.Message);
+        Assert.Equal(ex.LDAPMessage, Convert.FromBase64String(MESSAGE));
+    }
+
+    [Fact]
+    public static void FailToUnpackMessageInvalidNotAValidLDAPMsgExtraData()
+    {
+        const string MESSAGE = "MAR0ZXN0dGVzdA==";
+        LDAPSession session = new();
+
+        var ex = Assert.Throws<UnpackLDAPMessageException>(() => session.ReceiveData(Convert.FromBase64String(MESSAGE), out var _));
+
+        Assert.Equal("Failed to unpack LDAP message: The provided data is tagged with 'Application' class value '20', but it should have been 'Universal' class value '2'.",
+            ex.Message);
+        Assert.Equal(ex.LDAPMessage, Convert.FromBase64String(MESSAGE[..8]));
+    }
 }

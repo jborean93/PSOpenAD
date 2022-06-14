@@ -13,6 +13,8 @@
 + Added the `DomainController` property to the `OpenADSession` class to help identify the domain controller the session is connected to
 + Fixed the default parameter sets of the `Get-OpenAD*` cmdlets to always use the default LDAP filter that selects all of that type unless an explicit filter or identity was provided
 + Added `-ClientCertificate` to `New-OpenADSessionOption` that is used to authenticate using a client X.509 certificate
++ Raise `UnpackLDAPMessageException` when failing to unpack a response from the server.
+  + The exception contains the `LDAPMessage` property which is the raw byte string that was being unpacked.
 
 ## v0.1.0-preview3 - 2022-03-22
 
