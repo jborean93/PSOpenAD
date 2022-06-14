@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.1.0-preview4 - TBD
+## v0.1.0-preview4 - 2022-06-15
 
 + Added error handling for search request that ends with a referral
   + Currently the cmdlet will emit an error record with the referral URI which is similar to what the AD cmdlets do
