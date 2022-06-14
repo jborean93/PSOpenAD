@@ -96,6 +96,8 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
             true, false, "");
         GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
             false, "");
+        GlobalState.Providers[AuthenticationMethod.Certificate] = new(AuthenticationMethod.Certificate, "EXTERNAL",
+            true, true, "");
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {

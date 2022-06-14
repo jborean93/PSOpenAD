@@ -1,5 +1,6 @@
 using System;
 using System.Management.Automation;
+using System.Security.Cryptography.X509Certificates;
 
 namespace PSOpenAD.Commands;
 
@@ -30,6 +31,9 @@ public class NewOpenADSessionOption : PSCmdlet
     [Parameter()]
     public string? TracePath { get; set; }
 
+    [Parameter()]
+    public X509Certificate? ClientCertificate { get; set; }
+
     protected override void EndProcessing()
     {
         string? tracePath = null;
@@ -47,6 +51,7 @@ public class NewOpenADSessionOption : PSCmdlet
             ConnectTimeout = ConnectTimeout,
             OperationTimeout = OperationTimeout,
             TracePath = tracePath,
+            ClientCertificate = ClientCertificate,
         });
     }
 }

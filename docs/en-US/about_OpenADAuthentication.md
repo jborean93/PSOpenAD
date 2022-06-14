@@ -56,6 +56,17 @@ The data is still encrypted or signed by default it just requires less network r
 Negotiate authentication over LDAP refers to the `GSS-SPNEGO` mechanism.
 It is recommended to use Negotiate auth over Kerberos unless only Kerberos authentication is desired.
 
+# CERTIFICATE AUTH
+Certificate authentication uses an X.509 certificate presented by the client that used for authenticatoin.
+Typically this certificate is mapped to an account on the server.
+For Microsoft Active Directory servers, the certificate is either created by the Active Directory Certificate Services for a user, implicit mapping.
+It could also be a certificate that is manually mapped to a domain account and trusted in the `NTAuthStore`, explicit mapping.
+The client provides a certificate containing a private key for use with the TLS handshake and the identity the certificate is mapped to is used for authentication.
+This client certificate is set through the `New-OpenADSessionOption -ClientCertificate $cert` parameter when creating the session.
+
+Certificate authentication over LDAP refers to the `EXTERNAL` mechanism.
+This can only be used when communicating over LDAP with `StartTLS` enabled or an `LDAPS` connection.
+
 # ENCRYPTION
 While `StartTLS` or `LDAPS` connections will encrypt all the LDAP traffic between the client and server, normal `LDAP` connections use the authentication provider to provide encryption/signing.
 Neither the `Anonymous` or `Simple` authentication method can encrypt/sign the data and thus should only be used on a `StartTLS` or `LDAPS` connection.

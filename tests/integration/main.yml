@@ -77,6 +77,74 @@
     win_reboot:
     when: domain_setup_res.reboot_required
 
+  - name: install Active Directory Certificate Services
+    win_feature:
+      name: AD-Certificate
+      state: present
+    register: adcs_setup_res
+
+  - name: reboot after ADCS install
+    win_reboot:
+    when: adcs_setup_res.reboot_required
+
+  - name: configure ADCS certification authority
+    ansible.windows.win_powershell:
+      script: |
+        $ErrorActionPreference = 'Stop'
+        $Ansible.Changed = $false
+
+        $caParams = @{
+            CAType             = 'EnterpriseRootCa'
+            CryptoProviderName = 'RSA#Microsoft Software Key Storage Provider'
+            KeyLength          = 2048
+            HashAlgorithmName  = 'SHA256'
+            Force              = $true
+        }
+        try {
+            Install-AdcsCertificationAuthority @caParams
+            $Ansible.Changed = $true
+        }
+        catch [Microsoft.CertificateServices.Deployment.Common.CertificateServicesBaseSetupException] {
+            if ($_.Exception.Message -like 'The Certification Authority is already installed.*') {
+                return
+            }
+            throw
+        }
+
+    become: yes
+    become_method: runas
+    become_user: SYSTEM
+
+  - name: add custom CA to Forest NTAuthStore
+    ansible.windows.win_powershell:
+      script: |
+        $ErrorActionPreference = 'Stop'
+        $Ansible.Changed = $false
+
+        $caCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new('C:\Windows\TEMP\ca.pem')
+        $configRoot = (Get-ADRootDSE).configurationNamingContext
+
+        $dn = "CN=NTAuthCertificates,CN=Public Key Services,CN=Services,$configRoot"
+        $obj = Get-ADObject -Identity $dn -Properties cACertificate
+
+        $found = $false
+        foreach ($certBytes in $obj.cACertificate) {
+            $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certBytes)
+            if ($cert.Thumbprint -eq $caCert.Thumbprint) {
+                $found = $true
+                break
+            }
+        }
+
+        if (-not $found) {
+            certutil.exe -dspublish C:\Windows\TEMP\ca.pem NTAuthCA
+            $Ansible.Changed = $true
+        }
+
+    become: yes
+    become_method: runas
+    become_user: SYSTEM
+
   - name: create domain username
     win_domain_user:
       name: '{{ domain_username }}'
@@ -89,6 +157,52 @@
       - Domain Admins
       - Enterprise Admins
       state: present
+
+  - name: request User certificate
+    ansible.windows.win_powershell:
+      parameters:
+        Path: C:\Windows\TEMP\user-{{ domain_username }}.pfx
+        CertPass: '{{ domain_password }}'
+      script: |
+        [CmdletBinding()]
+        param (
+            [string]
+            $Path,
+
+            [string]
+            $CertPass
+        )
+        $ErrorActionPreference = 'Stop'
+        $Ansible.Changed = $false
+
+        if (Test-Path -LiteralPath $Path) {
+            return
+        }
+
+        Push-Location Cert:\CurrentUser\My
+        $result = Get-Certificate -Template User -Url ldap:
+        Pop-Location
+
+        if ($result.Status -ne "Issued") {
+            throw "Failed to request User certificate: $($result.Status)"
+        }
+        $Ansible.Changed = $true
+
+        $cert = $result.Certificate
+        $certBytes = $result.Certificate.Export("Pfx", $CertPass)
+        [System.IO.File]::WriteAllBytes($Path, $certBytes)
+
+    become: yes
+    become_method: runas
+    vars:
+      ansible_become_user: '{{ domain_user_upn }}'
+      ansible_become_pass: '{{ domain_password }}'
+
+  - name: fetch certificate for user cert authentication
+    fetch:
+      src: C:\Windows\TEMP\user-{{ domain_username }}.pfx
+      dest: '{{ playbook_dir }}/cert_setup/user-{{ domain_username }}.pfx'
+      flat: yes
 
   - name: copy LDAPS certificate
     win_copy:
