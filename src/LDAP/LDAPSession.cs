@@ -127,25 +127,35 @@ internal class LDAPSession
 
     public LDAPMessage? ReceiveData(ReadOnlySpan<byte> data, out int bytesConsumed)
     {
+        bytesConsumed = 0;
         TraceMsg("RECV", data);
 
-        if (!Asn1Helper.HasEnoughData(data))
+        try
         {
-            bytesConsumed = 0;
-            return null;
+            if (!Asn1Helper.HasEnoughData(data))
+            {
+                bytesConsumed = 0;
+                return null;
+            }
+
+            const AsnEncodingRules ruleSet = AsnEncodingRules.BER;
+            AsnDecoder.ReadSequence(data, ruleSet, out var sequenceOffset, out var sequenceLength,
+                out bytesConsumed);
+
+            LDAPMessage? msg = LDAPMessage.FromBytes(data.Slice(sequenceOffset, sequenceLength), out var _,
+                ruleSet: ruleSet);
+
+            if (msg is BindResponse bindResp && bindResp.Result.ResultCode == LDAPResultCode.Success)
+                State = SessionState.Opened;
+
+            return msg;
         }
-
-        const AsnEncodingRules ruleSet = AsnEncodingRules.BER;
-        AsnDecoder.ReadSequence(data, ruleSet, out var sequenceOffset, out var sequenceLength,
-            out bytesConsumed);
-
-        LDAPMessage? msg = LDAPMessage.FromBytes(data.Slice(sequenceOffset, sequenceLength), out var _,
-            ruleSet: ruleSet);
-
-        if (msg is BindResponse bindResp && bindResp.Result.ResultCode == LDAPResultCode.Success)
-            State = SessionState.Opened;
-
-        return msg;
+        catch (Exception e)
+        {
+            int msgLength = bytesConsumed > 0 ? bytesConsumed : data.Length;
+            string msg = $"Failed to unpack LDAP message: {e.Message}";
+            throw new UnpackLDAPMessageException(msg, data[..msgLength].ToArray(), e);
+        }
     }
 
     private void PutRequest(LDAPMessage message)

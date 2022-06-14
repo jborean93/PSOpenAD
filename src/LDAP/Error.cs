@@ -197,3 +197,22 @@ public class LDAPException : Exception
         _ => "Unknown error",
     };
 }
+
+public class UnpackLDAPMessageException : Exception
+{
+    public byte[] LDAPMessage { get; } = Array.Empty<byte>();
+
+    public UnpackLDAPMessageException() { }
+
+    public UnpackLDAPMessageException(string message) : base(message) { }
+
+    public UnpackLDAPMessageException(string message, Exception innerException) :
+        base(message, innerException)
+    { }
+
+    public UnpackLDAPMessageException(string message, byte[] ldapMessage, Exception innerException) :
+        base(message, innerException)
+    {
+        LDAPMessage = ldapMessage;
+    }
+}
