@@ -11,6 +11,7 @@
 + Have `Get-OpenADWhoami` return an object with more details on the LDAP session, like the domain controller DNS name, URI, and authentication method used.
   + The returned username value will also strip the leading `u:` prefix if it is present
 + Added the `DomainController` property to the `OpenADSession` class to help identify the domain controller the session is connected to
++ Fixed the default parameter sets of the `Get-OpenAD*` cmdlets to always use the default LDAP filter that selects all of that type unless an explicit filter or identity was provided
 
 ## v0.1.0-preview3 - 2022-03-22
 

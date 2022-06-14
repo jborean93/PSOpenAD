@@ -61,16 +61,14 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
     #region LDAPFilter Parameters
 
     [Parameter(
-        Mandatory = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "ServerLDAPFilter"
     )]
     [Parameter(
-        Mandatory = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "SessionLDAPFilter"
     )]
-    public string LDAPFilter { get; set; } = "";
+    public string? LDAPFilter { get; set; }
 
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
     [Parameter(ParameterSetName = "SessionLDAPFilter")]
@@ -82,21 +80,27 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
 
     #endregion
 
-    #region Common Parameters
+    #region Identity Parameters
 
     [Parameter(
+        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "ServerIdentity"
     )]
     [Parameter(
+        Mandatory = true,
         Position = 0,
         ValueFromPipeline = true,
         ValueFromPipelineByPropertyName = true,
         ParameterSetName = "SessionIdentity"
     )]
     public T? Identity { get; set; }
+
+    #endregion
+
+    #region Common Parameters
 
     [Parameter()]
     [Alias("Properties")]
@@ -109,7 +113,7 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
     protected override void ProcessRecord()
     {
         LDAPFilter finalFilter;
-        if (ParameterSetName.EndsWith("LDAPFilter"))
+        if (!string.IsNullOrWhiteSpace(LDAPFilter))
         {
             LDAPFilter subFilter;
             try
@@ -243,7 +247,7 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADObject",
-    DefaultParameterSetName = "ServerIdentity"
+    DefaultParameterSetName = "ServerLDAPFilter"
 )]
 [OutputType(typeof(OpenADObject))]
 public class GetOpenADObject : GetOpenADOperation<ADObjectIdentity>
@@ -261,7 +265,7 @@ public class GetOpenADObject : GetOpenADOperation<ADObjectIdentity>
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADComputer",
-    DefaultParameterSetName = "ServerIdentity"
+    DefaultParameterSetName = "ServerLDAPFilter"
 )]
 [OutputType(typeof(OpenADComputer))]
 public class GetOpenADComputer : GetOpenADOperation<ADPrincipalIdentityWithDollar>
@@ -277,7 +281,7 @@ public class GetOpenADComputer : GetOpenADOperation<ADPrincipalIdentityWithDolla
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADUser",
-    DefaultParameterSetName = "ServerIdentity"
+    DefaultParameterSetName = "ServerLDAPFilter"
 )]
 [OutputType(typeof(OpenADUser))]
 public class GetOpenADUser : GetOpenADOperation<ADPrincipalIdentity>
@@ -293,7 +297,7 @@ public class GetOpenADUser : GetOpenADOperation<ADPrincipalIdentity>
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADGroup",
-    DefaultParameterSetName = "ServerIdentity"
+    DefaultParameterSetName = "ServerLDAPFilter"
 )]
 [OutputType(typeof(OpenADGroup))]
 public class GetOpenADGroup : GetOpenADOperation<ADPrincipalIdentity>
@@ -309,7 +313,7 @@ public class GetOpenADGroup : GetOpenADOperation<ADPrincipalIdentity>
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADServiceAccount",
-    DefaultParameterSetName = "ServerIdentity"
+    DefaultParameterSetName = "ServerLDAPFilter"
 )]
 [OutputType(typeof(OpenADServiceAccount))]
 public class GetOpenADServiceAccount : GetOpenADOperation<ADPrincipalIdentityWithDollar>

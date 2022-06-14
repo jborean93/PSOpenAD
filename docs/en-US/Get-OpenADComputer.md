@@ -12,30 +12,30 @@ Get one or more Active Directory computers.
 
 ## SYNTAX
 
-### ServerIdentity (Default)
+### ServerLDAPFilter (Default)
 ```
 Get-OpenADComputer [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
- [[-Identity] <ADPrincipalIdentityWithDollar>] [-Property <String[]>] [<CommonParameters>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-LDAPFilter <String>]
+ [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
-Get-OpenADComputer -Session <OpenADSession> [[-Identity] <ADPrincipalIdentityWithDollar>]
- [-Property <String[]>] [<CommonParameters>]
+Get-OpenADComputer -Session <OpenADSession> [-Identity] <ADPrincipalIdentityWithDollar> [-Property <String[]>]
+ [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
 ```
-Get-OpenADComputer -Session <OpenADSession> -LDAPFilter <String> [-SearchBase <String>]
+Get-OpenADComputer -Session <OpenADSession> [-LDAPFilter <String>] [-SearchBase <String>]
  [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
 ```
 
-### ServerLDAPFilter
+### ServerIdentity
 ```
 Get-OpenADComputer [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] -LDAPFilter <String>
- [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
+ [-Identity] <ADPrincipalIdentityWithDollar> [-Property <String[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -108,7 +108,7 @@ This is used when the cmdlet creates a new connection to the `-Server` specified
 
 ```yaml
 Type: AuthenticationMethod
-Parameter Sets: ServerIdentity, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, ServerIdentity
 Aliases:
 Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos
 
@@ -125,7 +125,7 @@ This is used when the cmdlet creates a new connection to the `-Server` specified
 
 ```yaml
 Type: PSCredential
-Parameter Sets: ServerIdentity, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, ServerIdentity
 Aliases:
 
 Required: False
@@ -154,10 +154,10 @@ The `-LDAPFilter` parameter can be used instead to query for multiple objects.
 
 ```yaml
 Type: ADPrincipalIdentityWithDollar
-Parameter Sets: ServerIdentity, SessionIdentity
+Parameter Sets: SessionIdentity, ServerIdentity
 Aliases:
 
-Required: False
+Required: True
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName, ByValue)
@@ -170,10 +170,10 @@ The filter specified here will be used with an `AND` condition to `(objectCatego
 
 ```yaml
 Type: String
-Parameter Sets: SessionLDAPFilter, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, SessionLDAPFilter
 Aliases:
 
-Required: True
+Required: False
 Position: Named
 Default value: None
 Accept pipeline input: True (ByPropertyName)
@@ -229,7 +229,7 @@ Combine this with `-SearchScope` to limit searches to a smaller subset of the do
 
 ```yaml
 Type: String
-Parameter Sets: SessionLDAPFilter, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, SessionLDAPFilter
 Aliases:
 
 Required: False
@@ -251,7 +251,7 @@ This can be set to
 
 ```yaml
 Type: SearchScope
-Parameter Sets: SessionLDAPFilter, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, SessionLDAPFilter
 Aliases:
 Accepted values: Base, OneLevel, Subtree
 
@@ -273,7 +273,7 @@ This option is mutually exclusive with `-Session`.
 
 ```yaml
 Type: String
-Parameter Sets: ServerIdentity, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, ServerIdentity
 Aliases:
 
 Required: False
@@ -307,7 +307,7 @@ These options can be generated with `New-OpenADSessionOption`.
 
 ```yaml
 Type: OpenADSessionOptions
-Parameter Sets: ServerIdentity, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, ServerIdentity
 Aliases:
 
 Required: False
@@ -322,7 +322,7 @@ Use `StartTLS` when creating a new session with `-Server`.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: ServerIdentity, ServerLDAPFilter
+Parameter Sets: ServerLDAPFilter, ServerIdentity
 Aliases:
 
 Required: False
