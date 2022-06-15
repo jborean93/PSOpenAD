@@ -3,6 +3,7 @@
 ## v0.1.0-preview5 - TBD
 
 + Fix up edge case for calculating input LDAP message lengths causing an unpack exception
++ Make the AD object properties in a `Get-*` operation return with the first character in upper case to fit the PowerShell standard
 
 ## v0.1.0-preview4 - 2022-06-15
 
