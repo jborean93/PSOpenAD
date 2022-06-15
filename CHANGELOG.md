@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.1.0-preview5 - TBD
+
++ Fix up edge case for calculating input LDAP message lengths causing an unpack exception
+
 ## v0.1.0-preview4 - 2022-06-15
 
 + Added error handling for search request that ends with a referral
