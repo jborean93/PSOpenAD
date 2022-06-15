@@ -65,13 +65,14 @@ internal static class Asn1Helper
         uint length = 0;
         for (int i = 0; i < lengthLength; i++)
         {
-            byte currentOctet = data.Slice(i, 1 + i).ToArray()[0];
+            byte currentOctet = data[..1].ToArray()[0];
 
             if (length == 0 && currentOctet != 0 && lengthLength - i > sizeof(int))
                 throw new AsnContentException("ASN.1 content contains too much data to decode");
 
             length <<= 8;
             length |= currentOctet;
+            data = data[1..];
         }
 
         if (length > int.MaxValue)

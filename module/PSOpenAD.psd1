@@ -95,7 +95,7 @@
 
         PSData = @{
 
-            Prerelease   = 'preview4'
+            Prerelease   = 'preview5'
 
             # Tags applied to this module. These help with module discovery in online galleries.
             Tags         = @(
