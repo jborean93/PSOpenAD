@@ -224,7 +224,10 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
                         value = ((IList<PSObject>)value)[0];
                     }
 
-                    adPSObj.Properties.Add(new PSNoteProperty(p, value));
+                    // To make the properties more PowerShell like make sure the first char is in upper case.
+                    // PowerShell is case insensitive so users can still select it based on the lower case LDAP name.
+                    string propertyName = p[0..1].ToUpperInvariant() + p[1..];
+                    adPSObj.Properties.Add(new PSNoteProperty(propertyName, value));
                 }
 
                 outputResult = true;
