@@ -198,7 +198,7 @@ When no properties are specified the following attributes are retrieved:
 
 Any attributes specified by this parameter will be added to the list above.
 Specify `*` to display all attributes that are set on the object.
-Any attributes on the object that do not have a value set will not be returned with `*`.
+Any attributes on the object that do not have a value set will not be returned with `*` unless they were also explicitly requested.
 These unset attributes must be explicitly defined for it to return on the output object.
 
 If there has been a successful connection to any LDAP server this option supports tab completion.
@@ -350,6 +350,7 @@ The `OpenADObject` representing the object(s) found. This object will always hav
 + `DomainController`: This is set to the domain controller that processed the request
 
 Any explicit attributes requested through `-Property` are also present on the object.
+If an LDAP attribute on the underlying object did not have a value set but was explicitly requested then the property will be set to `$null`.
 
 ## NOTES
 Unlike `Get-ADObject`, if an computer object cannot be found based on the `-Identity` requested this cmdlet will emit an error record.

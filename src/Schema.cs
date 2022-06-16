@@ -2,6 +2,7 @@ using PSOpenAD.LDAP;
 using PSOpenAD.Security;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography.X509Certificates;
@@ -77,17 +78,42 @@ internal static class DefaultOverrider
 
 internal sealed class ObjectClass
 {
+    private HashSet<string>? _validAttributes;
+
     public string Name { get; }
     public ObjectClass[] SuperTypes { get; }
+    public ObjectClass[] AuxiliaryTypes { get; }
+    internal List<ObjectClass> SubTypes { get; }
     public string[] Must { get; }
     public string[] May { get; }
 
-    public ObjectClass(string name, ObjectClass[] superTypes, string[] must, string[] may)
+    public HashSet<string> ValidAttributes => _validAttributes ?? GetValidAttributes();
+
+    public ObjectClass(string name, ObjectClass[] superTypes, ObjectClass[] auxTypes, string[] must, string[] may)
     {
         Name = name;
         SuperTypes = superTypes;
+        AuxiliaryTypes = auxTypes;
+        SubTypes = new();
         Must = must;
         May = may;
+
+        foreach (ObjectClass superType in superTypes)
+        {
+            superType.SubTypes.Add(this);
+        }
+    }
+
+    private HashSet<string> GetValidAttributes()
+    {
+        _validAttributes = Must.Concat(May).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (ObjectClass subType in SubTypes)
+        {
+            _validAttributes.UnionWith(subType.ValidAttributes);
+        }
+        _validAttributes = _validAttributes.OrderBy(p => p).ToHashSet();
+
+        return _validAttributes;
     }
 }
 
@@ -97,6 +123,7 @@ internal sealed class SchemaMetadata
     private readonly Dictionary<string, ObjectClass> _classInformation = new();
 
     public SchemaMetadata(Dictionary<string, AttributeTypeDescription> typeInformation,
+        Dictionary<string, DITContentRuleDescription> ditInformation,
         Dictionary<string, ObjectClassDescription> classInformation)
     {
         _typeInformation = typeInformation;
@@ -108,16 +135,17 @@ internal sealed class SchemaMetadata
             bool ready = true;
 
             List<ObjectClass> superTypes = new();
-            List<string> must = new();
-            List<string> may = new();
+            List<ObjectClass> auxTypes = new();
+            HashSet<string> must = new();
+            HashSet<string> may = new();
             foreach (string superType in desc.SuperTypes)
             {
                 if (_classInformation.ContainsKey(superType))
                 {
                     ObjectClass super = _classInformation[superType];
                     superTypes.Add(super);
-                    must.AddRange(super.Must);
-                    may.AddRange(super.May);
+                    must.UnionWith(super.Must);
+                    may.UnionWith(super.May);
                 }
                 else
                 {
@@ -126,12 +154,33 @@ internal sealed class SchemaMetadata
                 }
             }
 
+            if (ready && ditInformation.ContainsKey(desc.OID))
+            {
+                DITContentRuleDescription ditRule = ditInformation[desc.OID];
+                foreach (string auxType in ditRule.Auxiliary)
+                {
+                    if (_classInformation.ContainsKey(auxType))
+                    {
+                        ObjectClass aux = _classInformation[auxType];
+                        auxTypes.Add(aux);
+                        must.UnionWith(aux.Must);
+                        may.UnionWith(aux.May);
+                    }
+                    else
+                    {
+                        ready = false;
+                        break;
+                    }
+                }
+            }
+
             if (ready)
             {
-                must.AddRange(desc.Must);
-                may.AddRange(desc.May);
+                must.UnionWith(desc.Must);
+                may.UnionWith(desc.May);
                 string className = desc.Names[0];
-                _classInformation[className] = new(className, superTypes.ToArray(), must.ToArray(), may.ToArray());
+                _classInformation[className] = new(className, superTypes.ToArray(), auxTypes.ToArray(), must.ToArray(),
+                    may.ToArray());
 
                 // Store this info in the global state if this class hasn't been cached yet. This is used for the
                 // property argument completer.

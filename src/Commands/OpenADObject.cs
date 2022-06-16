@@ -159,16 +159,6 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
             finalFilter = FilteredClass;
         }
 
-        StringComparer comparer = StringComparer.OrdinalIgnoreCase;
-        HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
-        string[] explicitProperties = Property ?? Array.Empty<string>();
-        bool showAll = false;
-        foreach (string prop in explicitProperties)
-        {
-            if (prop == "*") { showAll = true; }
-            requestedProperties.Add(prop);
-        }
-
         List<LDAPControl>? serverControls = null;
         if (_includeDeleted)
         {
@@ -187,6 +177,45 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
 
             if (Session == null)
                 return; // Failed to create session - error records have already been written.
+
+            StringComparer comparer = StringComparer.OrdinalIgnoreCase;
+            string className = PropertyCompleter.GetClassNameForCommand(MyInvocation.MyCommand.Name);
+            HashSet<string> validProperties = Session.SchemaMetadata.GetClassInformation(className).ValidAttributes;
+            HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
+            HashSet<string> invalidProperties = new();
+            string[] explicitProperties = Property ?? Array.Empty<string>();
+            bool showAll = false;
+            foreach (string prop in explicitProperties)
+            {
+                if (prop == "*")
+                {
+                    showAll = true;
+                    requestedProperties.Add(prop);
+                    continue;
+                }
+
+                if (validProperties.Contains(prop))
+                {
+                    requestedProperties.Add(prop);
+                }
+                else
+                {
+                    invalidProperties.Add(prop);
+                }
+            }
+
+            if (invalidProperties.Count > 0)
+            {
+                string sortedProps = string.Join("', '", invalidProperties.OrderBy(p => p).ToArray());
+                ErrorRecord rec = new(
+                    new ArgumentException($"One or more properties for {className} are not valid: '{sortedProps}'"),
+                    "InvalidPropertySet",
+                    ErrorCategory.InvalidArgument,
+                    null);
+
+                ThrowTerminatingError(rec);
+                return;
+            }
 
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
             bool outputResult = false;
@@ -210,7 +239,9 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
                 adPSObj.Properties.Add(new PSNoteProperty("DomainController", Session.DomainController));
 
                 List<string> orderedProps = props.Keys
+                    .Union(requestedProperties, comparer)
                     .Where(v =>
+                        v != "*" &&
                         (showAll || explicitProperties.Contains(v, comparer)) &&
                         !DefaultProperties.Contains((v, true)))
                     .OrderBy(v => v)
@@ -218,10 +249,14 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
 
                 foreach (string p in orderedProps)
                 {
-                    (object value, bool isSingleValue) = props[p];
-                    if (isSingleValue)
+                    object? value = null;
+                    if (props.ContainsKey(p))
                     {
-                        value = ((IList<PSObject>)value)[0];
+                        (value, bool isSingleValue) = props[p];
+                        if (isSingleValue)
+                        {
+                            value = ((IList<PSObject>)value)[0];
+                        }
                     }
 
                     // To make the properties more PowerShell like make sure the first char is in upper case.

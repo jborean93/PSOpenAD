@@ -670,11 +670,12 @@ internal sealed class OpenADSessionFactory
         OpenADSessionOptions sessionOptions, CancellationToken cancelToken, PSCmdlet? cmdlet)
     {
         Dictionary<string, AttributeTypeDescription> attrInfo = new();
+        Dictionary<string, DITContentRuleDescription> ditInfo = new();
         Dictionary<string, ObjectClassDescription> classInfo = new();
 
         foreach (SearchResultEntry result in Operations.LdapSearchRequest(connection, subschemaSubentry,
             SearchScope.Base, 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
-            new string[] { "attributeTypes", "objectClasses" }, null, cancelToken, cmdlet))
+            new string[] { "attributeTypes", "dITContentRules", "objectClasses" }, null, cancelToken, cmdlet))
         {
             foreach (PartialAttribute attribute in result.Attributes)
             {
@@ -687,6 +688,11 @@ internal sealed class OpenADSessionFactory
                         AttributeTypeDescription attrTypes = new(rawValue);
                         attrInfo[attrTypes.Names[0]] = attrTypes;
                     }
+                    else if (attribute.Name == "dITContentRules")
+                    {
+                        DITContentRuleDescription ditRule = new(rawValue);
+                        ditInfo[ditRule.OID] = ditRule;
+                    }
                     else if (attribute.Name == "objectClasses")
                     {
                         ObjectClassDescription objClass = new(rawValue);
@@ -696,7 +702,7 @@ internal sealed class OpenADSessionFactory
             }
         }
 
-        return new SchemaMetadata(attrInfo, classInfo);
+        return new SchemaMetadata(attrInfo, ditInfo, classInfo);
     }
 }
 
