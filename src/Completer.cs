@@ -33,51 +33,40 @@ internal class PropertyCompleter : IArgumentCompleter
     public IEnumerable<CompletionResult> CompleteArgument(string commandName, string parameterName,
         string wordToComplete, CommandAst commandAst, IDictionary fakeBoundParameters)
     {
-        if (String.IsNullOrWhiteSpace(wordToComplete))
+        if (string.IsNullOrWhiteSpace(wordToComplete))
             wordToComplete = "";
 
-        string className;
-        switch (commandName)
-        {
-            case "Get-OpenADComputer":
-                className = "computer";
-                break;
-
-            case "Get-OpenADUser":
-                className = "person";
-                break;
-
-            case "Get-OpenADGroup":
-                className = "group";
-                break;
-
-            case "Get-OpenADServiceAccount":
-                className = "msDS-GroupManagedServiceAccount";
-                break;
-
-            default:
-                className = "top";
-                break;
-        }
-
+        string className = GetClassNameForCommand(commandName);
         if (GlobalState.ClassDefintions.ContainsKey(className))
         {
             ObjectClass info = GlobalState.ClassDefintions[className];
-            foreach (string must in info.Must)
+            foreach (string attribute in info.ValidAttributes)
             {
-                if (must.StartsWith(wordToComplete, true, CultureInfo.InvariantCulture))
+                if (attribute.StartsWith(wordToComplete, true, CultureInfo.InvariantCulture))
                 {
-                    yield return new CompletionResult(must);
-                }
-            }
-
-            foreach (string may in info.May)
-            {
-                if (may.StartsWith(wordToComplete, true, CultureInfo.InvariantCulture))
-                {
-                    yield return new CompletionResult(may);
+                    yield return new CompletionResult(attribute);
                 }
             }
         }
     }
+
+    /// <summary>Get the object class used for the cmdlet attribute validation.</summary>
+    /// <remarks>
+    /// This is not perfect as most cmdlets filter by an objectCategory which can be more specific than an
+    /// objectCategory. Unfortunately the schema metadata doesn't dontain the data required to build a mapping of
+    /// objectCategory and the valid attributes so we use the next best thing. An example of where this doesn't work
+    /// as well as I would like is for the "person" class. The Get-OpenADUser cmdlet filters by
+    /// '(objectCategory=person)' which excludes computer objects. The computer object class is a subtype of the person
+    /// object class which means attributes that are only valid for computers will be returned. Not even the AD cmdlets
+    /// check for this so it's a best effort attempt.
+    /// </remarks>
+    /// <returns>The objectClass that is used for the cmdlet.</returns>
+    public static string GetClassNameForCommand(string command) => command switch
+    {
+        "Get-OpenADComputer" => "computer",
+        "Get-OpenADUser" => "person",
+        "Get-OpenADGroup" => "group",
+        "Get-OpenADServiceAccount" => "msDS-GroupManagedServiceAccount",
+        _ => "top",
+    };
 }

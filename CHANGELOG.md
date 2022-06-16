@@ -4,6 +4,14 @@
 
 + Fix up edge case for calculating input LDAP message lengths causing an unpack exception
 + Make the AD object properties in a `Get-*` operation return with the first character in upper case to fit the PowerShell standard
++ Validate the requested `-Properties` on `Get-OpenAD*` cmdlets are valid for the object class that is being queried
+  + Invalid properties/attributes will result in a pipeling terminating error
++ Various fixes to the tab completion of `-Properties` on `Get-OpenAD*`
+  + The order will now be in alphabetical order
+  + Include attributes that are defined on auxiliary types as well as sub types
++ Ensures that the `-Properties` selected on `Get-OpenAD*` will exist in the output object
+  + If a property was requested but not set on the LDAP object, the property will now be set to `$null` rather than be missing
+  + This is a change from the Microsoft `ActiveDirectory` module which omits the properties entirely if the attribute did not have a value
 
 ## v0.1.0-preview4 - 2022-06-15
 

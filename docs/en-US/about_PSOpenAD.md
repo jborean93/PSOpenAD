@@ -15,3 +15,5 @@ The [about_OpenADAuthentication](./about_OpenADAuthentication.md) docs go into f
 It also explains how to set up authentication on non-Windows hosts.
 
 The [about_OpenADSessions](./about_OpenADSessions.md) docs talk about an OpenAD session and how they are managed in this module.
+
+The [about_OpenADComparison](./about_OpenADComparison.md) docs talk about the differences between `PSOpenAD` and the Microsoft `ActiveDirectory` module provided by RSAT.

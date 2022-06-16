@@ -55,3 +55,18 @@ if (-not $global:PSOpenADSettings) {
     }
 
 }
+
+Function Global:Complete {
+    [OutputType([System.Management.Automation.CompletionResult])]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]
+        $Expression
+    )
+
+    [System.Management.Automation.CommandCompletion]::CompleteInput(
+        $Expression,
+        $Expression.Length,
+        $null).CompletionMatches
+}
