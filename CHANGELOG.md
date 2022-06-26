@@ -12,6 +12,7 @@
 + Ensures that the `-Properties` selected on `Get-OpenAD*` will exist in the output object
   + If a property was requested but not set on the LDAP object, the property will now be set to `$null` rather than be missing
   + This is a change from the Microsoft `ActiveDirectory` module which omits the properties entirely if the attribute did not have a value
++ Ensure connections that have timed out are not reused causing a deadlock
 
 ## v0.1.0-preview4 - 2022-06-15
 

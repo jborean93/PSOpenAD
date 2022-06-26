@@ -225,11 +225,6 @@ internal class OpenADConnection : IDisposable
                     break;
                 }
             }
-            catch (IOException e) when (e.InnerException is SocketException)
-            {
-                // Typically due to the server closing the socket before we had a chance to cancel it ourselves.
-                break;
-            }
             catch (Exception e)
             {
                 // Unknown failure - propagate back to the task waiters.
@@ -242,6 +237,8 @@ internal class OpenADConnection : IDisposable
                 break;
         }
 
+        Session.Close();
+        _closed = true;
         await writer.CompleteAsync();
     }
 
