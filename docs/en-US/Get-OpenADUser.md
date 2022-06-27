@@ -40,8 +40,8 @@ Get-OpenADUser [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionOp
 
 ## DESCRIPTION
 The `Get-OpenADUser` cmdlet gets a user or perforams a search to retrieve multiple users.
-Specifying no `-Identity` or `-LDAPFilter` parameter will result in a query of just `(objectCategory=person)`.
-Otherwise that will be be used as an AND condition of the query specified by the caller, e.g. `(&(objectCategory=person)(...))`.
+Specifying no `-Identity` or `-LDAPFilter` parameter will result in a query of just `(&(objectClass=user)(objectCategory=person))`.
+Otherwise that will be be used as an AND condition of the query specified by the caller, e.g. `(&(&(objectClass=user)(objectCategory=person))(...))`.
 
 The `-Identity` parameter specifies the Active Directory user to retrieve.
 You can identify a user by its distinguished name, GUID, security identifier, user principal name, or SAM account name.
@@ -69,7 +69,7 @@ Any additional properties can be requested with the `-Property` parameter in the
 PS C:\> Get-OpenADUser
 ```
 
-This command retrieves all AD user objects (`(objectCategory=person)`) in the implicit AD connection.
+This command retrieves all AD user objects (`(&(objectClass=user)(objectCategory=person))`) in the implicit AD connection.
 
 ### Example 2: Get specific user from a specific LDAP instance using the distinguished name
 ```powershell
@@ -149,7 +149,7 @@ Specifies the Active Directory user object to search for using one fo the follow
 + `SamAccountName`
 
 The cmdlet writes an error if no, or multiple, objects are found based on the identity specified.
-In addition the identity is filtered by the LDAP filter `(objectCategory=person)` to restrict only user objects from being searched.
+In addition the identity is filtered by the LDAP filter `(&(objectClass=user)(objectCategory=person))` to restrict only user objects from being searched.
 The `-LDAPFilter` parameter can be used instead to query for multiple objects.
 
 ```yaml
@@ -166,7 +166,7 @@ Accept wildcard characters: False
 
 ### -LDAPFilter
 Used instead of `-Identity` to specify an LDAP query used to filter user objects.
-The filter specified here will be used with an `AND` condition to `(objectCategory=person)`.
+The filter specified here will be used with an `AND` condition to `(&(objectClass=user)(objectCategory=person))`.
 
 ```yaml
 Type: String

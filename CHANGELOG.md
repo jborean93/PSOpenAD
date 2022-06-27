@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.1.0-preview5 - TBD
+## v0.1.0-preview5 - 2022-06-27
 
 + Fix up edge case for calculating input LDAP message lengths causing an unpack exception
 + Make the AD object properties in a `Get-*` operation return with the first character in upper case to fit the PowerShell standard
