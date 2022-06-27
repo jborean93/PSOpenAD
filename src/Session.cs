@@ -71,6 +71,7 @@ public sealed class OpenADSession
     /// <summary>Whether the connection has been closed or is still open.</summary>
     public bool IsClosed => Connection.IsClosed;
 
+    // FIXME: Should reflect when the connection is closed.
     /// <summary>The LDAP session state.</summary>
     public LDAP.SessionState State => Connection.Session.State;
 
@@ -108,11 +109,21 @@ public sealed class OpenADSession
         SupportedControls = supportedControls;
 
         GlobalState.Sessions.Add(this);
+        connection.Session.StateChanged += OnStateChanged;
     }
 
     internal void Close()
     {
         Connection.Dispose();
+        Connection.Session.StateChanged -= OnStateChanged;
+    }
+
+    private void OnStateChanged(object? sender, LDAP.SessionState state)
+    {
+        if (state == LDAP.SessionState.Closed)
+        {
+            GlobalState.Sessions.Remove(this);
+        }
     }
 }
 
@@ -174,19 +185,7 @@ internal sealed class OpenADSessionFactory
         OpenADSession? session = null;
         if (!skipCache)
         {
-            foreach (OpenADSession cachedSession in GlobalState.Sessions)
-            {
-                if (cachedSession.IsClosed)
-                {
-                    continue;
-                }
-
-                if (ldapUri == cachedSession.Uri)
-                {
-                    session = cachedSession;
-                    break;
-                }
-            }
+            session = GlobalState.Sessions.Find(s => s.Uri == ldapUri);
         }
 
         if (session == null)

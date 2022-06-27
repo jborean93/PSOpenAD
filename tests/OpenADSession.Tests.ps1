@@ -280,3 +280,53 @@ Describe "New-OpenADSession over TLS" -Skip:(-not $PSOpenADSettings.Server -or -
         }
     }
 }
+
+Describe "PSSession management" -Skip:(-not $PSOpenADSettings.Server) {
+    BeforeEach {
+        Get-OpenADSession | Remove-OpenADSession
+    }
+
+    AfterEach {
+        Get-OpenADSession | Remove-OpenADSession
+    }
+
+    It "Creates a session which can be returned by Get-PSSession" {
+        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
+
+        $sessionParams = @{
+            Uri        = "ldap://$($PSOpenADSettings.Server)"
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+        }
+
+        $s = New-OpenADSession @sessionParams
+        try {
+            $actual = Get-OpenADSession
+            $actual.Id -eq $s.Id | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $s | Remove-OpenADSession
+        }
+    }
+
+    It "Fails to use a session that is closed" {
+        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
+
+        $sessionParams = @{
+            Uri        = "ldap://$($PSOpenADSettings.Server)"
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+        }
+
+        $s = New-OpenADSession @sessionParams
+        try {
+            $null = Get-OpenADUser -Session $s
+        }
+        finally {
+            $s | Remove-OpenADSession
+        }
+        $s.IsClosed | Should -BeTrue
+
+        {
+            Get-OpenADUser -Session $s -ErrorAction Stop
+        } | Should -Throw -ExpectedMessage "Cannot perform a SearchRequest until the connection is opened"
+    }
+}

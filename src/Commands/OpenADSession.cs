@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Management.Automation;
 using System.Threading;
 
@@ -13,10 +12,9 @@ public class GetOpenADSession : PSCmdlet
 {
     protected override void EndProcessing()
     {
-        foreach (OpenADSession session in GlobalState.Sessions)
-        {
-            WriteObject(session);
-        }
+        // Ensure the sessions are their own collection to avoid something further down the line mutating the same
+        // list during an enumeration, e.g. 'Get-OpenADSession | Remove-OpenADSession'
+        WriteObject(GlobalState.Sessions.ToArray(), true);
     }
 }
 
@@ -118,9 +116,5 @@ public class RemoveOpenADSession : PSCmdlet
             WriteVerbose($"Closing connection to {s.Uri}");
             s.Close();
         }
-
-        GlobalState.Sessions = GlobalState.Sessions
-            .Where(x => !Session.Any(y => y.Id == x.Id))
-            .ToList();
     }
 }

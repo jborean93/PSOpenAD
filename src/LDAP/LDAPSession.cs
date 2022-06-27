@@ -18,7 +18,7 @@ public enum SessionState
     /// <summary>Connection has been opened and is available for subsequent requests.</summary>
     Opened,
 
-    /// <summary>Connection has been closed (unbound) and not further operations can be submitted.</summary>
+    /// <summary>Connection has been closed (unbound) and no further operations can be submitted.</summary>
     Closed,
 }
 
@@ -27,6 +27,7 @@ internal class LDAPSession
     private readonly Pipe _outgoing = new();
     private readonly StreamWriter? _logWriter;
     private readonly SemaphoreSlim _logLock = new(1, 1);
+    private SessionState _state = SessionState.BeforeOpen;
 
     private int _messageCounter;
 
@@ -34,7 +35,17 @@ internal class LDAPSession
 
     public PipeReader Outgoing => _outgoing.Reader;
 
-    public SessionState State { get; internal set; } = SessionState.BeforeOpen;
+    public SessionState State
+    {
+        get => _state;
+        internal set
+        {
+            StateChanged?.Invoke(this, value);
+            _state = value;
+        }
+    }
+
+    public event EventHandler<SessionState>? StateChanged;
 
     public LDAPSession(int version = 3, StreamWriter? writer = null)
     {
@@ -103,7 +114,7 @@ internal class LDAPSession
         if (State != SessionState.Opened)
         {
             throw new InvalidOperationException(
-                "Cannot perform a SearchRequest until the connection is openned");
+                "Cannot perform a SearchRequest until the connection is opened");
         }
 
         SearchRequest request = new(NextMessageId(), controls, baseObject, scope, derefAliases,
@@ -116,7 +127,7 @@ internal class LDAPSession
     public int Unbind()
     {
         if (State != SessionState.Opened)
-            throw new InvalidOperationException("Cannot perform an Unbind until the connection is openned");
+            throw new InvalidOperationException("Cannot perform an Unbind until the connection is opened");
 
         UnbindRequest request = new(NextMessageId(), null);
         PutRequest(request);
