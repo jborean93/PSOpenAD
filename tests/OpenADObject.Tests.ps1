@@ -249,5 +249,12 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.CompletionText -like 'last*'
             }
         }
+
+        It "Ignores contacts in the default filter" {
+            $actual = Get-OpenADUser -Identity MyTestContact -ErrorAction SilentlyContinue -ErrorVariable err
+            $actual | Should -BeNullOrEmpty
+            $err.Count | Should -Be 1
+            $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter: '(&(&(objectCategory=person)(objectClass=user))(sAMAccountName=MyTestContact))' under: *"
+        }
     }
 }

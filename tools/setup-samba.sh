@@ -49,4 +49,8 @@ samba-tool domain provision \
 
 cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
 
+# FUTURE: Move this to the test suite once New-OpenADObject has been implented
+samba-tool contact add \
+    MyTestContact
+
 samba --debug-stderr --foreground --no-process-group

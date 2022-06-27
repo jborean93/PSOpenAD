@@ -329,7 +329,10 @@ public class GetOpenADUser : GetOpenADOperation<ADPrincipalIdentity>
     internal override (string, bool)[] DefaultProperties => OpenADUser.DEFAULT_PROPERTIES;
 
     internal override LDAPFilter FilteredClass
-        => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("person"));
+        => new FilterAnd(new LDAPFilter[] {
+            new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("person")),
+            new FilterEquality("objectClass", LDAP.LDAPFilter.EncodeSimpleFilterValue("user"))
+        });
 
     internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
         => new OpenADUser(attributes);
