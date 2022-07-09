@@ -199,9 +199,9 @@ internal sealed class SchemaMetadata
     public void RegisterTransformer(string attribute, DefaultOverrider.CustomTransform transformer)
         => DefaultOverrider.Overrides[attribute] = transformer;
 
-    public ObjectClass GetClassInformation(string name)
+    public ObjectClass? GetClassInformation(string name)
     {
-        return _classInformation[name];
+        return _classInformation.GetValueOrDefault(name);
     }
 
     public (PSObject[], bool) TransformAttributeValue(string attribute, IList<byte[]> value, PSCmdlet? cmdlet)

@@ -18,11 +18,12 @@ internal static class Operations
     /// <param name="filter">The LDAP filter to use for the query.</param>
     /// <param name="attributes">The attributes to retrieve.</param>
     /// <param name="cancelToken">Token to cancel any network IO waits</param>
-    /// <param name="cmdlet">The PSCmdlet that is running the operation</param>
+    /// <param name="cmdlet">The PSCmdlet that is running the operation.</param>
+    /// <param name="ignoreErrors">Ignore errors and do not write to the error stream.</param>
     /// <returns>Yields each returned result containing the attributes requested from the search request.</returns>
     public static IEnumerable<SearchResultEntry> LdapSearchRequest(OpenADConnection connection, string searchBase,
         SearchScope scope, int sizeLimit, int timeLimit, LDAPFilter filter, string[] attributes,
-        IList<LDAPControl>? controls, CancellationToken cancelToken, PSCmdlet? cmdlet)
+        IList<LDAPControl>? controls, CancellationToken cancelToken, PSCmdlet? cmdlet, bool ignoreErrors)
     {
         cmdlet?.WriteVerbose($"Starting LDAP search request at '{searchBase}' for {scope} - {filter}");
 
@@ -59,7 +60,7 @@ internal static class Operations
                 {
                     cmdlet?.WriteWarning("Exceeded size limit of search request - results may be incomplete.");
                 }
-                else if (resultDone.Result.ResultCode == LDAPResultCode.Referral)
+                else if (!ignoreErrors && resultDone.Result.ResultCode == LDAPResultCode.Referral)
                 {
                     // FUTURE: see if we can try and do the referral ourselves
                     ErrorRecord error = new(
@@ -72,6 +73,15 @@ internal static class Operations
                     error.ErrorDetails = new(
                         $"A referral was returned from the server that points to: '{referralUris}'");
                     error.ErrorDetails.RecommendedAction = "Perform request on one of the referral URIs";
+                    cmdlet?.WriteError(error);
+                }
+                else if (!ignoreErrors && resultDone.Result.ResultCode != LDAPResultCode.Success)
+                {
+                    ErrorRecord error = new(
+                        new LDAPException(resultDone.Result),
+                        "LDAPSearchFailure",
+                        ErrorCategory.InvalidOperation,
+                        null);
                     cmdlet?.WriteError(error);
                 }
                 break;

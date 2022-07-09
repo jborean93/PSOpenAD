@@ -1,5 +1,10 @@
 # Changelog for PSOpenAD
 
+## v0.1.0 - TBD
+
++ Fix up `Get-OpenAD*` calls where there is no valid metadata to calculate the valid properties.
++ Minor tweaks to error messages when using an un-authenticated bind.
+
 ## v0.1.0-preview5 - 2022-06-27
 
 + Fix up edge case for calculating input LDAP message lengths causing an unpack exception
