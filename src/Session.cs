@@ -262,7 +262,7 @@ internal sealed class OpenADSessionFactory
             };
             foreach (SearchResultEntry searchRes in Operations.LdapSearchRequest(connection, "", SearchScope.Base,
                 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
-                baseAttributes, null, cancelToken, cmdlet))
+                baseAttributes, null, cancelToken, cmdlet, true))
             {
                 foreach (PartialAttribute attribute in searchRes.Attributes)
                 {
@@ -674,7 +674,7 @@ internal sealed class OpenADSessionFactory
 
         foreach (SearchResultEntry result in Operations.LdapSearchRequest(connection, subschemaSubentry,
             SearchScope.Base, 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
-            new string[] { "attributeTypes", "dITContentRules", "objectClasses" }, null, cancelToken, cmdlet))
+            new string[] { "attributeTypes", "dITContentRules", "objectClasses" }, null, cancelToken, cmdlet, true))
         {
             foreach (PartialAttribute attribute in result.Attributes)
             {

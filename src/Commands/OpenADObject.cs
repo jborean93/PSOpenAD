@@ -180,11 +180,25 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
 
             StringComparer comparer = StringComparer.OrdinalIgnoreCase;
             string className = PropertyCompleter.GetClassNameForCommand(MyInvocation.MyCommand.Name);
-            HashSet<string> validProperties = Session.SchemaMetadata.GetClassInformation(className).ValidAttributes;
             HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
-            HashSet<string> invalidProperties = new();
             string[] explicitProperties = Property ?? Array.Empty<string>();
             bool showAll = false;
+
+            // We can only validate modules if there was metadata. Metadata may not be present on all systems and
+            // when unauthenticated authentication was used.
+            HashSet<string> validProperties;
+            ObjectClass? objectClass = Session.SchemaMetadata.GetClassInformation(className);
+            if (objectClass is null)
+            {
+                validProperties = explicitProperties.ToHashSet();
+            }
+            else
+            {
+                validProperties = objectClass.ValidAttributes;
+            }
+
+            HashSet<string> invalidProperties = new();
+
             foreach (string prop in explicitProperties)
             {
                 if (prop == "*")
@@ -217,12 +231,13 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
                 return;
             }
 
+
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
             bool outputResult = false;
 
             foreach (SearchResultEntry result in Operations.LdapSearchRequest(Session.Connection, searchBase,
                 SearchScope, 0, Session.OperationTimeout, finalFilter, requestedProperties.ToArray(), serverControls,
-                CurrentCancelToken.Token, this))
+                CurrentCancelToken.Token, this, false))
             {
                 Dictionary<string, (PSObject[], bool)> props = new();
                 foreach (PartialAttribute attribute in result.Attributes)
