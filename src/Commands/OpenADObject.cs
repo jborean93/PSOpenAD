@@ -190,7 +190,7 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
             ObjectClass? objectClass = Session.SchemaMetadata.GetClassInformation(className);
             if (objectClass is null)
             {
-                validProperties = explicitProperties.ToHashSet();
+                validProperties = explicitProperties.ToHashSet(comparer);
             }
             else
             {
@@ -230,7 +230,6 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
                 ThrowTerminatingError(rec);
                 return;
             }
-
 
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
             bool outputResult = false;

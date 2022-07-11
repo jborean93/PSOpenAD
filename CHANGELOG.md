@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.1.1 - TBD
+
++ Fix up case insensitive matching for requested LDAP attributes/properties.
+
 ## v0.1.0 - 2022-07-09
 
 + Fix up `Get-OpenAD*` calls where there is no valid metadata to calculate the valid properties.

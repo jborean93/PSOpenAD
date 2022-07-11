@@ -256,5 +256,12 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $err.Count | Should -Be 1
             $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter: '(&(&(objectCategory=person)(objectClass=user))(sAMAccountName=MyTestContact))' under: *"
         }
+
+        It "Requests property with different casing" {
+            $user = Get-OpenADUser -Session $session | Select-Object -ExpandProperty DistinguishedName -First 1
+            $actual = Get-OpenADUser -Session $session -Identity $user -Property LASTLOGOFF
+            $actual.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
+            $actual.PSObject.Properties.Name | Should -Contain 'LastLogoff'
+        }
     }
 }

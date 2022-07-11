@@ -111,7 +111,7 @@ internal sealed class ObjectClass
         {
             _validAttributes.UnionWith(subType.ValidAttributes);
         }
-        _validAttributes = _validAttributes.OrderBy(p => p).ToHashSet();
+        _validAttributes = _validAttributes.OrderBy(p => p).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return _validAttributes;
     }
