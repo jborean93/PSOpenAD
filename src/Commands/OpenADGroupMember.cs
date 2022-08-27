@@ -13,17 +13,14 @@ namespace PSOpenAD.Commands;
     VerbsCommon.Get, "OpenADGroupMember",
     DefaultParameterSetName = "ServerLDAPFilter"
 )]
-[OutputType(typeof(OpenADUser))]
+[OutputType(typeof(OpenADPrincipal))]
 public class GetOpenADGroupMember : PSCmdlet
 {
     internal bool _includeDeleted = false;
 
     private CancellationTokenSource? CurrentCancelToken { get; set; }
 
-    internal (string, bool)[] DefaultProperties => OpenADGroup.DEFAULT_PROPERTIES;
-
-    internal OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
-        => new(attributes);
+    internal (string, bool)[] DefaultProperties => OpenADPrincipal.DEFAULT_PROPERTIES;
 
     #region Connection Parameters
 
@@ -185,7 +182,7 @@ public class GetOpenADGroupMember : PSCmdlet
                             attribute.Values, this);
                     }
 
-                    OpenADObject adObj = new(props);
+                    OpenADPrincipal adObj = new(props);
 
                     // This adds a note property for each explicitly requested property, excluding the ones the object
                     // naturally exposes. Also adds the DomainController property to denote what DC the response came from.
