@@ -147,7 +147,7 @@ public class GetOpenADGroupMember : PSCmdlet
             {
                 string sortedProps = string.Join("', '", invalidProperties.OrderBy(p => p).ToArray());
                 ErrorRecord rec = new(
-                    new ArgumentException($"One or more properties for {className} are not valid: '{sortedProps}'"),
+                    new ArgumentException($"One or more properties for '{className}' class are not valid: '{sortedProps}'"),
                     "InvalidPropertySet",
                     ErrorCategory.InvalidArgument,
                     null);
