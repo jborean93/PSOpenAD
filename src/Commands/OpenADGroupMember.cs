@@ -172,10 +172,14 @@ public class GetOpenADGroupMember : PSCmdlet
                 // use memberOf rather than member to make recursive search easier & avoid paging
                 LDAPFilter memberOfFilter;
                 if (Recursive) {
-                    // TODO: Allow recursion with LDAP_MATCHING_RULE_IN_CHAIN/LDAP_MATCHING_RULE_TRANSITIVE_EVAL
                     // Manually recursing into groups would also work, not sure where perf sweet spot is.
-                    // This leaves groups in the results, which Get-ADGroupMember does not.
-                    memberOfFilter = new FilterExtensibleMatch("1.2.840.113556.1.4.1941", "memberOf", LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName), false);
+                    // Exclude groups to match Get-ADGroupMembership results. Including only objectClass=user works too.
+                    memberOfFilter = new FilterAnd( new LDAPFilter[] {
+                        new FilterNot(
+                            new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("group"))
+                        ),
+                        new FilterExtensibleMatch("1.2.840.113556.1.4.1941", "memberOf", LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName), false)
+                    });
                 } else {
                     memberOfFilter = new FilterEquality("memberOf", LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName));
                 }
