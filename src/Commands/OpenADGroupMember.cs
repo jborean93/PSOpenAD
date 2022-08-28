@@ -70,6 +70,9 @@ public class GetOpenADGroupMember : PSCmdlet
     [ArgumentCompleter(typeof(PropertyCompleter))]
     public string[]? Property { get; set; }
 
+    [Parameter()]
+    public SwitchParameter Recursive { get; set; }
+
     #endregion
 
     protected override void ProcessRecord()
@@ -167,9 +170,15 @@ public class GetOpenADGroupMember : PSCmdlet
                 outputResult = true;
 
                 // use memberOf rather than member to make recursive search easier & avoid paging
-                FilterEquality memberOfFilter = new FilterEquality("memberOf", LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName));
-                // TODO: Allow recursion with LDAP_MATCHING_RULE_IN_CHAIN/LDAP_MATCHING_RULE_TRANSITIVE_EVAL
-                // Manually recursing into groups would also work, not sure where perf sweet spot is.
+                LDAPFilter memberOfFilter;
+                if (Recursive) {
+                    // TODO: Allow recursion with LDAP_MATCHING_RULE_IN_CHAIN/LDAP_MATCHING_RULE_TRANSITIVE_EVAL
+                    // Manually recursing into groups would also work, not sure where perf sweet spot is.
+                    // This leaves groups in the results, which Get-ADGroupMember does not.
+                    memberOfFilter = new FilterExtensibleMatch("1.2.840.113556.1.4.1941", "memberOf", LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName), false);
+                } else {
+                    memberOfFilter = new FilterEquality("memberOf", LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName));
+                }
 
                 foreach (SearchResultEntry result in Operations.LdapSearchRequest(Session.Connection, searchBase,
                     SearchScope.Subtree, 0, Session.OperationTimeout, memberOfFilter, requestedProperties.ToArray(), serverControls,
