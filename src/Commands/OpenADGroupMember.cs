@@ -11,7 +11,7 @@ namespace PSOpenAD.Commands;
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADGroupMember",
-    DefaultParameterSetName = "ServerLDAPFilter"
+    DefaultParameterSetName = "ServerIdentity"
 )]
 [OutputType(typeof(OpenADPrincipal))]
 public class GetOpenADGroupMember : PSCmdlet
