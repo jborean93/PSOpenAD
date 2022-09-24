@@ -30,6 +30,23 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             }
         }
 
+        # Primary groups do not list members in their member attribute- Particularly important for Domain Controllers, Domain Users, and Domain Computers.
+        It "Finds group members in their primary group" {
+            $actual = Get-OpenADGroupMember -Identity 'Domain Controllers' -Session $session
+            $actual.Count | Should -Be 1
+            $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+
+            $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
+                $_.PSObject.Properties.Name | Should -Contain 'Name'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
+                $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
+                $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
+                $_.PSObject.Properties.Name | Should -Contain 'SID'
+                $_.DomainController | Should -Be $PSOpenADSettings.Server
+            }
+        }
+
         It "Finds group members through pipeline input" {
             $actual = "Administrators" | Get-OpenADGroupMember -Session $session
             $actual.Count | Should -Be 3
@@ -45,6 +62,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.DomainController | Should -Be $PSOpenADSettings.Server
             }
         }
+
         It "Finds group members recursively" {
             $actual = Get-OpenADGroupMember -Identity 'Administrators' -Recursive -Session $session
             $actual.Count | Should -Be 1
@@ -60,8 +78,6 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.DomainController | Should -Be $PSOpenADSettings.Server
             }
         }
-
-
 
         It "Requests a property that is not set" {
             $actual = Get-OpenADGroupMember -Session $session -Identity 'Administrators' -Property adminCount | Select-Object -First 1
