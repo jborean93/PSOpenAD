@@ -1,4 +1,5 @@
 using PSOpenAD.LDAP;
+using PSOpenAD.Security;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -183,6 +184,16 @@ public class GetOpenADGroupMember : PSCmdlet
                 } else {
                     memberOfFilter = new FilterEquality("memberOf", LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName));
                 }
+
+                // get group's rid and include (primaryGroupID=$RID) for primary groups. Only on user so no recursion.
+                SecurityIdentifier sid = new SecurityIdentifier(
+                    Array.Find(group.Attributes, x => x.Name.Equals("objectSid")).Values[0]
+                    );
+                string rid = sid.ToString().Split("-").Last();
+
+                memberOfFilter = new FilterOr( new LDAPFilter[] {memberOfFilter,
+                    new FilterEquality("primaryGroupID", LDAPFilter.EncodeSimpleFilterValue(rid))
+                    } );
 
                 foreach (SearchResultEntry result in Operations.LdapSearchRequest(Session.Connection, searchBase,
                     SearchScope.Subtree, 0, Session.OperationTimeout, memberOfFilter, requestedProperties.ToArray(), serverControls,
