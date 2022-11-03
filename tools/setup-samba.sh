@@ -53,4 +53,24 @@ cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
 samba-tool contact add \
     MyTestContact
 
+samba-tool group add \
+    TestGroup
+
+samba-tool group add \
+    TestGroupSub
+
+samba-tool user create \
+    TestGroupMember Password01!
+
+samba-tool user create \
+    TestGroupSubMember Password01!
+
+samba-tool group addmembers \
+    TestGroup \
+    TestGroupSub,TestGroupMember
+
+samba-tool group addmembers \
+    TestGroupSub \
+    TestGroupSubMember
+
 samba --debug-stderr --foreground --no-process-group

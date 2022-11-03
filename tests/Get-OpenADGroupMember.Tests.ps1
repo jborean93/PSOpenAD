@@ -79,6 +79,34 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             }
         }
 
+        It "Finds test group" {
+            $actual = Get-OpenADGroupMember -Identity 'TestGroup' -Session $session |
+                Sort-Object -Property SamAccountName
+            $actual.Count | Should -Be 2
+
+            $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[0].SamAccountName | Should -Be 'TestGroupMember'
+            $actual[0].ObjectClass | Should -Be 'user'
+
+            $actual[1] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[1].SamAccountName | Should -Be 'TestGroupSub'
+            $actual[1].ObjectClass | Should -Be 'group'
+        }
+
+        It "Finds test group recursively" {
+            $actual = Get-OpenADGroupMember -Identity 'TestGroup' -Recursive -Session $session |
+                Sort-Object -Property SamAccountName
+            $actual.Count | Should -Be 2
+
+            $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[0].SamAccountName | Should -Be 'TestGroupMember'
+            $actual[0].ObjectClass | Should -Be 'user'
+
+            $actual[1] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[1].SamAccountName | Should -Be 'TestGroupSubMember'
+            $actual[1].ObjectClass | Should -Be 'user'
+        }
+
         It "Requests a property that is not set" {
             $actual = Get-OpenADGroupMember -Session $session -Identity 'Administrators' -Property adminCount | Select-Object -First 1
             $actual.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
@@ -94,7 +122,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
         It "Requests a property that is not valid" {
             {
                 Get-OpenADGroupMember -Identity 'Administrators' -Session $session -Property sAMAccountName, invalid1, objectSid, invalid2 -ErrorAction Stop
-            } | Should -Throw -ExpectedMessage "One or more properties for 'top' class are not valid: 'invalid1', 'invalid2'"
+            } | Should -Throw -ExpectedMessage "One or more properties for person are not valid: 'invalid1', 'invalid2'"
         }
 
         It "Completes the properties selected" {

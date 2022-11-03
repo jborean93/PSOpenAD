@@ -12,6 +12,8 @@ namespace PSOpenAD.Commands;
 public abstract class GetOpenADOperation<T> : PSCmdlet
     where T : ADObjectIdentity
 {
+    internal StringComparer _caseInsensitiveComparer = StringComparer.OrdinalIgnoreCase;
+
     internal bool _includeDeleted = false;
 
     private CancellationTokenSource? CurrentCancelToken { get; set; }
@@ -178,9 +180,10 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
             if (Session == null)
                 return; // Failed to create session - error records have already been written.
 
-            StringComparer comparer = StringComparer.OrdinalIgnoreCase;
             string className = PropertyCompleter.GetClassNameForCommand(MyInvocation.MyCommand.Name);
-            HashSet<string> requestedProperties = DefaultProperties.Select(p => p.Item1).ToHashSet(comparer);
+            HashSet<string> requestedProperties = DefaultProperties
+                .Select(p => p.Item1)
+                .ToHashSet(_caseInsensitiveComparer);
             string[] explicitProperties = Property ?? Array.Empty<string>();
             bool showAll = false;
 
@@ -190,7 +193,7 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
             ObjectClass? objectClass = Session.SchemaMetadata.GetClassInformation(className);
             if (objectClass is null)
             {
-                validProperties = explicitProperties.ToHashSet(comparer);
+                validProperties = explicitProperties.ToHashSet(_caseInsensitiveComparer);
             }
             else
             {
@@ -234,9 +237,8 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
             string searchBase = SearchBase ?? Session.DefaultNamingContext;
             bool outputResult = false;
 
-            foreach (SearchResultEntry result in Operations.LdapSearchRequest(Session.Connection, searchBase,
-                SearchScope, 0, Session.OperationTimeout, finalFilter, requestedProperties.ToArray(), serverControls,
-                CurrentCancelToken.Token, this, false))
+            foreach (SearchResultEntry result in SearchRequest(Session, searchBase, finalFilter,
+                requestedProperties.ToArray(), serverControls, CurrentCancelToken.Token))
             {
                 Dictionary<string, (PSObject[], bool)> props = new();
                 foreach (PartialAttribute attribute in result.Attributes)
@@ -253,10 +255,10 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
                 adPSObj.Properties.Add(new PSNoteProperty("DomainController", Session.DomainController));
 
                 List<string> orderedProps = props.Keys
-                    .Union(requestedProperties, comparer)
+                    .Union(requestedProperties, _caseInsensitiveComparer)
                     .Where(v =>
                         v != "*" &&
-                        (showAll || explicitProperties.Contains(v, comparer)) &&
+                        (showAll || explicitProperties.Contains(v, _caseInsensitiveComparer)) &&
                         !DefaultProperties.Contains((v, true)))
                     .OrderBy(v => v)
                     .ToList();
@@ -296,6 +298,13 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
     protected override void StopProcessing()
     {
         CurrentCancelToken?.Cancel();
+    }
+
+    internal virtual IEnumerable<SearchResultEntry> SearchRequest(OpenADSession session, string searchBase,
+        LDAP.LDAPFilter filter, string[] attributes, IList<LDAPControl>? serverControls, CancellationToken cancelToken)
+    {
+        return Operations.LdapSearchRequest(session.Connection, searchBase, SearchScope, 0, session.OperationTimeout,
+            filter, attributes, serverControls, cancelToken, this, false);
     }
 }
 

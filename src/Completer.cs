@@ -66,6 +66,7 @@ internal class PropertyCompleter : IArgumentCompleter
         "Get-OpenADComputer" => "computer",
         "Get-OpenADUser" => "person",
         "Get-OpenADGroup" => "group",
+        "Get-OpenADGroupMember" => "person",
         "Get-OpenADServiceAccount" => "msDS-GroupManagedServiceAccount",
         _ => "top",
     };
