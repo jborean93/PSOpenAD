@@ -20,6 +20,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
 
             $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'QueriedGroup'
                 $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
                 $_.PSObject.Properties.Name | Should -Contain 'Name'
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
@@ -37,6 +38,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
 
             $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'QueriedGroup'
                 $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
                 $_.PSObject.Properties.Name | Should -Contain 'Name'
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
@@ -53,6 +55,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
 
             $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'QueriedGroup'
                 $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
                 $_.PSObject.Properties.Name | Should -Contain 'Name'
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
@@ -69,6 +72,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
 
             $actual | ForEach-Object {
+                $_.PSObject.Properties.Name | Should -Contain 'QueriedGroup'
                 $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
                 $_.PSObject.Properties.Name | Should -Contain 'Name'
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectClass'
@@ -80,35 +84,42 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
         }
 
         It "Finds test group" {
-            $actual = Get-OpenADGroupMember -Identity 'TestGroup' -Session $session |
+            $group = Get-OpenADGroup -Identity 'TestGroup'
+            $actual = $group | Get-OpenADGroupMember -Session $session |
                 Sort-Object -Property SamAccountName
             $actual.Count | Should -Be 2
 
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[0].QueriedGroup | Should -Be $group.DistinguishedName
             $actual[0].SamAccountName | Should -Be 'TestGroupMember'
             $actual[0].ObjectClass | Should -Be 'user'
 
             $actual[1] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[1].QueriedGroup | Should -Be $group.DistinguishedName
             $actual[1].SamAccountName | Should -Be 'TestGroupSub'
             $actual[1].ObjectClass | Should -Be 'group'
         }
 
         It "Finds test group recursively" {
-            $actual = Get-OpenADGroupMember -Identity 'TestGroup' -Recursive -Session $session |
+            $group = Get-OpenADGroup -Identity 'TestGroup'
+            $actual = $group | Get-OpenADGroupMember -Recursive -Session $session |
                 Sort-Object -Property SamAccountName
             $actual.Count | Should -Be 2
 
             $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[0].QueriedGroup | Should -Be $group.DistinguishedName
             $actual[0].SamAccountName | Should -Be 'TestGroupMember'
             $actual[0].ObjectClass | Should -Be 'user'
 
             $actual[1] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[1].QueriedGroup | Should -Be $group.DistinguishedName
             $actual[1].SamAccountName | Should -Be 'TestGroupSubMember'
             $actual[1].ObjectClass | Should -Be 'user'
         }
 
         It "Requests a property that is not set" {
             $actual = Get-OpenADGroupMember -Session $session -Identity 'Administrators' -Property adminCount | Select-Object -First 1
+            $actual.PSObject.Properties.Name | Should -Contain 'QueriedGroup'
             $actual.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
             $actual.PSObject.Properties.Name | Should -Contain 'Name'
             $actual.PSObject.Properties.Name | Should -Contain 'ObjectClass'

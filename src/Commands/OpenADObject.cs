@@ -281,6 +281,7 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
                     adPSObj.Properties.Add(new PSNoteProperty(propertyName, value));
                 }
 
+                ProcessOutputObject(adPSObj);
                 outputResult = true;
                 WriteObject(adObj);
             }
@@ -306,6 +307,8 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
         return Operations.LdapSearchRequest(session.Connection, searchBase, SearchScope, 0, session.OperationTimeout,
             filter, attributes, serverControls, cancelToken, this, false);
     }
+
+    internal virtual void ProcessOutputObject(PSObject obj) { }
 }
 
 [Cmdlet(

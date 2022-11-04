@@ -361,6 +361,8 @@ The `OpenADPrincipal` representing the member objects. This object will always h
 
 + `DomainController`: This is set to the domain controller that processed the request
 
++ `QueriedGroup`: The distinguished name of the group this object is a member of
+
 Any explicit attributes requested through `-Property` are also present on the object.
 
 If an LDAP attribute on the underlying object did not have a value set but was explicitly requested then the property will be set to `$null`.

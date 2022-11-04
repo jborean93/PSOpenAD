@@ -1,5 +1,4 @@
 using PSOpenAD.LDAP;
-using PSOpenAD.Security;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
@@ -14,6 +13,8 @@ namespace PSOpenAD.Commands;
 [OutputType(typeof(OpenADPrincipal))]
 public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
 {
+    private string _currentGroupDN = "";
+
     [Parameter()]
     public SwitchParameter Recursive { get; set; }
 
@@ -29,8 +30,8 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
         LDAP.LDAPFilter filter, string[] attributes, IList<LDAPControl>? serverControls, CancellationToken cancelToken)
     {
         foreach (SearchResultEntry group in Operations.LdapSearchRequest(session.Connection, searchBase,
-            SearchScope, 1, session.OperationTimeout, filter, new[] { "objectSid" }, serverControls, cancelToken, this,
-            false))
+            SearchScope, 1, session.OperationTimeout, filter, new[] { "primaryGroupToken" }, serverControls,
+            cancelToken, this, false))
         {
             // use memberOf rather than member to make recursive search easier & avoid paging
             LDAPFilter memberOfFilter;
@@ -54,27 +55,38 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
 
             // get group's rid and include (primaryGroupID=$RID) for primary groups. Only on user so no recursion.
             // objectSid is most likely going to be there but it's optionally added to satisfy dotnet's null checks.
-            SecurityIdentifier? sid = group.Attributes
-                .Where(a => a.Name == "objectSid")
-                .Select(a => new SecurityIdentifier(a.Values[0]))
+            string? primaryGroupToken = group.Attributes
+                .Where(a => a.Name == "primaryGroupToken")
+                .Select(a => SyntaxDefinition.ReadInteger(a.Values[0]).ToString())
                 .FirstOrDefault();
 
-            if (sid != null)
+            if (!string.IsNullOrWhiteSpace(primaryGroupToken))
             {
-                string rid = sid.ToString().Split("-").Last();
-
                 memberOfFilter = new FilterOr(new[] {
                     memberOfFilter,
-                    new FilterEquality("primaryGroupID", LDAP.LDAPFilter.EncodeSimpleFilterValue(rid))
+                    new FilterEquality("primaryGroupID", LDAP.LDAPFilter.EncodeSimpleFilterValue(primaryGroupToken))
                 });
             }
 
-            foreach (SearchResultEntry result in Operations.LdapSearchRequest(session.Connection, searchBase,
-                SearchScope, 0, session.OperationTimeout, memberOfFilter, attributes, serverControls, cancelToken,
-                this, false))
+            _currentGroupDN = group.ObjectName;
+            try
             {
-                yield return result;
+                foreach (SearchResultEntry result in Operations.LdapSearchRequest(session.Connection, searchBase,
+                    SearchScope, 0, session.OperationTimeout, memberOfFilter, attributes, serverControls, cancelToken,
+                    this, false))
+                {
+                    yield return result;
+                }
+            }
+            finally
+            {
+                _currentGroupDN = "";
             }
         }
+    }
+
+    internal override void ProcessOutputObject(PSObject obj)
+    {
+        obj.Properties.Add(new PSNoteProperty("QueriedGroup", _currentGroupDN));
     }
 }
