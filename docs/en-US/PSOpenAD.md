@@ -20,6 +20,9 @@ Get one or more Active Directory computers.
 ### [Get-OpenADGroup](Get-OpenADGroup.md)
 Gets one or more Active Directory groups.
 
+### [Get-OpenADGroupMember](Get-OpenADGroupMember.md)
+Gets the members of an Active Directory group.
+
 ### [Get-OpenADObject](Get-OpenADObject.md)
 Gets one or more Active Directory objects.
 

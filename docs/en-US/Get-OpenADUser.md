@@ -371,6 +371,7 @@ The `OpenADUser` representing the object(s) found. This object will always have 
 + `DomainController`: This is set to the domain controller that processed the request
 
 Any explicit attributes requested through `-Property` are also present on the object.
+
 If an LDAP attribute on the underlying object did not have a value set but was explicitly requested then the property will be set to `$null`.
 
 ## NOTES

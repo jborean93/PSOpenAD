@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.2.0 - TBD
+
++ Added `Get-OpenADGroupMember` that returns members of a group - thanks @theaquamarine
+
 ## v0.1.1 - 2022-07-28
 
 + Fix up case insensitive matching for requested LDAP attributes/properties.

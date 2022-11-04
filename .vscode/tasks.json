@@ -23,7 +23,7 @@
             "type": "shell",
             "args": [
                 "-Command",
-                "Import-Module ${workspaceFolder}/output/PSOpenAD; Import-Module platyPS; Update-MarkdownHelpModule ${workspaceFolder}/docs/en-US -AlphabeticParamsOrder -RefreshModulePage -UpdateInputOutput"
+                "Import-Module ${workspaceFolder}/output/PSOpenAD; Import-Module ${workspaceFolder}/tools/Modules/platyPS; Update-MarkdownHelpModule ${workspaceFolder}/docs/en-US -AlphabeticParamsOrder -RefreshModulePage -UpdateInputOutput"
             ],
             "problemMatcher": [],
             "dependsOn": [
