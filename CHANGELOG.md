@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.2.0 - TBD
+## v0.2.0 - 2022-11-04
 
 + Added `Get-OpenADGroupMember` that returns members of a group - thanks @theaquamarine
 
