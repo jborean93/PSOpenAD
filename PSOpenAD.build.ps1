@@ -208,19 +208,29 @@ task DoTest {
         if (-not $IsUnix) {
             '-ExecutionPolicy', 'Bypass'
         }
-        '-File', ('"{0}"' -f $pesterScript)
-        '-TestPath', ('"{0}"' -f [IO.Path]::Combine($PSScriptRoot, 'tests'))
-        '-OutputFile', ('"{0}"' -f $resultsFile)
+        '-File', $pesterScript
+        '-TestPath', ([IO.Path]::Combine($PSScriptRoot, 'tests'))
+        '-OutputFile', $resultsFile
     )
 
     if ($Configuration -eq 'Debug') {
         # We use coverlet to collect code coverage of our binary
         $unitCoveragePath = [IO.Path]::Combine($resultsPath, 'UnitCoverage.json')
+        $targetArgs = '"' + ($arguments -join '" "') + '"'
+
+        $psVersion = $PSVersionTable.PSVersion
+        if ($psVersion.Major -gt 7 -or ($psVersion.Major -eq 7 -and $psVersion.Minor -gt 2)) {
+            $watchFolder = [IO.Path]::Combine($ReleasePath, 'bin', $PSFramework)
+        }
+        else {
+            $targetArgs = '"' + ($targetArgs -replace '"', '\"') + '"'
+            $watchFolder = '"{0}"' -f ([IO.Path]::Combine($ReleasePath, 'bin', $PSFramework))
+        }
 
         $arguments = @(
-            '"{0}"' -f ([IO.Path]::Combine($ReleasePath, 'bin', $PSFramework))
+            $watchFolder
             '--target', $pwsh
-            '--targetargs', (($arguments -join " ") -replace '"', '\"')
+            '--targetargs', $targetArgs
             '--output', ([IO.Path]::Combine($resultsPath, 'Coverage.xml'))
             '--format', 'cobertura'
             if (Test-Path -LiteralPath $unitCoveragePath) {
