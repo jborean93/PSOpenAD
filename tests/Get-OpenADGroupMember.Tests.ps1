@@ -31,7 +31,8 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             }
         }
 
-        # Primary groups do not list members in their member attribute- Particularly important for Domain Controllers, Domain Users, and Domain Computers.
+        # Finding the objects with a group as their primary group works differently, so test it separately.
+        # Use Domain Controllers as it is all DCs' primary group by default, and unlikely to have other members.
         It "Finds group members in their primary group" {
             $actual = Get-OpenADGroupMember -Identity 'Domain Controllers' -Session $session
             $actual.Count | Should -Be 1
