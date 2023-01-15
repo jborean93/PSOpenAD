@@ -200,17 +200,24 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
                         // _ldap._tcp.dc._msdcs.domain.com
                         string baseDomain = $"dc._msdcs.{defaultRealm}";
                         LookupClient dnsLookup = new();
-                        ServiceHostEntry[] res = dnsLookup.ResolveService(baseDomain, "ldap",
-                            System.Net.Sockets.ProtocolType.Tcp);
+                        try
+                        {
+                            ServiceHostEntry[] res = dnsLookup.ResolveService(baseDomain, "ldap",
+                                System.Net.Sockets.ProtocolType.Tcp);
 
-                        ServiceHostEntry? first = res.OrderBy(r => r.Priority).ThenBy(r => r.Weight).FirstOrDefault();
-                        if (first != null)
-                        {
-                            GlobalState.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");
+                            ServiceHostEntry? first = res.OrderBy(r => r.Priority).ThenBy(r => r.Weight).FirstOrDefault();
+                            if (first != null)
+                            {
+                                GlobalState.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");
+                            }
+                            else
+                            {
+                                GlobalState.DefaultDCError = $"No SRV records for _ldap._tcp.{baseDomain} found";
+                            }
                         }
-                        else
+                        catch (DnsResponseException e)
                         {
-                            GlobalState.DefaultDCError = $"No SRV records for _ldap._tcp.{baseDomain} found";
+                            GlobalState.DefaultDCError = $"Error looking up SRV records for _ldap._tcp.{baseDomain}: {e.Message}";
                         }
                     }
                 }
