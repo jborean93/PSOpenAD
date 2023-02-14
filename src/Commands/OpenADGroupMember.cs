@@ -53,8 +53,10 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
                     LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName));
             }
 
-            // get group's rid and include (primaryGroupID=$RID) for primary groups. Only on user so no recursion.
-            // objectSid is most likely going to be there but it's optionally added to satisfy dotnet's null checks.
+            // Objects don't include their primary group in their memberOf attribute,
+            // instead the group's RID is in the user's primaryGroupID attribute.
+            // Get the group's RID from its primaryGroupToken attribute and add to the filter.
+            // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-ada2/cc24555b-61c7-49a2-9748-167b8ce5a512)
             string? primaryGroupToken = group.Attributes
                 .Where(a => a.Name == "primaryGroupToken")
                 .Select(a => SyntaxDefinition.ReadInteger(a.Values[0]).ToString())
