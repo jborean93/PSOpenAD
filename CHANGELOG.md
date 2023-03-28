@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.3.0 - TBD
+
++ Bumped minimum PowerShell version to 7.2
+
 ## v0.2.0 - 2022-11-04
 
 + Added `Get-OpenADGroupMember` that returns members of a group - thanks @theaquamarine

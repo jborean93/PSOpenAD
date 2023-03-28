@@ -1,17 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.1</TargetFrameworks>
+    <TargetFrameworks>net6.0</TargetFrameworks>
     <AssemblyName>PSOpenAD</AssemblyName>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <LangVersion>10.0</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DnsClient" Version="1.5.0" />
-    <PackageReference Include="System.IO.Pipelines" Version="6.0.1" />
+    <PackageReference Include="DnsClient" Version="1.7.0" />
+    <PackageReference Include="System.IO.Pipelines" Version="6.0.3" />
     <PackageReference Include="System.Formats.Asn1" Version="6.0.0" PrivateAssets="all" />
-    <PackageReference Include="System.Management.Automation" Version="7.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.Management.Automation" Version="7.2.0" PrivateAssets="all" />
   </ItemGroup>
 </Project>

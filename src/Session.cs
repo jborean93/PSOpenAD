@@ -348,8 +348,11 @@ internal sealed class OpenADSessionFactory
         SslStream tls = connection.SetTlsStream(authOptions, cancelToken);
 
         ChannelBindings? cbt = null;
-        if (!sessionOptions.NoChannelBinding)
-            cbt = GetTlsChannelBindings(tls);
+        if (!sessionOptions.NoChannelBinding && tls.RemoteCertificate != null)
+        {
+            using X509Certificate2 cert = (X509Certificate2)tls.RemoteCertificate;
+            cbt = GetTlsChannelBindings(cert);
+        }
 
         return cbt;
     }
@@ -362,10 +365,8 @@ internal sealed class OpenADSessionFactory
     /// </remarks>
     /// <param name="tls">The SslStream that has been authenticated.</param>
     /// <returns>The channel binding data if available.</returns>
-    private static ChannelBindings? GetTlsChannelBindings(SslStream tls)
+    private static ChannelBindings? GetTlsChannelBindings(X509Certificate2 cert)
     {
-        using X509Certificate2 cert = new(tls.RemoteCertificate);
-
         byte[] certHash;
         switch (cert.SignatureAlgorithm.Value)
         {

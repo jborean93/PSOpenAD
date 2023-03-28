@@ -11,10 +11,10 @@
 @{
 
     # Script module or binary module file associated with this manifest.
-    RootModule             = 'bin/netcoreapp3.1/PSOpenAD.dll'
+    RootModule             = 'bin/net6.0/PSOpenAD.dll'
 
     # Version number of this module.
-    ModuleVersion          = '0.2.0'
+    ModuleVersion          = '0.3.0'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -35,7 +35,7 @@
     Description            = 'Cross platform module that can get/set information in Active Directory.`nSee https://github.com/jborean93/PSOpenAD for more info'
 
     # Minimum version of the PowerShell engine required by this module
-    PowerShellVersion      = '7.0'
+    PowerShellVersion      = '7.2'
 
     # Minimum version of Microsoft .NET Framework required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
     DotNetFrameworkVersion = '4.7.2'

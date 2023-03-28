@@ -16,9 +16,10 @@ $PowerShellPath = [IO.Path]::Combine($PSScriptRoot, 'module')
 $CSharpPath = [IO.Path]::Combine($PSScriptRoot, 'src')
 $ReleasePath = [IO.Path]::Combine($BuildPath, $ModuleName, $Version)
 $IsUnix = $PSEdition -eq 'Core' -and -not $IsWindows
+$UseNativeArguments = $PSVersionTable.PSVersion.Major -gt 7 -or ($PSVersionTable.PSVersion.Major -eq 7 -and $PSVersionTable.PSVersion.Minor -gt 2)
 
 [xml]$csharpProjectInfo = Get-Content ([IO.Path]::Combine($CSharpPath, '*.csproj'))
-$TargetFrameworks = @($csharpProjectInfo.Project.PropertyGroup.TargetFrameworks.Split(
+$TargetFrameworks = @(@($csharpProjectInfo.Project.PropertyGroup)[0].TargetFrameworks.Split(
         ';', [StringSplitOptions]::RemoveEmptyEntries))
 $PSFramework = $TargetFrameworks[0]
 
@@ -39,7 +40,6 @@ task BuildDocs {
 }
 
 task BuildManaged {
-    Push-Location -Path $CSharpPath
     $arguments = @(
         'publish'
         '--configuration', $Configuration
@@ -47,6 +47,8 @@ task BuildManaged {
         '-nologo'
         "-p:Version=$Version"
     )
+
+    Push-Location -LiteralPath $CSharpPath
     try {
         foreach ($framework in $TargetFrameworks) {
             Write-Host "Compiling for $framework"
@@ -91,18 +93,19 @@ task Sign {
     [byte[]]$certBytes = [System.Convert]::FromBase64String($env:PSMODULE_SIGNING_CERT)
     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certBytes, $certPassword)
     $signParams = @{
-        Certificate     = $cert
-        TimestampServer = 'http://timestamp.digicert.com'
-        HashAlgorithm   = 'SHA256'
+        Certificate = $cert
+        TimeStampServer = 'http://timestamp.digicert.com'
+        HashAlgorithm = 'SHA256'
     }
 
     Get-ChildItem -LiteralPath $ReleasePath -Recurse -ErrorAction SilentlyContinue |
-        Where-Object Extension -in ".ps1", ".psm1", ".psd1", ".ps1xml", ".dll" |
+        Where-Object {
+            $_.Extension -in ".ps1", ".psm1", ".psd1", ".ps1xml" -or (
+                $_.Extension -eq ".dll" -and $_.BaseName -like "$ModuleName*"
+            )
+        } |
         ForEach-Object -Process {
-            $result = Set-AuthenticodeSignature -LiteralPath $_.FullName @signParams
-            if ($result.Status -ne "Valid") {
-                throw "Failed to sign $($_.FullName) - Status: $($result.Status) Message: $($result.StatusMessage)"
-            }
+            Set-OpenAuthenticodeSignature -LiteralPath $_.FullName @signParams
         }
 }
 
@@ -145,7 +148,14 @@ task Analyze {
     }
 }
 
+
 task DoUnitTest {
+    $testsPath = [IO.Path]::Combine($PSScriptRoot, 'tests', 'units')
+    if (-not (Test-Path -LiteralPath $testsPath)) {
+        Write-Host "No unit tests found, skipping"
+        return
+    }
+
     $resultsPath = [IO.Path]::Combine($BuildPath, 'TestResults')
     if (-not (Test-Path -LiteralPath $resultsPath)) {
         New-Item $resultsPath -ItemType Directory -ErrorAction Stop | Out-Null
@@ -163,13 +173,18 @@ task DoUnitTest {
         $runSettingsPrefix = 'DataCollectionRunSettings.DataCollectors.DataCollector.Configuration'
         $arguments = @(
             'test'
-            '"{0}"' -f ([IO.Path]::Combine($PSScriptRoot, 'tests', 'units'))
+            $testsPath
             '--results-directory', $tempResultsPath
             if ($Configuration -eq 'Debug') {
                 '--collect:"XPlat Code Coverage"'
                 '--'
                 "$runSettingsPrefix.Format=json"
-                "$runSettingsPrefix.IncludeDirectory=`"$CSharpPath`""
+                if ($UseNativeArguments) {
+                    "$runSettingsPrefix.IncludeDirectory=`"$CSharpPath`""
+                }
+                else {
+                    "$runSettingsPrefix.IncludeDirectory=\`"$CSharpPath\`""
+                }
             }
         )
 
@@ -218,8 +233,7 @@ task DoTest {
         $unitCoveragePath = [IO.Path]::Combine($resultsPath, 'UnitCoverage.json')
         $targetArgs = '"' + ($arguments -join '" "') + '"'
 
-        $psVersion = $PSVersionTable.PSVersion
-        if ($psVersion.Major -gt 7 -or ($psVersion.Major -eq 7 -and $psVersion.Minor -gt 2)) {
+        if ($UseNativeArguments) {
             $watchFolder = [IO.Path]::Combine($ReleasePath, 'bin', $PSFramework)
         }
         else {
