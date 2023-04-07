@@ -35,6 +35,9 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
             FilterEquality? primaryGroupFilter = null;
             LDAPFilter groupMembershipFilter;
 
+            groupMembershipFilter = new FilterEquality("member",
+                LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName));
+
             PSOpenAD.Security.SecurityIdentifier objectSid = new PSOpenAD.Security.SecurityIdentifier(principal.Attributes
                 .Where(a => a.Name == "objectSid")
                 .Select(a => a.Values[0])
@@ -58,9 +61,6 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
                 primaryGroupFilter =
                     new FilterEquality("objectSid", LDAP.LDAPFilter.EncodeSimpleFilterValue(primaryGroupSid));
             }
-
-            groupMembershipFilter = new FilterEquality("member",
-                LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName));
 
             if (primaryGroupFilter != null) {
                 groupMembershipFilter = new FilterOr(new LDAP.LDAPFilter[] {primaryGroupFilter, groupMembershipFilter});
