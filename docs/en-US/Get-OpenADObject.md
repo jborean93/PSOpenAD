@@ -43,10 +43,10 @@ The `Get-OpenADObject` cmdlet gets an Active Directory object or performs a sear
 Specifying no `-Identity` or `-LDAPFilter` parameter will result in a query of just `(objectClass=*)`.
 Otherwise that will be be used as an AND condition of the query specified by the caller, e.g. `(&(objectClass=*)(...))`.
 
-The `-Identity` parameter specifies an individual object to retreive.
+The `-Identity` parameter specifies an individual object to retrieve.
 The identity for this cmdlet can either be the distinguished name or GUID.
 
-The `-LDAPFilter` parameter can be used to search for multiple obejcts using the LDAP query language.
+The `-LDAPFilter` parameter can be used to search for multiple objects using the LDAP query language.
 The filter can be combined with `-SearchBase` and `-SearchScope` to refine the search parameters used.
 
 The cmdlet communicates in one of three way:

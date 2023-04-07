@@ -39,7 +39,7 @@ Get-OpenADGroup [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionO
 ```
 
 ## DESCRIPTION
-The `Get-OpenADGroup` cmdlet gets a group or perforams a search to retrieve multiple groups.
+The `Get-OpenADGroup` cmdlet gets a group or performs a search to retrieve multiple groups.
 Specifying no `-Identity` or `-LDAPFilter` parameter will result in a query of just `(objectCategory=group)`.
 Otherwise that will be be used as an AND condition of the query specified by the caller, e.g. `(&(objectCategory=group)(...))`.
 
@@ -245,7 +245,7 @@ This can be set to
 
 + `OneLevel` - Searches the immediate children of `-SearchBase`
 
-+ `Subtree` (default) - Searches the children of `-SearchBase` and subsquent children of them
++ `Subtree` (default) - Searches the children of `-SearchBase` and subsequent children of them
 
 ```yaml
 Type: SearchScope
