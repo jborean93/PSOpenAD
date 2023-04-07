@@ -35,8 +35,13 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
             FilterEquality? primaryGroupFilter = null;
             LDAPFilter groupMembershipFilter;
 
-            groupMembershipFilter = new FilterEquality("member",
-                LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName));
+            if (Recursive) {
+                groupMembershipFilter = new FilterExtensibleMatch("1.2.840.113556.1.4.1941", "member",
+                    LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName), false);
+            } else {
+                groupMembershipFilter = new FilterEquality("member",
+                    LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName));
+            }
 
             PSOpenAD.Security.SecurityIdentifier objectSid = new PSOpenAD.Security.SecurityIdentifier(principal.Attributes
                 .Where(a => a.Name == "objectSid")
