@@ -13,6 +13,26 @@ public sealed class SecurityIdentifier
 
     public string Value => ToString();
 
+    /// <value>
+    /// The domain SID of the identifier
+    /// </value>
+    public SecurityIdentifier? AccountDomainSid
+    {
+        get
+        {
+            if (IsAccountSid())
+            {
+                return new SecurityIdentifier(
+                    $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities[0..4])
+                );
+            }
+            else
+            {
+                return null;
+            }
+        }
+    }
+
     public SecurityIdentifier(string sid)
     {
         Match m = Regex.Match(sid, @"^S-(?<revision>\d)-(?<authority>\d+)(?:-\d+){1,15}$");
