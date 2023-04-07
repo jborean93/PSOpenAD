@@ -59,14 +59,12 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
                     new FilterEquality("objectSid", LDAP.LDAPFilter.EncodeSimpleFilterValue(primaryGroupSid));
             }
 
-            List<FilterEquality> filterList = principal.Attributes
-                .Where(a => a.Name == "memberOf")
-                .SelectMany(a => a.Values)
-                .Select(a => new FilterEquality("distinguishedName", a))
-                .ToList();
-            if (primaryGroupFilter != null) {filterList.Add(primaryGroupFilter);}
-            groupMembershipFilter = new FilterOr(filterList.ToArray());
+            groupMembershipFilter = new FilterEquality("member",
+                LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName));
 
+            if (primaryGroupFilter != null) {
+                groupMembershipFilter = new FilterOr(new LDAP.LDAPFilter[] {primaryGroupFilter, groupMembershipFilter});
+            }
 
             _currentPrincipalDN = principal.ObjectName;
 
