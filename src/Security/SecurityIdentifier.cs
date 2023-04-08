@@ -152,4 +152,7 @@ public sealed class SecurityIdentifier
             return false;
         }
     }
+
+    public static bool operator ==(SecurityIdentifier a, SecurityIdentifier b) => a is null ? b is null : a.Equals(b);
+    public static bool operator !=(SecurityIdentifier a, SecurityIdentifier b) => !(a == b);
 }
