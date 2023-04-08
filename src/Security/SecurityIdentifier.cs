@@ -125,7 +125,31 @@ public sealed class SecurityIdentifier
     /// </summary>
     public bool IsAccountSid()
         => _identifierAuthority == 5 && _subAuthorities.Length >= 4 && _subAuthorities[0] == 21;
-        // 21 is a fixed value used for "normal" issuing authorities
-        // Normal SID layout is 4 subauthorities and RID
-        // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-azod/ecc7dfba-77e1-4e03-ab99-114b349c7164
+    // 21 is a fixed value used for "normal" issuing authorities
+    // Normal SID layout is 4 subauthorities and RID
+    // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-azod/ecc7dfba-77e1-4e03-ab99-114b349c7164
+
+    /// <summary>
+    /// Test if the identifier belongs to the same domain as the specified SID
+    /// </summary>
+    public bool IsEqualDomainSid(SecurityIdentifier sid)
+    {
+        if (_identifierAuthority != 5 || sid._identifierAuthority != 5)
+        {
+            return false;
+        }
+        else if (IsAccountSid() && sid.IsAccountSid())
+        {
+            return AccountDomainSid!.Equals(sid.AccountDomainSid);
+        }
+        else if (_subAuthorities.Length >= 1 && _subAuthorities[0] == 32 &&
+                    sid._subAuthorities.Length >= 1 && _subAuthorities[0] == 32)
+        {
+            return _subAuthorities[0] == sid._subAuthorities[0];
+        }
+        else
+        {
+            return false;
+        }
+    }
 }

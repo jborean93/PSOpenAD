@@ -125,4 +125,19 @@ public static class SecurityIdentifierTests
     {
         Assert.Equal(AccountDomainSid, (new SecurityIdentifier(sid)).AccountDomainSid?.ToString());
     }
+
+    [Theory]
+    [InlineData("S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681", "S-1-15-3-1", false)]
+    // Built-in SIDs https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+    [InlineData("S-1-5-32-554", "S-1-5-32-544", true)]
+    // domainDNS objects don't have a RID, but do have a domain https://learn.microsoft.com/en-us/windows/win32/adschema/c-domaindns
+    [InlineData("S-1-5-21-3787635890-1162502339-3687787521", "S-1-5-21-3787635890-1162502339-3687787521", true)]
+    // Normal SIDs
+    [InlineData("S-1-5-21-3137669136-239306048-608292226-1001", "S-1-5-21-3137669136-239306048-608292226", true)]
+    [InlineData("S-1-5-21-3787635890-1162502339-3687787521-500", "S-1-5-21-3787635890-1162502339-3687787521", true)]
+    [InlineData("S-1-5-11", "S-1-5-11", false)]
+    public static void IsEqualDomainSidIsCorrect(string sidA, string sidB, bool expected)
+    {
+        Assert.Equal(expected, (new SecurityIdentifier(sidA)).IsEqualDomainSid(new SecurityIdentifier(sidB)));
+    }
 }
