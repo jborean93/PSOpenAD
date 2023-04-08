@@ -93,4 +93,19 @@ public static class SecurityIdentifierTests
 
         Assert.Equal("Destination array was not large enough.", ex.Message);
     }
+
+    [Theory]
+    // Capability SIDs aren't real accounts https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers#capability-sids
+    [InlineData("S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681", false)]
+    // Built-in SIDs https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+    [InlineData("S-1-5-32-554", false)]
+    // domainDNS objects don't have a RID, but do have a domain https://learn.microsoft.com/en-us/windows/win32/adschema/c-domaindns
+    [InlineData("S-1-5-21-3787635890-1162502339-3687787521", true)]
+    // Normal SIDs
+    [InlineData("S-1-5-21-3137669136-239306048-608292226-1001", true)]
+    [InlineData("S-1-5-21-3787635890-1162502339-3687787521-500", true)]
+    public static void IsAccountSidIsCorrect(string sid, bool IsAccountSid)
+    {
+        Assert.Equal(IsAccountSid, (new SecurityIdentifier(sid)).IsAccountSid());
+    }
 }

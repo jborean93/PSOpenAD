@@ -99,4 +99,13 @@ public sealed class SecurityIdentifier
     }
 
     public override string ToString() => $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities);
+
+    /// <summary>
+    /// Test if the identifier is a valid Windows account SID.
+    /// </summary>
+    public bool IsAccountSid()
+        => _identifierAuthority == 5 && _subAuthorities.Length >= 4 && _subAuthorities[0] == 21;
+        // 21 is a fixed value used for "normal" issuing authorities
+        // Normal SID layout is 4 subauthorities and RID
+        // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-azod/ecc7dfba-77e1-4e03-ab99-114b349c7164
 }
