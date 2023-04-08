@@ -162,4 +162,14 @@ public static class SecurityIdentifierTests
     {
         Assert.Equal(expected, (new SecurityIdentifier(sidA)).IsEqualDomainSid(new SecurityIdentifier(sidB)));
     }
+    
+    [Fact]
+    public static void SidRoundtrip()
+    {
+        SecurityIdentifier sid = new SecurityIdentifier("S-1-5-12921-1921-943-12-3-5");
+        System.Security.Principal.SecurityIdentifier winsid = (System.Security.Principal.SecurityIdentifier)sid;
+        Assert.Equal(sid.Value, winsid.Value);
+        SecurityIdentifier newsid = (SecurityIdentifier)winsid;
+        Assert.Equal(sid.Value, newsid.Value);
+    }
 }
