@@ -3,6 +3,7 @@
 ## v0.3.0 - TBD
 
 + Bumped minimum PowerShell version to 7.2
++ Added `Get-OpenADPrincipalGroupMembership` that returns the groups a principal is a member of - thanks @theaquamarine
 
 ## v0.2.0 - 2022-11-04
 
