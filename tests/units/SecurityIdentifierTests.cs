@@ -47,6 +47,28 @@ public static class SecurityIdentifierTests
     }
 
     [Fact]
+    public static void SidEqualsOperatorSid()
+    {
+        SecurityIdentifier sid1 = new SecurityIdentifier("S-1-5-19");
+        SecurityIdentifier sid2 = new SecurityIdentifier("S-1-5-19");
+        SecurityIdentifier sid3 = new SecurityIdentifier("S-1-5-18");
+
+        Assert.True(sid1 == sid2);
+        Assert.False(sid1 == sid3);
+    }
+
+    [Fact]
+    public static void SidNotEqualsOperatorSid()
+    {
+        SecurityIdentifier sid1 = new SecurityIdentifier("S-1-5-18");
+        SecurityIdentifier sid2 = new SecurityIdentifier("S-1-5-19");
+        SecurityIdentifier sid3 = new SecurityIdentifier("S-1-5-18");
+
+        Assert.True(sid1 != sid2);
+        Assert.False(sid1 != sid3);
+    }
+
+    [Fact]
     public static void SidNotEqualString()
     {
         SecurityIdentifier sid1 = new SecurityIdentifier("S-1-5-19");
