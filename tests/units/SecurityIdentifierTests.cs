@@ -1,6 +1,7 @@
 using PSOpenAD.Security;
 using System;
 using Xunit;
+using System.Runtime.InteropServices;
 
 namespace PSOpenADTests;
 
@@ -162,10 +163,12 @@ public static class SecurityIdentifierTests
     {
         Assert.Equal(expected, (new SecurityIdentifier(sidA)).IsEqualDomainSid(new SecurityIdentifier(sidB)));
     }
-    
-    [Fact]
+
+    [SkippableFact]
     public static void SidRoundtrip()
     {
+        Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+
         SecurityIdentifier sid = new SecurityIdentifier("S-1-5-12921-1921-943-12-3-5");
         System.Security.Principal.SecurityIdentifier winsid = (System.Security.Principal.SecurityIdentifier)sid;
         Assert.Equal(sid.Value, winsid.Value);
