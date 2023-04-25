@@ -13,6 +13,26 @@ public sealed class SecurityIdentifier
 
     public string Value => ToString();
 
+    /// <value>
+    /// The domain SID of the identifier
+    /// </value>
+    public SecurityIdentifier? AccountDomainSid
+    {
+        get
+        {
+            if (IsAccountSid())
+            {
+                return new SecurityIdentifier(
+                    $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities[0..4])
+                );
+            }
+            else
+            {
+                return null;
+            }
+        }
+    }
+
     public SecurityIdentifier(string sid)
     {
         Match m = Regex.Match(sid, @"^S-(?<revision>\d)-(?<authority>\d+)(?:-\d+){1,15}$");
@@ -99,4 +119,48 @@ public sealed class SecurityIdentifier
     }
 
     public override string ToString() => $"S-{_revision}-{_identifierAuthority}-" + String.Join("-", _subAuthorities);
+
+    /// <summary>
+    /// Test if the identifier is a valid Windows account SID.
+    /// </summary>
+    public bool IsAccountSid()
+        => _identifierAuthority == 5 && _subAuthorities.Length >= 4 && _subAuthorities[0] == 21;
+    // 21 is a fixed value used for "normal" issuing authorities
+    // Normal SID layout is 4 subauthorities and RID
+    // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-azod/ecc7dfba-77e1-4e03-ab99-114b349c7164
+
+    /// <summary>
+    /// Test if the identifier belongs to the same domain as the specified SID
+    /// </summary>
+    public bool IsEqualDomainSid(SecurityIdentifier sid)
+    {
+        if (_identifierAuthority != 5 || sid._identifierAuthority != 5)
+        {
+            return false;
+        }
+        else if (IsAccountSid() && sid.IsAccountSid())
+        {
+            return AccountDomainSid!.Equals(sid.AccountDomainSid);
+        }
+        else if (_subAuthorities.Length >= 1 && _subAuthorities[0] == 32 &&
+                    sid._subAuthorities.Length >= 1 && _subAuthorities[0] == 32)
+        {
+            return _subAuthorities[0] == sid._subAuthorities[0];
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    public static bool operator ==(SecurityIdentifier a, SecurityIdentifier b) => a is null ? b is null : a.Equals(b);
+    public static bool operator !=(SecurityIdentifier a, SecurityIdentifier b) => !(a == b);
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static implicit operator System.Security.Principal.SecurityIdentifier(SecurityIdentifier sid)
+        => new System.Security.Principal.SecurityIdentifier(sid.Value);
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static implicit operator SecurityIdentifier(System.Security.Principal.SecurityIdentifier sid)
+        => new SecurityIdentifier(sid.Value);
 }
