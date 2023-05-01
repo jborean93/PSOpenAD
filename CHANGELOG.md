@@ -1,9 +1,12 @@
 # Changelog for PSOpenAD
 
-## v0.3.0 - TBD
+## v0.3.0 - 2023-05-02
 
 + Bumped minimum PowerShell version to 7.2
-+ Added `Get-OpenADPrincipalGroupMembership` that returns the groups a principal is a member of - thanks @theaquamarine
++ Added `Get-OpenADPrincipalGroupMembership` that returns the groups a principal is a member of - thanks @theaquamarine in https://github.com/jborean93/PSOpenAD/pull/61
++ Added SecurityIdentifier properties, methods, and operators by @theaquamarine in https://github.com/jborean93/PSOpenAD/pull/62
++ Catch errors from ResolveService() when importing by @theaquamarine in https://github.com/jborean93/PSOpenAD/pull/59
++ Improve comments explaining primary group filter by @theaquamarine in https://github.com/jborean93/PSOpenAD/pull/58
 
 ## v0.2.0 - 2022-11-04
 
