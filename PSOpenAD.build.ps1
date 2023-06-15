@@ -84,16 +84,24 @@ task CopyToRelease {
 }
 
 task Sign {
-    $certPath = $env:PSMODULE_SIGNING_CERT
-    $certPassword = $env:PSMODULE_SIGNING_CERT_PASSWORD
-    if (-not $certPath -or -not $certPassword) {
+    if (-not $env:AZURE_KEYVAULT_CREDENTIALS) {
         return
     }
 
-    [byte[]]$certBytes = [System.Convert]::FromBase64String($env:PSMODULE_SIGNING_CERT)
-    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($certBytes, $certPassword)
+    $credInfo = ConvertFrom-Json -InputObject $env:AZURE_KEYVAULT_CREDENTIALS
+    $vaultName = $credInfo.vaultName
+    $vaultCert = $credInfo.vaultCert
+
+    $env:AZURE_CLIENT_ID = $credInfo.clientId
+    $env:AZURE_CLIENT_SECRET = $credInfo.clientSecret
+    $env:AZURE_TENANT_ID = $credInfo.tenantId
+    $key = Get-OpenAuthenticodeAzKey -Vault $vaultName -Certificate $vaultCert
+    $env:AZURE_CLIENT_ID = ''
+    $env:AZURE_CLIENT_SECRET = ''
+    $env:AZURE_TENANT_ID = ''
+
     $signParams = @{
-        Certificate = $cert
+        Key = $key
         TimeStampServer = 'http://timestamp.digicert.com'
         HashAlgorithm = 'SHA256'
     }
