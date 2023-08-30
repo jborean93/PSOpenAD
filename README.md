@@ -15,24 +15,21 @@ Documentation for this module and details on the cmdlets included can be found [
 
 These cmdlets have the following requirements
 
-* PowerShell v7.0 or newer
+* PowerShell v7.2 or newer
 
 ## Installing
 
-The easiest way to install this module is through
-[PowerShellGet](https://docs.microsoft.com/en-us/powershell/gallery/overview).
+The easiest way to install this module is through [PowerShellGet](https://docs.microsoft.com/en-us/powershell/gallery/overview).
 
 You can install this module by running;
 
 ```powershell
 # Install for only the current user
-Install-Module -Name PSOpenAD -Scope CurrentUser -AllowPrerelease
+Install-Module -Name PSOpenAD -Scope CurrentUser
 
 # Install for all users
-Install-Module -Name PSOpenAD -Scope AllUsers -AllowPrerelease
+Install-Module -Name PSOpenAD -Scope AllUsers
 ```
-
-_Note: The module is still in preview so the `-AllowPrerelease` parameter is required._
 
 ## Contributing
 

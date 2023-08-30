@@ -8,16 +8,12 @@ on:
     branches:
     - main
 
-  release:
-    types:
-    - published
-
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   POWERSHELL_TELEMETRY_OPTOUT: 1
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
-  BUILD_CONFIGURATION: ${{ fromJSON('["Debug", "Release"]')[startsWith(github.ref, 'refs/tags/v')] }}
+  BUILD_CONFIGURATION: ${{ fromJSON('["Debug", "Release"]')[github.ref == 'refs/heads/main'] }}
 
 jobs:
   test:
@@ -75,48 +71,32 @@ jobs:
     needs:
     - test
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Azure OIDC auth
+      contents: read  # Repo checkout
+
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
 
-    - name: Build module - Debug
-      shell: pwsh
-      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
-      if: ${{ env.BUILD_CONFIGURATION == 'Debug' }}
-
-    - name: Build module - Publish
-      shell: pwsh
-      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
+    - name: OIDC Login to Azure
       if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Build module - Release
+      if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
+      shell: pwsh
+      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
       env:
-        AZURE_KEYVAULT_CREDENTIALS: ${{ secrets.AZURE_KEYVAULT_CREDENTIALS }}
+        AZURE_KEYVAULT_NAME: ${{ secrets.AZURE_KEYVAULT_NAME }}
+        AZURE_KEYVAULT_CERT: ${{ secrets.AZURE_KEYVAULT_CERT }}
 
     - name: Capture PowerShell Module
       uses: actions/upload-artifact@v3
       with:
         name: PSModule
         path: output/*.nupkg
-
-  publish:
-    name: publish
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs:
-    - build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Restore Built PowerShell Module
-      uses: actions/download-artifact@v3
-      with:
-        name: PSModule
-        path: ./
-
-    - name: Publish to Gallery
-      if: github.event_name == 'release'
-      shell: pwsh
-      run: >-
-        dotnet nuget push '*.nupkg'
-        --api-key $env:PSGALLERY_TOKEN
-        --source 'https://www.powershellgallery.com/api/v2/package'
-        --no-symbols
-      env:
-        PSGALLERY_TOKEN: ${{ secrets.PSGALLERY_TOKEN }}

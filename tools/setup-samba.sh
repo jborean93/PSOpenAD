@@ -73,4 +73,4 @@ samba-tool group addmembers \
     TestGroupSub \
     TestGroupSubMember
 
-samba --debug-stderr --foreground --no-process-group
+samba --debug-stdout --foreground --no-process-group

@@ -23,7 +23,9 @@ PASSWORD=${AD_PASSWORD:-Password01}
 NETWORK_NAME=psopenad-net-$( openssl rand -hex 5 )
 DC_CONTAINER_ID=""
 
-if [ -x "$( command -v podman )" ]; then
+if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
+    DOCKER_BIN=docker
+elif [ -x "$( command -v podman )" ]; then
     DOCKER_BIN=podman
 else
     DOCKER_BIN=docker
@@ -59,7 +61,7 @@ DC_CONTAINER_ID=$( $DOCKER_BIN run \
     --network "${NETWORK_NAME}" \
     --network-alias dc \
     --network-alias "dc.${REALM,,}" \
-    debian:11 /bin/bash /tmp/PSOpenAD/tools/setup-samba.sh )
+    debian:12 /bin/bash /tmp/PSOpenAD/tools/setup-samba.sh )
 
 echo "Getting Samba DC container IP"
 DC_IP=$( $DOCKER_BIN inspect -f \
@@ -69,8 +71,6 @@ DC_IP=$( $DOCKER_BIN inspect -f \
 
 echo "Waiting for Samba to come online"
 $DOCKER_BIN exec \
-    --interactive \
-    --tty \
     "${DC_CONTAINER_ID}" \
     /bin/bash -c "until pidof samba >/dev/null 2>&1; do sleep 1; done"
 
