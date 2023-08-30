@@ -84,26 +84,18 @@ task CopyToRelease {
 }
 
 task Sign {
-    if (-not $env:AZURE_KEYVAULT_CREDENTIALS) {
+    $vaultName = $env:AZURE_KEYVAULT_NAME
+    $vaultCert = $env:AZURE_KEYVAULT_CERT
+    if (-not $vaultName -or -not $vaultCert) {
         return
     }
 
-    $credInfo = ConvertFrom-Json -InputObject $env:AZURE_KEYVAULT_CREDENTIALS
-    $vaultName = $credInfo.vaultName
-    $vaultCert = $credInfo.vaultCert
+    Import-Module -Name (Join-Path $ReleasePath "$ModuleName.psd1") -ErrorAction Stop
 
-    $env:AZURE_CLIENT_ID = $credInfo.clientId
-    $env:AZURE_CLIENT_SECRET = $credInfo.clientSecret
-    $env:AZURE_TENANT_ID = $credInfo.tenantId
     $key = Get-OpenAuthenticodeAzKey -Vault $vaultName -Certificate $vaultCert
-    $env:AZURE_CLIENT_ID = ''
-    $env:AZURE_CLIENT_SECRET = ''
-    $env:AZURE_TENANT_ID = ''
-
     $signParams = @{
         Key = $key
         TimeStampServer = 'http://timestamp.digicert.com'
-        HashAlgorithm = 'SHA256'
     }
 
     Get-ChildItem -LiteralPath $ReleasePath -Recurse -ErrorAction SilentlyContinue |
@@ -183,16 +175,14 @@ task DoUnitTest {
             'test'
             $testsPath
             '--results-directory', $tempResultsPath
-            if ($Configuration -eq 'Debug') {
-                '--collect:"XPlat Code Coverage"'
-                '--'
-                "$runSettingsPrefix.Format=json"
-                if ($UseNativeArguments) {
-                    "$runSettingsPrefix.IncludeDirectory=`"$CSharpPath`""
-                }
-                else {
-                    "$runSettingsPrefix.IncludeDirectory=\`"$CSharpPath\`""
-                }
+            '--collect:"XPlat Code Coverage"'
+            '--'
+            "$runSettingsPrefix.Format=json"
+            if ($UseNativeArguments) {
+                "$runSettingsPrefix.IncludeDirectory=`"$CSharpPath`""
+            }
+            else {
+                "$runSettingsPrefix.IncludeDirectory=\`"$CSharpPath\`""
             }
         )
 
@@ -203,9 +193,7 @@ task DoUnitTest {
             throw "Unit tests failed"
         }
 
-        if ($Configuration -eq 'Debug') {
-            Move-Item -Path $tempResultsPath/*/*.json -Destination $resultsPath/UnitCoverage.json -Force
-        }
+        Move-Item -Path $tempResultsPath/*/*.json -Destination $resultsPath/UnitCoverage.json -Force
     }
     finally {
         Remove-Item -LiteralPath $tempResultsPath -Force -Recurse
@@ -236,33 +224,30 @@ task DoTest {
         '-OutputFile', $resultsFile
     )
 
-    if ($Configuration -eq 'Debug') {
-        # We use coverlet to collect code coverage of our binary
-        $unitCoveragePath = [IO.Path]::Combine($resultsPath, 'UnitCoverage.json')
-        $targetArgs = '"' + ($arguments -join '" "') + '"'
+    # We use coverlet to collect code coverage of our binary
+    $unitCoveragePath = [IO.Path]::Combine($resultsPath, 'UnitCoverage.json')
+    $targetArgs = '"' + ($arguments -join '" "') + '"'
 
-        if ($UseNativeArguments) {
-            $watchFolder = [IO.Path]::Combine($ReleasePath, 'bin', $PSFramework)
-        }
-        else {
-            $targetArgs = '"' + ($targetArgs -replace '"', '\"') + '"'
-            $watchFolder = '"{0}"' -f ([IO.Path]::Combine($ReleasePath, 'bin', $PSFramework))
-        }
-
-        $arguments = @(
-            $watchFolder
-            '--target', $pwsh
-            '--targetargs', $targetArgs
-            '--output', ([IO.Path]::Combine($resultsPath, 'Coverage.xml'))
-            '--format', 'cobertura'
-            if (Test-Path -LiteralPath $unitCoveragePath) {
-                '--merge-with', $unitCoveragePath
-            }
-        )
-        $pwsh = 'coverlet'
+    if ($UseNativeArguments) {
+        $watchFolder = [IO.Path]::Combine($ReleasePath, 'bin', $PSFramework)
+    }
+    else {
+        $targetArgs = '"' + ($targetArgs -replace '"', '\"') + '"'
+        $watchFolder = '"{0}"' -f ([IO.Path]::Combine($ReleasePath, 'bin', $PSFramework))
     }
 
-    &$pwsh $arguments
+    $arguments = @(
+        $watchFolder
+        '--target', $pwsh
+        '--targetargs', $targetArgs
+        '--output', ([IO.Path]::Combine($resultsPath, 'Coverage.xml'))
+        '--format', 'cobertura'
+        if (Test-Path -LiteralPath $unitCoveragePath) {
+            '--merge-with', $unitCoveragePath
+        }
+    )
+
+    & coverlet $arguments
     if ($LASTEXITCODE) {
         throw "Pester failed tests"
     }

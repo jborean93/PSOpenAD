@@ -1,0 +1,37 @@
+name: Publish module
+on:
+  release:
+    types:
+    - published
+
+jobs:
+  build:
+    name: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed for GitHub release asset task
+
+    steps:
+    - name: Download
+      id: download-artifact
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: ci.yml
+        commit: ${{ github.sha }}
+        name: PSModule
+
+    - name: Upload nupkg as release asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: '*.nupkg'
+
+    - name: Publish to the PowerShell Gallery
+      shell: pwsh
+      run: >-
+        dotnet nuget push '*.nupkg'
+        --api-key $env:PSGALLERY_TOKEN
+        --source 'https://www.powershellgallery.com/api/v2/package'
+        --no-symbols
+      env:
+        PSGALLERY_TOKEN: ${{ secrets.PSGALLERY_TOKEN }}
