@@ -153,8 +153,8 @@ public sealed class SecurityIdentifier
         }
     }
 
-    public static bool operator ==(SecurityIdentifier a, SecurityIdentifier b) => a is null ? b is null : a.Equals(b);
-    public static bool operator !=(SecurityIdentifier a, SecurityIdentifier b) => !(a == b);
+    public static bool operator ==(SecurityIdentifier? a, SecurityIdentifier? b) => a is null ? b is null : a.Equals(b);
+    public static bool operator !=(SecurityIdentifier? a, SecurityIdentifier? b) => !(a == b);
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static implicit operator System.Security.Principal.SecurityIdentifier(SecurityIdentifier sid)
