@@ -2,7 +2,7 @@ using System;
 using System.Management.Automation;
 using System.Security.Cryptography.X509Certificates;
 
-namespace PSOpenAD.Commands;
+namespace PSOpenAD.Module.Commands;
 
 [Cmdlet(
     VerbsCommon.New, "OpenADSessionOption"

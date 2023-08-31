@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.IO;
-using System.IO.Pipelines;
 using System.Threading;
 
 namespace PSOpenAD.LDAP;
@@ -22,9 +21,8 @@ public enum SessionState
     Closed,
 }
 
-internal class LDAPSession
+internal abstract class LDAPSession
 {
-    private readonly Pipe _outgoing = new();
     private readonly StreamWriter? _logWriter;
     private readonly SemaphoreSlim _logLock = new(1, 1);
     private SessionState _state = SessionState.BeforeOpen;
@@ -32,8 +30,6 @@ internal class LDAPSession
     private int _messageCounter;
 
     public int Version { get; }
-
-    public PipeReader Outgoing => _outgoing.Reader;
 
     public SessionState State
     {
@@ -53,13 +49,17 @@ internal class LDAPSession
         _logWriter = writer;
     }
 
+    public virtual void CloseConnection()
+    {}
+
+    public abstract void WriteData(AsnWriter writer);
+
     public void Close()
     {
         if (State != SessionState.Closed)
         {
             State = SessionState.Closed;
-            _outgoing.Writer.Complete();
-            _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
+            CloseConnection();
         }
     }
 
@@ -185,12 +185,7 @@ internal class LDAPSession
             }
         }
 
-        Memory<byte> buffer = _outgoing.Writer.GetMemory(writer.GetEncodedLength());
-        TraceMsg("SEND", buffer.Span);
-        int written = writer.Encode(buffer.Span);
-        _outgoing.Writer.Advance(written);
-
-        _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
+        WriteData(writer);
     }
 
     private int NextMessageId()
@@ -201,7 +196,7 @@ internal class LDAPSession
         return messageId;
     }
 
-    private void TraceMsg(string direction, ReadOnlySpan<byte> data)
+    protected void TraceMsg(string direction, ReadOnlySpan<byte> data)
     {
         if (_logWriter is null)
         {

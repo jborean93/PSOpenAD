@@ -9,7 +9,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
-namespace PSOpenAD;
+namespace PSOpenAD.Module;
 
 internal sealed class LibraryInfo : IDisposable
 {

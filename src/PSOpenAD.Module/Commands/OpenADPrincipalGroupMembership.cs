@@ -4,7 +4,7 @@ using System.Linq;
 using System.Management.Automation;
 using System.Threading;
 
-namespace PSOpenAD.Commands;
+namespace PSOpenAD.Module.Commands;
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADPrincipalGroupMembership",

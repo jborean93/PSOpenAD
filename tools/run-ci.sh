@@ -18,6 +18,12 @@ if [[ -z "${BUILD_CONFIGURATION}" ]]; then
     exit 1
 fi
 
+PWSH_VERSION=${4}
+if [[ -z "${PWSH_VERSION}" ]]; then
+    echo "Must provider a pwsh version as the fourth argument" 1>&2
+    exit 1
+fi
+
 REALM=${AD_REALM:-PSOPENAD.TEST}
 PASSWORD=${AD_PASSWORD:-Password01}
 NETWORK_NAME=psopenad-net-$( openssl rand -hex 5 )
@@ -84,6 +90,7 @@ $DOCKER_BIN run \
   --env AD_PASSWORD="${PASSWORD}" \
   --env GSSAPI_PROVIDER="${GSSAPI_PROVIDER}" \
   --env BUILD_CONFIGURATION="${BUILD_CONFIGURATION}" \
+  --env PWSH_VERSION="${PWSH_VERSION}" \
   --hostname "app.${REALM,,}" \
   --network "${NETWORK_NAME}" \
   --network-alias app \

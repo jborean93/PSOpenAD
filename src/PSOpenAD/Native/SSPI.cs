@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Authentication;
-using System.Text;
 
 namespace PSOpenAD.Native;
 

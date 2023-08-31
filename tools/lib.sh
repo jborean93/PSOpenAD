@@ -33,7 +33,7 @@ lib::setup::system_requirements::el() {
             heimdal-path \
             heimdal-workstation \
             dotnet-sdk-6.0 \
-            powershell
+            wget
 
         source /etc/profile.d/heimdal.sh
 
@@ -53,10 +53,23 @@ lib::setup::system_requirements::el() {
             krb5-libs \
             krb5-workstation \
             dotnet-sdk-6.0 \
-            powershell
+            wget
     fi
 
-    export PATH="~/.dotnet/tools:$PATH"
+    mkdir "/tmp/PowerShell-${PWSH_VERSION}"
+    echo "Downloading PowerShell ${PWSH_VERSION}"
+    wget \
+        --quiet \
+        --output-document "/tmp/powershell.tar.gz" \
+        "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz"
+
+    echo "Extracting PowerShell ${PWSH_VERSION}"
+    tar xf \
+        "/tmp/powershell.tar.gz" \
+        --directory "/tmp/PowerShell-${PWSH_VERSION}"
+    chmod +x "/tmp/PowerShell-${PWSH_VERSION}/pwsh"
+
+    export PATH="/tmp/PowerShell-${PWSH_VERSION}:~/.dotnet/tools:${PATH}"
 }
 
 lib::setup::gssapi() {

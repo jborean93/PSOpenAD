@@ -11,10 +11,10 @@
 @{
 
     # Script module or binary module file associated with this manifest.
-    RootModule             = 'bin/net6.0/PSOpenAD.dll'
+    RootModule             = 'PSOpenAD.psm1'
 
     # Version number of this module.
-    ModuleVersion          = '0.3.0'
+    ModuleVersion          = '0.4.0'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
