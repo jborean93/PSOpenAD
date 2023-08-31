@@ -4,11 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using System.Runtime.CompilerServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
-[assembly: InternalsVisibleTo("PSOpenADTests")]
 namespace PSOpenAD;
 
 internal static class DefaultOverrider
@@ -184,9 +182,9 @@ internal sealed class SchemaMetadata
 
                 // Store this info in the global state if this class hasn't been cached yet. This is used for the
                 // property argument completer.
-                if (!GlobalState.ClassDefintions.ContainsKey(className))
+                if (!GlobalState.ClassDefinitions.ContainsKey(className))
                 {
-                    GlobalState.ClassDefintions[className] = _classInformation[className];
+                    GlobalState.ClassDefinitions[className] = _classInformation[className];
                 }
             }
             else

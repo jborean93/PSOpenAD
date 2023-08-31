@@ -7,7 +7,7 @@ using System.Management.Automation.Language;
 using System.Reflection;
 using System.Threading;
 
-namespace PSOpenAD.Commands;
+namespace PSOpenAD.Module.Commands;
 
 public abstract class GetOpenADOperation<T> : PSCmdlet
     where T : ADObjectIdentity

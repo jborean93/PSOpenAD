@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\PSOpenAD.csproj" />
+    <ProjectReference Include="../../src/PSOpenAD/PSOpenAD.csproj" />
   </ItemGroup>
 
 </Project>

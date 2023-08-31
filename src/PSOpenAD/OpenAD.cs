@@ -30,7 +30,7 @@ public class OpenADObject
             : "";
 
         ObjectClass = attributes.ContainsKey("objectClass")
-            ? (string)((IList<PSObject>)attributes["objectClass"].Item1).Last().BaseObject
+            ? (string)attributes["objectClass"].Item1.Last().BaseObject
             : "";
 
         ObjectGuid = attributes.ContainsKey("objectGUID")
@@ -164,25 +164,19 @@ public class OpenADGroup : OpenADPrincipal
 
     public OpenADGroup(Dictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
-        GroupType grouptType = attributes.ContainsKey("groupType")
+        GroupType groupType = attributes.ContainsKey("groupType")
             ? (GroupType)attributes["groupType"].Item1[0].BaseObject
             : GroupType.None;
 
-        GroupCategory = (grouptType & GroupType.IsSecurity) != 0
+        GroupCategory = (groupType & GroupType.IsSecurity) != 0
             ? ADGroupCategory.Security : ADGroupCategory.Distribution;
 
-        switch (grouptType)
+        GroupScope = groupType switch
         {
-            case GroupType.DomainLocal:
-                GroupScope = ADGroupScope.DomainLocal;
-                break;
-            case GroupType.Global:
-                GroupScope = ADGroupScope.Global;
-                break;
-            default:
-                GroupScope = ADGroupScope.Universal;
-                break;
-        }
+            GroupType.DomainLocal => ADGroupScope.DomainLocal,
+            GroupType.Global => ADGroupScope.Global,
+            _ => ADGroupScope.Universal,
+        };
     }
 }
 

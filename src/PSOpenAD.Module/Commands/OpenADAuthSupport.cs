@@ -1,6 +1,6 @@
 using System.Management.Automation;
 
-namespace PSOpenAD.Commands;
+namespace PSOpenAD.Module.Commands;
 
 [Cmdlet(
     VerbsCommon.Get, "OpenADAuthSupport"

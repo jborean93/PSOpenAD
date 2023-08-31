@@ -4,7 +4,7 @@ using System.Management.Automation;
 using System.Text;
 using System.Threading;
 
-namespace PSOpenAD.Commands;
+namespace PSOpenAD.Module.Commands;
 
 /// <summary>The result from a LDAP Whoami request operation.</summary>
 public sealed class WhoamiResult

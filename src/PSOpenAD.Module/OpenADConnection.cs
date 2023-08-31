@@ -11,9 +11,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PSOpenAD;
+namespace PSOpenAD.Module;
 
-internal class OpenADConnection : IDisposable
+internal class OpenADConnection : IADConnection
 {
     private readonly object _closeLock = new();
     private readonly Task _recvTask;
@@ -23,16 +23,17 @@ internal class OpenADConnection : IDisposable
     private readonly TcpClient _connection;
     private readonly int _waitTimeout;
     private readonly StreamWriter? _traceWriter;
+    private readonly PipeReader _pipeReader;
     private bool _closed;
     private Stream _ioStream;
     private CancellationTokenSource _recvCancel = new();
     private Exception? _taskFailure;
+    private bool _signed;
+    private bool _encrypted;
+    private SecurityContext? _securityContext;
 
     public LDAPSession Session { get; set; }
-    public SecurityContext? SecurityContext { get; set; }
 
-    public bool Sign { get; set; }
-    public bool Encrypt { get; set; }
     public bool IsClosed => _taskFailure != null || _closed;
 
     public OpenADConnection(TcpClient connection, Stream stream, int waitTimeout, string? tracePath)
@@ -42,7 +43,9 @@ internal class OpenADConnection : IDisposable
             _traceWriter = new(File.Open(tracePath, FileMode.Create, FileAccess.Write,
                 FileShare.ReadWrite | FileShare.Delete), new UTF8Encoding(false));
         }
-        Session = new(writer: _traceWriter);
+        PipelineLDAPSession ldapSession = new(writer: _traceWriter);
+        _pipeReader = ldapSession.Outgoing;
+        Session = ldapSession;
 
         _connection = connection;
         _ioStream = stream;
@@ -51,11 +54,6 @@ internal class OpenADConnection : IDisposable
         _sendTask = Task.Run(Send);
     }
 
-    /// <summary>Wait for a response from the LDAP server.</summary>
-    /// <param name="messageId">Wait for the response for the request that generated this id.</param>
-    /// <param name="timeout">Override the default timeout to wait for a response.</param>
-    /// <param name="cancelToken">Cancel token used to cancel the wait operation.</param>
-    /// <returns>The LDAP message response.</returns>
     public LDAPMessage WaitForMessage(int messageId, int? timeout = null, CancellationToken cancelToken = default)
     {
         BlockingCollection<LDAPMessage> queue;
@@ -85,20 +83,11 @@ internal class OpenADConnection : IDisposable
         return msg;
     }
 
-    /// <summary>Remove the wait queue for this request message identifier.</summary>
-    /// <remarks>This should be called once all the messages for this request has been received.</remarks>
-    /// <param name="messageId">The request message id to remove from the queue.</param>
     public void RemoveMessageQueue(int messageId)
     {
         _messages.TryRemove(messageId, out var _);
     }
 
-    /// <summary>Upgrades the socket stream to a TLS wrapped one.</summary>
-    /// <remarks>
-    /// This is used for a StartTLS or LDAPS connection to replace the socket stream with a TLS one.
-    /// </remarks>
-    /// <param name="authOptions">The TLS client authentication details used during the handshake.</param>
-    /// <param name="cancelToken">Token to cancel the TLS handshake connection.</param>
     public SslStream SetTlsStream(SslClientAuthenticationOptions authOptions,
         CancellationToken cancelToken = default)
     {
@@ -121,13 +110,18 @@ internal class OpenADConnection : IDisposable
         }
     }
 
+    public void AssociateSecurityContext(SecurityContext context, bool sign, bool encrypt)
+    {
+        _securityContext = context;
+        _signed = sign;
+        _encrypted = encrypt;
+    }
+
     private async Task Send()
     {
-        PipeReader reader = Session.Outgoing;
-
         try
         {
-            while (await WrappedSend(reader)) { }
+            while (await WrappedSend(_pipeReader)) { }
         }
         // Ignores socket closures as they are expected if the server closed their end.
         catch (IOException e) when (e.InnerException is SocketException) { }
@@ -143,17 +137,17 @@ internal class OpenADConnection : IDisposable
         ReadResult result = await reader.ReadAsync();
         ReadOnlySequence<byte> buffer = result.Buffer;
 
-        if (SecurityContext != null && Sign)
+        if (_securityContext != null && _signed)
         {
             byte[] wrappedData;
             if (buffer.IsSingleSegment)
             {
-                wrappedData = SecurityContext.Wrap(buffer.FirstSpan, Encrypt);
+                wrappedData = _securityContext.Wrap(buffer.FirstSpan, _encrypted);
             }
             else
             {
                 ReadOnlyMemory<byte> toWrap = buffer.ToArray();
-                wrappedData = SecurityContext.Wrap(toWrap.Span, Encrypt);
+                wrappedData = _securityContext.Wrap(toWrap.Span, _encrypted);
             }
 
             byte[] lengthData = BitConverter.GetBytes(wrappedData.Length);
@@ -256,9 +250,9 @@ internal class OpenADConnection : IDisposable
                 {
                     consumed = 0;
                 }
-                else if (SecurityContext != null && Sign)
+                else if (_securityContext != null && _signed)
                 {
-                    consumed = await ProcessSealedMessage(SecurityContext, buffer, writer);
+                    consumed = await ProcessSealedMessage(_securityContext, buffer, writer);
                 }
                 else
                 {
@@ -430,18 +424,18 @@ internal class OpenADConnection : IDisposable
         else
             Session.Close();
         _sendTask.GetAwaiter().GetResult();
-
-        Session.Outgoing.Complete();
+        _pipeReader.Complete();
 
         // Once both tasks are complete dispose of the stream and connection.
         _ioStream.Dispose();
         _connection.Dispose();
-        SecurityContext?.Dispose();
+        _securityContext?.Dispose();
         _traceWriter?.Dispose();
 
         _closed = true;
 
         GC.SuppressFinalize(this);
     }
+
     ~OpenADConnection() { Dispose(); }
 }

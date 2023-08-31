@@ -5,14 +5,14 @@ using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Language;
 
-namespace PSOpenAD;
+namespace PSOpenAD.Module;
 
 internal class ServerCompleter : IArgumentCompleter
 {
     public IEnumerable<CompletionResult> CompleteArgument(string commandName, string parameterName,
         string wordToComplete, CommandAst commandAst, IDictionary fakeBoundParameters)
     {
-        if (String.IsNullOrWhiteSpace(wordToComplete))
+        if (string.IsNullOrWhiteSpace(wordToComplete))
             wordToComplete = "";
 
         HashSet<Uri> emitted = new();
@@ -37,9 +37,9 @@ internal class PropertyCompleter : IArgumentCompleter
             wordToComplete = "";
 
         string className = GetClassNameForCommand(commandName);
-        if (GlobalState.ClassDefintions.ContainsKey(className))
+        if (GlobalState.ClassDefinitions.ContainsKey(className))
         {
-            ObjectClass info = GlobalState.ClassDefintions[className];
+            ObjectClass info = GlobalState.ClassDefinitions[className];
             foreach (string attribute in info.ValidAttributes)
             {
                 if (attribute.StartsWith(wordToComplete, true, CultureInfo.InvariantCulture))

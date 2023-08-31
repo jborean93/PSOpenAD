@@ -23,14 +23,21 @@ jobs:
       fail-fast: false
       matrix:
         info:
-        - name: Fedora_37_MIT
+        - name: Fedora_37_72_MIT
           container: fedora:37
           os: ubuntu-latest
           gssapi_provider: mit
-        - name: Fedora_37_Heimdal
+          version: '7.2.0'
+        - name: Fedora_37_73_MIT
+          container: fedora:37
+          os: ubuntu-latest
+          gssapi_provider: mit
+          version: '7.3.0'
+        - name: Fedora_37_73_Heimdal
           container: fedora:37
           os: ubuntu-latest
           gssapi_provider: heimdal
+          version: '7.3.0'
 
     steps:
     - uses: actions/checkout@v3
@@ -42,6 +49,7 @@ jobs:
         '${{ matrix.info.container }}'
         '${{ matrix.info.gssapi_provider }}'
         "${BUILD_CONFIGURATION}"
+        '${{ matrix.info.version }}'
 
     - name: Upload Test Results
       if: always()

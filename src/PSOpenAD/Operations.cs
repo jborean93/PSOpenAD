@@ -21,9 +21,19 @@ internal static class Operations
     /// <param name="cmdlet">The PSCmdlet that is running the operation.</param>
     /// <param name="ignoreErrors">Ignore errors and do not write to the error stream.</param>
     /// <returns>Yields each returned result containing the attributes requested from the search request.</returns>
-    public static IEnumerable<SearchResultEntry> LdapSearchRequest(OpenADConnection connection, string searchBase,
-        SearchScope scope, int sizeLimit, int timeLimit, LDAPFilter filter, string[] attributes,
-        IList<LDAPControl>? controls, CancellationToken cancelToken, PSCmdlet? cmdlet, bool ignoreErrors)
+    public static IEnumerable<SearchResultEntry> LdapSearchRequest(
+        IADConnection connection,
+        string searchBase,
+        SearchScope scope,
+        int sizeLimit,
+        int timeLimit,
+        LDAPFilter filter,
+        string[] attributes,
+        IList<LDAPControl>? controls,
+        CancellationToken cancelToken,
+        PSCmdlet? cmdlet,
+        bool ignoreErrors
+    )
     {
         cmdlet?.WriteVerbose($"Starting LDAP search request at '{searchBase}' for {scope} - {filter}");
 

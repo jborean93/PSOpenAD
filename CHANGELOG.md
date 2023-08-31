@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.4.0 - TBD
+
++ Moved module code into a separate Assembly Load Context to avoid assembly conflicts for dependencies
+
 ## v0.3.0 - 2023-05-02
 
 + Bumped minimum PowerShell version to 7.2

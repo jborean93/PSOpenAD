@@ -2,11 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
-[assembly: InternalsVisibleTo("PSOpenADTests")]
 namespace PSOpenAD.LDAP;
 
 /// <summary>Exception used when failing to parse an LDAP filter.</summary>
