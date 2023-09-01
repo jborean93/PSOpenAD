@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 
 namespace PSOpenAD.LDAP;
 
@@ -104,13 +105,26 @@ public class LDAPException : Exception
         ResultCode = result.ResultCode;
     }
 
-    private static string BuildErrorMessage(LDAPResult result)
+    internal LDAPException(string message, LDAPResult result) : base(BuildErrorMessage(result, message))
     {
-        string msg = CodeToString(result.ResultCode);
-        if (!String.IsNullOrWhiteSpace(result.DiagnosticsMessage))
-            msg += $" - {result.DiagnosticsMessage}";
+        DiagnosticsMessage = result.DiagnosticsMessage;
+        ResultCode = result.ResultCode;
+    }
 
-        return msg;
+    private static string BuildErrorMessage(LDAPResult result, string? message = null)
+    {
+        StringBuilder finalMsg = new();
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            finalMsg.Append($"{message}: ");
+        }
+        finalMsg.Append(CodeToString(result.ResultCode));
+        if (!string.IsNullOrWhiteSpace(result.DiagnosticsMessage))
+        {
+            finalMsg.Append($" - {result.DiagnosticsMessage}");
+        }
+
+        return finalMsg.ToString();
     }
 
     private static string CodeToString(LDAPResultCode code) => code switch

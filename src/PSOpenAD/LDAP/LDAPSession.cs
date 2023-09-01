@@ -63,6 +63,24 @@ internal abstract class LDAPSession
         }
     }
 
+    public int Add(string entry, PartialAttribute[] attributes, IEnumerable<LDAPControl>? controls = null)
+    {
+        if (State == SessionState.Closed)
+        {
+            throw new InvalidOperationException(
+                "Cannot perform an AddRequest on a closed connection");
+        }
+        else if (attributes.Length < 1)
+        {
+            throw new ArgumentException("Add operation requires at least 1 attribute");
+        }
+
+        AddRequest request = new(NextMessageId(), controls, entry, attributes);
+        PutRequest(request);
+
+        return request.MessageId;
+    }
+
     public int Bind(string dn, string password, IEnumerable<LDAPControl>? controls = null)
     {
         if (State != SessionState.BeforeOpen)
@@ -93,6 +111,20 @@ internal abstract class LDAPSession
         return request.MessageId;
     }
 
+    public int Delete(string distinguishedName, IEnumerable<LDAPControl>? controls = null)
+    {
+        if (State == SessionState.Closed)
+        {
+            throw new InvalidOperationException(
+                "Cannot perform a DelRequest on a closed connection");
+        }
+
+        DelRequest request = new(NextMessageId(), controls, distinguishedName);
+        PutRequest(request);
+
+        return request.MessageId;
+    }
+
     public int ExtendedRequest(string name, byte[]? value = null, IEnumerable<LDAPControl>? controls = null)
     {
         if (State == SessionState.Closed)
@@ -107,7 +139,7 @@ internal abstract class LDAPSession
         return request.MessageId;
     }
 
-    public int SearchRequest(string baseObject, SearchScope scope, DereferencingPolicy derefAliases, int sizeLimit,
+    public int Search(string baseObject, SearchScope scope, DereferencingPolicy derefAliases, int sizeLimit,
         int timeLimit, bool typesOnly, LDAPFilter filter, string[] attributeSelection,
         IEnumerable<LDAPControl>? controls = null)
     {

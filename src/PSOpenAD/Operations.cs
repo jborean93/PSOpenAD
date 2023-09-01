@@ -9,6 +9,76 @@ namespace PSOpenAD;
 
 internal static class Operations
 {
+    /// <summary>Performs an LDAP add operation.</summary>
+    /// <param name="connection">The LDAP connection to perform the add on.</param>
+    /// <param name="entry">The entry DN to create the object at.</param>
+    /// <param name="attributes">The attributes and their values to set on the new object.</param>
+    /// <param name="controls">Custom controls to use with the request</param>
+    /// <param name="cancelToken">Token to cancel any network IO waits</param>
+    /// <param name="cmdlet">The PSCmdlet that is running the operation.</param>
+    /// <returns>The AddResponse from the request.</returns>
+    public static AddResponse LdapAddRequest(
+        IADConnection connection,
+        string entry,
+        PartialAttribute[] attributes,
+        IList<LDAPControl>? controls,
+        CancellationToken cancelToken,
+        PSCmdlet? cmdlet
+    )
+    {
+        cmdlet?.WriteVerbose($"Starting LDAP add request for '{entry}'");
+
+        int addId = connection.Session.Add(entry, attributes, controls: controls);
+        AddResponse addRes = (AddResponse)connection.WaitForMessage(addId, cancelToken: cancelToken);
+        connection.RemoveMessageQueue(addId);
+
+        if (addRes.Result.ResultCode != LDAPResultCode.Success)
+        {
+            ErrorRecord error = new(
+                new LDAPException($"Failed to add '{entry}'", addRes.Result),
+                "LDAPAddFailure",
+                ErrorCategory.InvalidOperation,
+                null);
+            cmdlet?.WriteError(error);
+        }
+
+        return addRes;
+    }
+
+    /// <summary>Performs an LDAP delete operation.</summary>
+    /// <param name="connection">The LDAP connection to perform the delete on.</param>
+    /// <param name="entry">The entry DN to delete.</param>
+    /// <param name="controls">Custom controls to use with the request</param>
+    /// <param name="cancelToken">Token to cancel any network IO waits</param>
+    /// <param name="cmdlet">The PSCmdlet that is running the operation.</param>
+    /// <returns>The DelResponse from the request.</returns>
+    public static DelResponse LdapDeleteRequest(
+        IADConnection connection,
+        string entry,
+        IList<LDAPControl>? controls,
+        CancellationToken cancelToken,
+        PSCmdlet? cmdlet
+    )
+    {
+        cmdlet?.WriteVerbose($"Starting LDAP delete request for '{entry}'");
+
+        int addId = connection.Session.Delete(entry, controls: controls);
+        DelResponse delRes = (DelResponse)connection.WaitForMessage(addId, cancelToken: cancelToken);
+        connection.RemoveMessageQueue(addId);
+
+        if (delRes.Result.ResultCode != LDAPResultCode.Success)
+        {
+            ErrorRecord error = new(
+                new LDAPException($"Failed to delete '{entry}'", delRes.Result),
+                "LDAPDeleteFailure",
+                ErrorCategory.InvalidOperation,
+                null);
+            cmdlet?.WriteError(error);
+        }
+
+        return delRes;
+    }
+
     /// <summary>Performs an LDAP search operation.</summary>
     /// <param name="connection">The LDAP connection to perform the search on.</param>
     /// <param name="searchBase">The search base of the query.</param>
@@ -48,7 +118,7 @@ internal static class Operations
             {
                 List<LDAPControl> copiedControls = controls?.ToList() ?? new();
                 copiedControls.Add(new PagedResultControl(false, paginationLimit, paginationCookie));
-                searchId = connection.Session.SearchRequest(searchBase, scope, DereferencingPolicy.Never, sizeLimit,
+                searchId = connection.Session.Search(searchBase, scope, DereferencingPolicy.Never, sizeLimit,
                     timeLimit / 1000, false, filter, attributes, copiedControls);
 
                 request = false;

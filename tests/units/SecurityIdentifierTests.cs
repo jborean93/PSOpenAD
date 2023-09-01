@@ -165,6 +165,7 @@ public static class SecurityIdentifierTests
     }
 
     [SkippableFact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public static void SidRoundtrip()
     {
         Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));

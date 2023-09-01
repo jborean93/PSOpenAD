@@ -26,6 +26,9 @@ Gets the members of an Active Directory group.
 ### [Get-OpenADObject](Get-OpenADObject.md)
 Gets one or more Active Directory objects.
 
+### [Get-OpenADPrincipalGroupMembership](Get-OpenADPrincipalGroupMembership.md)
+Get the Active Directory groups that an object belongs to.
+
 ### [Get-OpenADServiceAccount](Get-OpenADServiceAccount.md)
 Gets one or more Active Directory managed service accounts or group managed service accounts.
 
@@ -38,11 +41,17 @@ Gets one or more Active Directory users.
 ### [Get-OpenADWhoami](Get-OpenADWhoami.md)
 Performs an LDAP Whoami extended operation on the target server.
 
+### [New-OpenADObject](New-OpenADObject.md)
+Creates an Active Directory object.
+
 ### [New-OpenADSession](New-OpenADSession.md)
 Creates an authenticated connection to an AD/LDAP host.
 
 ### [New-OpenADSessionOption](New-OpenADSessionOption.md)
 Creates an object that contains advanced options for an `OpenAD` session.
+
+### [Remove-OpenADObject](Remove-OpenADObject.md)
+Removes an Active Directory object.
 
 ### [Remove-OpenADSession](Remove-OpenADSession.md)
 Disconnects an LDAP/AD session.

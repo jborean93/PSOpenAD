@@ -9,17 +9,28 @@ public class ADObjectIdentity
 {
     internal LDAPFilter LDAPFilter { get; set; }
 
+    internal string? DistinguishedName { get; set; }
+
     internal ADObjectIdentity() => LDAPFilter = new FilterPresent("objectClass");
 
     public ADObjectIdentity(string value)
     {
         if (TryParseGuid(value, out var filter))
+        {
             LDAPFilter = filter;
+        }
         else
-            LDAPFilter = new FilterEquality("distinguishedName", LDAPFilter.EncodeSimpleFilterValue(value));
+        {
+            LDAPFilter = DistinguishedNameFilter(value);
+            DistinguishedName = value;
+        }
+
     }
 
-    public ADObjectIdentity(OpenADObject obj) : this(obj.ObjectGuid) { }
+    public ADObjectIdentity(OpenADObject obj) : this(obj.ObjectGuid)
+    {
+        DistinguishedName = obj.DistinguishedName;
+    }
 
     public ADObjectIdentity(Guid objectGuid) => LDAPFilter = ObjectGUIDFilter(objectGuid);
 
@@ -38,9 +49,14 @@ public class ADObjectIdentity
         }
     }
 
-    internal LDAPFilter ObjectGUIDFilter(Guid objectGuid)
+    internal static LDAPFilter ObjectGUIDFilter(Guid objectGuid)
     {
         return new FilterEquality("objectGUID", objectGuid.ToByteArray());
+    }
+
+    internal static LDAPFilter DistinguishedNameFilter(string dn)
+    {
+        return new FilterEquality("distinguishedName", LDAPFilter.EncodeSimpleFilterValue(dn));
     }
 }
 
@@ -59,7 +75,10 @@ public class ADPrincipalIdentity : ADObjectIdentity
         else if (TryParseSecurityIdentifier(value, out filter))
             LDAPFilter = filter;
         else
-            LDAPFilter = new FilterEquality("distinguishedName", LDAPFilter.EncodeSimpleFilterValue(value));
+        {
+            LDAPFilter = DistinguishedNameFilter(value);
+            DistinguishedName = value;
+        }
     }
 
     public ADPrincipalIdentity(SecurityIdentifier sid) => LDAPFilter = ObjectSidFilter(sid);

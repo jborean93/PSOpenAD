@@ -1,5 +1,5 @@
 ---
-external help file: PSOpenAD.dll-Help.xml
+external help file: PSOpenAD.Module.dll-Help.xml
 Module Name: PSOpenAD
 online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADWhoami.md
 schema: 2.0.0
@@ -67,7 +67,7 @@ This is used when the cmdlet creates a new connection to the `-Server` specified
 Type: AuthenticationMethod
 Parameter Sets: Server
 Aliases:
-Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos
+Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos, Certificate
 
 Required: False
 Position: Named
@@ -170,7 +170,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ### None
 ## OUTPUTS
 
-### PSOpenAD.Commands.WhoamiResult
+### PSOpenAD.WhoamiResult
 The `WhoamiResult` object representing the result returned by the LDAP Whoami extended operation plus extra properties to provide extract context on the session. This object will always have the following properties set:
 
 + `UserName`: The username, typically in the netlogon form `DOMAIN\username`, of the authenticated session.

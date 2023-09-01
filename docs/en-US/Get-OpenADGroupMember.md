@@ -1,5 +1,5 @@
 ---
-external help file: PSOpenAD.dll-Help.xml
+external help file: PSOpenAD.Module.dll-Help.xml
 Module Name: PSOpenAD
 online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADGroupMember.md
 schema: 2.0.0
@@ -255,6 +255,7 @@ This can be set to
 Type: SearchScope
 Parameter Sets: SessionLDAPFilter, ServerLDAPFilter
 Aliases:
+Accepted values: Base, OneLevel, Subtree
 
 Required: False
 Position: Named
@@ -339,6 +340,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+### System.String
 ### PSOpenAD.ADPrincipalIdentity
 The identity in its various forms can be piped into the cmdlet.
 

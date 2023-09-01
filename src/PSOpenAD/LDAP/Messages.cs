@@ -171,6 +171,14 @@ internal abstract class LDAPMessage
                 return SearchResultDone.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
                     ruleSet: ruleSet);
 
+            case AddResponse.TAG_NUMBER:
+                return AddResponse.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
+                    ruleSet: ruleSet);
+
+            case DelResponse.TAG_NUMBER:
+                return DelResponse.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
+                    ruleSet: ruleSet);
+
             case SearchResultReference.TAG_NUMBER:
                 return SearchResultReference.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
                     ruleSet: ruleSet);
@@ -558,6 +566,134 @@ internal class SearchResultDone : LDAPMessage
     }
 }
 
+/// <summary>LDAP Add Operation</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     AddRequest ::= [APPLICATION 8] SEQUENCE {
+///             entry           LDAPDN,
+///             attributes      AttributeList }
+///     AttributeList ::= SEQUENCE OF attribute Attribute
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.7">4.7. Add Operation</see>
+internal class AddRequest : LDAPMessage
+{
+    public const int TAG_NUMBER = 8;
+
+    public string Entry { get; set; }
+
+    public PartialAttribute[] Attributes { get; set; } = Array.Empty<PartialAttribute>();
+
+    public AddRequest(int messageId, IEnumerable<LDAPControl>? controls, string entry, PartialAttribute[] attributes)
+        : base(messageId, controls)
+    {
+        Entry = entry;
+        Attributes = attributes;
+    }
+
+    public override void ToBytes(AsnWriter writer)
+    {
+        using AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.Application, TAG_NUMBER,
+            true));
+
+        writer.WriteOctetString(Encoding.UTF8.GetBytes(Entry));
+
+        using AsnWriter.Scope _2 = writer.PushSequence();
+        foreach (PartialAttribute attr in Attributes)
+        {
+            attr.ToBytes(writer);
+        }
+    }
+}
+
+/// <summary>LDAP Add Response</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     AddResponse ::= [APPLICATION 9] LDAPResult
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.7">4.7. Add Operation</see>
+internal class AddResponse : LDAPMessage
+{
+    public const int TAG_NUMBER = 9;
+
+    /// <summary>The final result of a search operation.</summary>
+    public LDAPResult Result { get; internal set; }
+
+    public AddResponse(int messageId, IEnumerable<LDAPControl>? controls, LDAPResult result)
+        : base(messageId, controls)
+    {
+        Result = result;
+    }
+
+    public static AddResponse FromBytes(int messageId, IEnumerable<LDAPControl>? controls,
+        ReadOnlySpan<byte> data, out int bytesConsumed, AsnEncodingRules ruleSet = AsnEncodingRules.BER)
+    {
+        bytesConsumed = 0;
+
+        LDAPResult result = LDAPResult.FromBytes(data, out var consumed, ruleSet: ruleSet);
+        data = data[consumed..];
+        bytesConsumed += consumed;
+
+        return new AddResponse(messageId, controls, result);
+    }
+}
+
+/// <summary>LDAP Del Operation</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     DelRequest ::= [APPLICATION 10] LDAPDN
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.8">4.8. Delete Operation</see>
+internal class DelRequest : LDAPMessage
+{
+    public const int TAG_NUMBER = 10;
+
+    public string DistinguishedName { get; internal set; }
+
+    public DelRequest(int messageId, IEnumerable<LDAPControl>? controls, string dn)
+        : base(messageId, controls)
+    {
+        DistinguishedName = dn;
+    }
+
+    public override void ToBytes(AsnWriter writer)
+    {
+        writer.WriteOctetString(Encoding.UTF8.GetBytes(DistinguishedName),
+            new Asn1Tag(TagClass.Application, TAG_NUMBER, false));
+    }
+}
+
+/// <summary>LDAP Del Response</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     DelResponse ::= [APPLICATION 11] LDAPResult
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.8">4.8. Delete Operation</see>
+internal class DelResponse : LDAPMessage
+{
+    public const int TAG_NUMBER = 11;
+
+    /// <summary>The final result of a delete operation.</summary>
+    public LDAPResult Result { get; internal set; }
+
+    public DelResponse(int messageId, IEnumerable<LDAPControl>? controls, LDAPResult result)
+        : base(messageId, controls)
+    {
+        Result = result;
+    }
+
+    public static DelResponse FromBytes(int messageId, IEnumerable<LDAPControl>? controls,
+        ReadOnlySpan<byte> data, out int bytesConsumed, AsnEncodingRules ruleSet = AsnEncodingRules.BER)
+    {
+        bytesConsumed = 0;
+
+        LDAPResult result = LDAPResult.FromBytes(data, out var consumed, ruleSet: ruleSet);
+        data = data[consumed..];
+        bytesConsumed += consumed;
+
+        return new DelResponse(messageId, controls, result);
+    }
+}
+
 /// <summary>LDAP Search Result Reference</summary>
 /// <remarks>
 /// The ASN.1 structure is defined as
@@ -824,5 +960,18 @@ internal class PartialAttribute
         }
 
         return new PartialAttribute(name, values.ToArray());
+    }
+
+    public void ToBytes(AsnWriter writer)
+    {
+        using AsnWriter.Scope _1 = writer.PushSequence();
+
+        writer.WriteOctetString(Encoding.UTF8.GetBytes(Name));
+
+        using AsnWriter.Scope _2 = writer.PushSetOf();
+        foreach (byte[] val in Values)
+        {
+            writer.WriteOctetString(val);
+        }
     }
 }

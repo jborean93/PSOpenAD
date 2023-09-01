@@ -1,5 +1,5 @@
 ---
-external help file: PSOpenAD.dll-Help.xml
+external help file: PSOpenAD.Module.dll-Help.xml
 Module Name: PSOpenAD
 online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADUser.md
 schema: 2.0.0
@@ -110,7 +110,7 @@ This is used when the cmdlet creates a new connection to the `-Server` specified
 Type: AuthenticationMethod
 Parameter Sets: ServerLDAPFilter, ServerIdentity
 Aliases:
-Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos
+Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos, Certificate
 
 Required: False
 Position: Named
@@ -339,8 +339,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### PSOpenAD.ADPrincipalIdentity
 ### System.String
+### PSOpenAD.ADPrincipalIdentity
 The identity in it's various forms can be piped into the cmdlet.
 
 ## OUTPUTS

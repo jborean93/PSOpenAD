@@ -701,35 +701,21 @@ $";
         {
             char c = value[read];
 
-            if (c == '\\')
+            // While the spec seems to indicate \ must be followed by a hex value, both OpenLDAP and the MS AD cmdlets
+            // just cancel the escaping and treats the \ as a literal value rather than an escaped value so we do that
+            // here.
+            if (c == '\\' && (read + 2 < value.Length))
             {
-                if (read + 2 < value.Length)
+                string escapedHex = value.Slice(read + 1, 2).ToString();
+                if (Regex.Match(escapedHex, "[a-fA-F0-9]{2}", RegexOptions.Compiled).Success)
                 {
-                    string escapedHex = value.Slice(read + 1, 2).ToString();
-                    if (Regex.Match(escapedHex, "[a-fA-F0-9]{2}", RegexOptions.Compiled).Success)
-                    {
-                        encodedSpan[count] = Convert.ToByte(escapedHex, 16);
-                        read += 2;
-                        count++;
-                    }
-                    else
-                    {
-                        // LDAP filter - 'objectClass=foo\1Z'
-                        throw new InvalidLDAPFilterException(
-                            $"Invalid hex characters following \\ '{escapedHex}'",
-                            filter.ToString(),
-                            offset + read + 1,
-                            offset + read + 3);
-                    }
+                    encodedSpan[count] = Convert.ToByte(escapedHex, 16);
+                    read += 2;
+                    count++;
                 }
                 else
                 {
-                    // LDAP filter - 'objectClass=\1'
-                    throw new InvalidLDAPFilterException(
-                        "Not enough escape characters following \\",
-                        filter.ToString(),
-                        offset + read,
-                        offset + length);
+                    count += Encoding.UTF8.GetBytes(value.Slice(read, 1), encodedSpan[count..]);
                 }
             }
             else if (c == ')' || (c == '*' && endWithAsterisk))

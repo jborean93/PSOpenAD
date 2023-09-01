@@ -88,9 +88,9 @@
       </TableControl>
     </View>
     <View>
-      <Name>PSOpenAD.Commands.WhoamiResult</Name>
+      <Name>PSOpenAD.WhoamiResult</Name>
       <ViewSelectedBy>
-        <TypeName>PSOpenAD.Commands.WhoamiResult</TypeName>
+        <TypeName>PSOpenAD.WhoamiResult</TypeName>
       </ViewSelectedBy>
       <TableControl>
         <TableHeaders>
