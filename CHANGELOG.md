@@ -3,6 +3,13 @@
 ## v0.4.0 - TBD
 
 + Moved module code into a separate Assembly Load Context to avoid assembly conflicts for dependencies
++ Added the following cmdlets:
+  + [New-OpenADObject](./docs/en-US/New-OpenADObject.md): Creates new AD objects
+  + [Remove-OpenADObject](./docs/en-US/Remove-OpenADObject.md): Removes AD objects
++ Fixed up `-LDAPFilter` logic to align the `\` escaping behaviour with OpenLDAP and the `Get-AD*` cmdlets
+  + Before a filter with the char `\` had to have 2 more chars `[A-F0-9]` which represented the characters hex value
+  + Now if the `\` does not have 2 characters after or they don't match the hex pattern, the `\` and subsequent values are treated literally
++ Fixed up some binary length calculations for the `PSOpenAD.Security` classes
 
 ## v0.3.0 - 2023-05-02
 

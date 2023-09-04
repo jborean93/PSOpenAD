@@ -1,5 +1,5 @@
 ---
-external help file: PSOpenAD.dll-Help.xml
+external help file: PSOpenAD.Module.dll-Help.xml
 Module Name: PSOpenAD
 online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/Get-OpenADObject.md
 schema: 2.0.0
@@ -21,7 +21,7 @@ Get-OpenADObject [-IncludeDeletedObjects] [-Server <String>] [-AuthType <Authent
 
 ### SessionIdentity
 ```
-Get-OpenADObject [-IncludeDeletedObjects] -Session <OpenADSession> -Identity <ADObjectIdentity>
+Get-OpenADObject [-IncludeDeletedObjects] -Session <OpenADSession> [-Identity] <ADObjectIdentity>
  [-Property <String[]>] [<CommonParameters>]
 ```
 
@@ -34,8 +34,8 @@ Get-OpenADObject [-IncludeDeletedObjects] -Session <OpenADSession> [-LDAPFilter 
 ### ServerIdentity
 ```
 Get-OpenADObject [-IncludeDeletedObjects] [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] -Identity <ADObjectIdentity>
- [-Property <String[]>] [<CommonParameters>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
+ [-Identity] <ADObjectIdentity> [-Property <String[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -101,7 +101,7 @@ This is used when the cmdlet creates a new connection to the `-Server` specified
 Type: AuthenticationMethod
 Parameter Sets: ServerLDAPFilter, ServerIdentity
 Aliases:
-Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos
+Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos, Certificate
 
 Required: False
 Position: Named
@@ -142,7 +142,7 @@ Parameter Sets: SessionIdentity, ServerIdentity
 Aliases:
 
 Required: True
-Position: Named
+Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName, ByValue)
 Accept wildcard characters: False
@@ -248,6 +248,7 @@ This can be set to
 Type: SearchScope
 Parameter Sets: ServerLDAPFilter, SessionLDAPFilter
 Aliases:
+Accepted values: Base, OneLevel, Subtree
 
 Required: False
 Position: Named
@@ -331,6 +332,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+### System.String
 ### PSOpenAD.ADObjectIdentity
 The identity to get can be passed in as an input object. This can be in the form of the Distinguished Name or Object GUID.
 

@@ -1,5 +1,5 @@
 ---
-external help file: PSOpenAD.dll-Help.xml
+external help file: PSOpenAD.Module.dll-Help.xml
 Module Name: PSOpenAD
 online version: https://www.github.com/jborean93/PSOpenAD/blob/main/docs/en-US/New-OpenADSession.md
 schema: 2.0.0
@@ -125,6 +125,7 @@ Use `Get-OpenADAuthSupport` to get more information around authentication.
 Type: AuthenticationMethod
 Parameter Sets: (All)
 Aliases:
+Accepted values: Default, Anonymous, Simple, Negotiate, Kerberos, Certificate
 
 Required: False
 Position: Named

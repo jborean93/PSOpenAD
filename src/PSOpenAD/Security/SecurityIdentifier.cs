@@ -81,6 +81,14 @@ public sealed class SecurityIdentifier
         WriteBinaryForm(data);
     }
 
+    internal byte[] ToByteArray()
+    {
+        byte[] data = new byte[BinaryLength];
+        WriteBinaryForm(data);
+
+        return data;
+    }
+
     internal void WriteBinaryForm(Span<byte> data)
     {
         if (!BitConverter.TryWriteBytes(data, _identifierAuthority))

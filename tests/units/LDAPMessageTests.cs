@@ -23,9 +23,9 @@ public static class LDAPMessageTests
 
         Assert.NotNull(actual.Controls);
         LDAPControl[] controls = actual.Controls ?? Array.Empty<LDAPControl>();
-        LDAPControl control = Assert.Single<LDAPControl>(controls);
+        LDAPControl control = Assert.Single(controls);
         PagedResultControl pagedControl = Assert.IsType<PagedResultControl>(control);
-        Assert.Equal(pagedControl.ControlType, PagedResultControl.LDAP_PAGED_RESULT_OID_STRING);
+        Assert.Equal(PagedResultControl.LDAP_PAGED_RESULT_OID_STRING, pagedControl.ControlType);
         Assert.False(pagedControl.Criticality);
         Assert.Equal(0, pagedControl.Size);
         Assert.Equal(704, pagedControl.Cookie?.Length);
@@ -44,6 +44,7 @@ public static class LDAPMessageTests
         Assert.Equal(LDAPResultCode.Referral, actual.Result.ResultCode);
         Assert.Equal("0000202B: RefErr: DSID-0310078A, data 0, 1 access points\n\tref 1: 'foo.ldap.test'\n\0", actual.Result.DiagnosticsMessage);
         Assert.Equal("", actual.Result.MatchedDN);
+        Assert.NotNull(actual.Result.Referrals);
         Assert.Single(actual.Result.Referrals);
         Assert.Equal("ldap://foo.ldap.test/DC=foo,DC=ldap,DC=test", actual.Result.Referrals?[0]);
     }

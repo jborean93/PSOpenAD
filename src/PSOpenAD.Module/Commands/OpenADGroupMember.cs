@@ -2,7 +2,6 @@ using PSOpenAD.LDAP;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using System.Threading;
 
 namespace PSOpenAD.Module.Commands;
 
@@ -26,12 +25,17 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
     internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
         => new OpenADPrincipal(attributes);
 
-    internal override IEnumerable<SearchResultEntry> SearchRequest(OpenADSession session, string searchBase,
-        LDAP.LDAPFilter filter, string[] attributes, IList<LDAPControl>? serverControls, CancellationToken cancelToken)
+    internal override IEnumerable<SearchResultEntry> SearchRequest(
+        OpenADSession session,
+        string searchBase,
+        LDAPFilter filter,
+        string[] attributes,
+        IList<LDAPControl>? serverControls
+    )
     {
         foreach (SearchResultEntry group in Operations.LdapSearchRequest(session.Connection, searchBase,
             SearchScope, 1, session.OperationTimeout, filter, new[] { "primaryGroupToken" }, serverControls,
-            cancelToken, this, false))
+            CancelToken, this, false))
         {
             // use memberOf rather than member to make recursive search easier & avoid paging
             LDAPFilter memberOfFilter;
@@ -74,7 +78,7 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
             try
             {
                 foreach (SearchResultEntry result in Operations.LdapSearchRequest(session.Connection, searchBase,
-                    SearchScope, 0, session.OperationTimeout, memberOfFilter, attributes, serverControls, cancelToken,
+                    SearchScope, 0, session.OperationTimeout, memberOfFilter, attributes, serverControls, CancelToken,
                     this, false))
                 {
                     yield return result;

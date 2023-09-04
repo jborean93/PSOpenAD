@@ -5,18 +5,17 @@ using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Reflection;
-using System.Threading;
 
 namespace PSOpenAD.Module.Commands;
 
-public abstract class GetOpenADOperation<T> : PSCmdlet
+internal delegate OpenADObject CreateADObjectDelegate(Dictionary<string, (PSObject[], bool)> attributes);
+
+public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
     where T : ADObjectIdentity
 {
     internal StringComparer _caseInsensitiveComparer = StringComparer.OrdinalIgnoreCase;
 
     internal bool _includeDeleted = false;
-
-    private CancellationTokenSource? CurrentCancelToken { get; set; }
 
     internal abstract (string, bool)[] DefaultProperties { get; }
 
@@ -34,29 +33,29 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
         Mandatory = true,
         ParameterSetName = "SessionLDAPFilter"
     )]
-    public OpenADSession? Session { get; set; }
+    public override OpenADSession? Session { get; set; }
 
     [Parameter(ParameterSetName = "ServerIdentity")]
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
     [ArgumentCompleter(typeof(ServerCompleter))]
-    public string Server { get; set; } = "";
+    public override string Server { get; set; } = "";
 
     [Parameter(ParameterSetName = "ServerIdentity")]
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
-    public AuthenticationMethod AuthType { get; set; } = AuthenticationMethod.Default;
+    public override AuthenticationMethod AuthType { get; set; } = AuthenticationMethod.Default;
 
     [Parameter(ParameterSetName = "ServerIdentity")]
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
-    public OpenADSessionOptions SessionOption { get; set; } = new OpenADSessionOptions();
+    public override OpenADSessionOptions SessionOption { get; set; } = new OpenADSessionOptions();
 
     [Parameter(ParameterSetName = "ServerIdentity")]
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
-    public SwitchParameter StartTLS { get; set; }
+    public override SwitchParameter StartTLS { get; set; }
 
     [Parameter(ParameterSetName = "ServerIdentity")]
     [Parameter(ParameterSetName = "ServerLDAPFilter")]
     [Credential()]
-    public PSCredential? Credential { get; set; }
+    public override PSCredential? Credential { get; set; }
 
     #endregion
 
@@ -112,7 +111,7 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
 
     #endregion
 
-    protected override void ProcessRecord()
+    protected override void ProcessRecordWithSession(OpenADSession session)
     {
         LDAPFilter finalFilter;
         if (!string.IsNullOrWhiteSpace(LDAPFilter))
@@ -164,151 +163,181 @@ public abstract class GetOpenADOperation<T> : PSCmdlet
         List<LDAPControl>? serverControls = null;
         if (_includeDeleted)
         {
-            serverControls = new();
-            serverControls.Add(new ShowDeleted(false));
-            serverControls.Add(new ShowDeactivatedLink(false));
+            serverControls = new()
+            {
+                new ShowDeleted(false),
+                new ShowDeactivatedLink(false),
+            };
         }
 
-        using (CurrentCancelToken = new CancellationTokenSource())
+        string className = PropertyCompleter.GetClassNameForCommand(MyInvocation.MyCommand.Name);
+        HashSet<string> requestedProperties = DefaultProperties
+            .Select(p => p.Item1)
+            .ToHashSet(_caseInsensitiveComparer);
+        string[] explicitProperties = Property ?? Array.Empty<string>();
+        bool showAll = false;
+
+        // We can only validate modules if there was metadata. Metadata may not be present on all systems and
+        // when unauthenticated authentication was used.
+        HashSet<string> validProperties;
+        ObjectClass? objectClass = session.SchemaMetadata.GetClassInformation(className);
+        if (objectClass is null)
         {
-            if (Session == null)
+            validProperties = explicitProperties.ToHashSet(_caseInsensitiveComparer);
+        }
+        else
+        {
+            validProperties = objectClass.ValidAttributes;
+        }
+
+        HashSet<string> invalidProperties = new();
+
+        foreach (string prop in explicitProperties)
+        {
+            if (prop == "*")
             {
-                Session = OpenADSessionFactory.CreateOrUseDefault(Server, Credential, AuthType, StartTLS,
-                    SessionOption, CurrentCancelToken.Token, this);
+                showAll = true;
+                requestedProperties.Add(prop);
+                continue;
             }
 
-            if (Session == null)
-                return; // Failed to create session - error records have already been written.
-
-            string className = PropertyCompleter.GetClassNameForCommand(MyInvocation.MyCommand.Name);
-            HashSet<string> requestedProperties = DefaultProperties
-                .Select(p => p.Item1)
-                .ToHashSet(_caseInsensitiveComparer);
-            string[] explicitProperties = Property ?? Array.Empty<string>();
-            bool showAll = false;
-
-            // We can only validate modules if there was metadata. Metadata may not be present on all systems and
-            // when unauthenticated authentication was used.
-            HashSet<string> validProperties;
-            ObjectClass? objectClass = Session.SchemaMetadata.GetClassInformation(className);
-            if (objectClass is null)
+            if (validProperties.Contains(prop))
             {
-                validProperties = explicitProperties.ToHashSet(_caseInsensitiveComparer);
+                requestedProperties.Add(prop);
             }
             else
             {
-                validProperties = objectClass.ValidAttributes;
+                invalidProperties.Add(prop);
             }
+        }
 
-            HashSet<string> invalidProperties = new();
+        if (invalidProperties.Count > 0)
+        {
+            string sortedProps = string.Join("', '", invalidProperties.OrderBy(p => p).ToArray());
+            ErrorRecord rec = new(
+                new ArgumentException($"One or more properties for {className} are not valid: '{sortedProps}'"),
+                "InvalidPropertySet",
+                ErrorCategory.InvalidArgument,
+                null);
 
-            foreach (string prop in explicitProperties)
-            {
-                if (prop == "*")
-                {
-                    showAll = true;
-                    requestedProperties.Add(prop);
-                    continue;
-                }
+            ThrowTerminatingError(rec);
+            return;
+        }
 
-                if (validProperties.Contains(prop))
-                {
-                    requestedProperties.Add(prop);
-                }
-                else
-                {
-                    invalidProperties.Add(prop);
-                }
-            }
+        string searchBase = SearchBase ?? session.DefaultNamingContext;
+        bool outputResult = false;
 
-            if (invalidProperties.Count > 0)
-            {
-                string sortedProps = string.Join("', '", invalidProperties.OrderBy(p => p).ToArray());
-                ErrorRecord rec = new(
-                    new ArgumentException($"One or more properties for {className} are not valid: '{sortedProps}'"),
-                    "InvalidPropertySet",
-                    ErrorCategory.InvalidArgument,
-                    null);
+        HashSet<string> finalObjectProperties = requestedProperties
+            .Where(v =>
+                v != "*" &&
+                (showAll || explicitProperties.Contains(v, _caseInsensitiveComparer)))
+            .ToHashSet();
 
-                ThrowTerminatingError(rec);
-                return;
-            }
+        foreach (SearchResultEntry result in SearchRequest(session, searchBase, finalFilter,
+            requestedProperties.ToArray(), serverControls))
+        {
+            OpenADObject adObj = CreateOutputObject(
+                session,
+                result,
+                finalObjectProperties,
+                CreateADObject,
+                this
+            );
+            ProcessOutputObject(PSObject.AsPSObject(adObj));
+            outputResult = true;
+            WriteObject(adObj);
+        }
 
-            string searchBase = SearchBase ?? Session.DefaultNamingContext;
-            bool outputResult = false;
-
-            foreach (SearchResultEntry result in SearchRequest(Session, searchBase, finalFilter,
-                requestedProperties.ToArray(), serverControls, CurrentCancelToken.Token))
-            {
-                Dictionary<string, (PSObject[], bool)> props = new();
-                foreach (PartialAttribute attribute in result.Attributes)
-                {
-                    props[attribute.Name] = Session.SchemaMetadata.TransformAttributeValue(attribute.Name,
-                        attribute.Values, this);
-                }
-
-                OpenADObject adObj = CreateADObject(props);
-
-                // This adds a note property for each explicitly requested property, excluding the ones the object
-                // naturally exposes. Also adds the DomainController property to denote what DC the response came from.
-                PSObject adPSObj = PSObject.AsPSObject(adObj);
-                adPSObj.Properties.Add(new PSNoteProperty("DomainController", Session.DomainController));
-
-                List<string> orderedProps = props.Keys
-                    .Union(requestedProperties, _caseInsensitiveComparer)
-                    .Where(v =>
-                        v != "*" &&
-                        (showAll || explicitProperties.Contains(v, _caseInsensitiveComparer)) &&
-                        !DefaultProperties.Contains((v, true)))
-                    .OrderBy(v => v)
-                    .ToList();
-
-                foreach (string p in orderedProps)
-                {
-                    object? value = null;
-                    if (props.ContainsKey(p))
-                    {
-                        (value, bool isSingleValue) = props[p];
-                        if (isSingleValue)
-                        {
-                            value = ((IList<PSObject>)value)[0];
-                        }
-                    }
-
-                    // To make the properties more PowerShell like make sure the first char is in upper case.
-                    // PowerShell is case insensitive so users can still select it based on the lower case LDAP name.
-                    string propertyName = p[0..1].ToUpperInvariant() + p[1..];
-                    adPSObj.Properties.Add(new PSNoteProperty(propertyName, value));
-                }
-
-                ProcessOutputObject(adPSObj);
-                outputResult = true;
-                WriteObject(adObj);
-            }
-
-            if (ParameterSetName.EndsWith("Identity") && !outputResult)
-            {
-                string msg = $"Cannot find an object with identity filter: '{finalFilter}' under: '{searchBase}'";
-                ErrorRecord rec = new(new ItemNotFoundException(msg), "IdentityNotFound",
-                    ErrorCategory.ObjectNotFound, finalFilter.ToString());
-                WriteError(rec);
-            }
+        if (ParameterSetName.EndsWith("Identity") && !outputResult)
+        {
+            string msg = $"Cannot find an object with identity filter: '{finalFilter}' under: '{searchBase}'";
+            ErrorRecord rec = new(new ItemNotFoundException(msg), "IdentityNotFound",
+                ErrorCategory.ObjectNotFound, finalFilter.ToString());
+            WriteError(rec);
         }
     }
 
-    protected override void StopProcessing()
-    {
-        CurrentCancelToken?.Cancel();
-    }
-
-    internal virtual IEnumerable<SearchResultEntry> SearchRequest(OpenADSession session, string searchBase,
-        LDAP.LDAPFilter filter, string[] attributes, IList<LDAPControl>? serverControls, CancellationToken cancelToken)
+    internal virtual IEnumerable<SearchResultEntry> SearchRequest(
+        OpenADSession session,
+        string searchBase,
+        LDAPFilter filter,
+        string[] attributes,
+        IList<LDAPControl>? serverControls
+    )
     {
         return Operations.LdapSearchRequest(session.Connection, searchBase, SearchScope, 0, session.OperationTimeout,
-            filter, attributes, serverControls, cancelToken, this, false);
+            filter, attributes, serverControls, CancelToken, this, false);
     }
 
     internal virtual void ProcessOutputObject(PSObject obj) { }
+
+    /// <summary>
+    /// Common code to create the ADObject output object.
+    /// </summary>
+    /// <param name="session">The OpenADSession the result is from.</param>
+    /// <param name="result">The LDAP search result to use as the value source.</param>
+    /// <param name="requestedProperties">All properties that should on the output object.</param>
+    /// <param name="createFunc">If set is called to create the OpenADObject, otherwise OpenADObject is used.</param>
+    /// <param name="cmdlet">The cmdlet to write verbose messages to.</param>
+    /// <returns>The created ADObject</returns>
+    internal static OpenADObject CreateOutputObject(
+        OpenADSession session,
+        SearchResultEntry result,
+        HashSet<string>? requestedProperties,
+        CreateADObjectDelegate? createFunc,
+        PSCmdlet? cmdlet
+    )
+    {
+        Dictionary<string, (PSObject[], bool)> props = new();
+        foreach (PartialAttribute attribute in result.Attributes)
+        {
+            props[attribute.Name] = session.SchemaMetadata.TransformAttributeValue(
+                attribute.Name,
+                attribute.Values,
+                cmdlet
+            );
+        }
+
+        OpenADObject adObj = createFunc == null ? new OpenADObject(props) : createFunc(props);
+        (string, bool)[] defaultProperties = ((string, bool)[])adObj
+            .GetType()
+            .GetField("DEFAULT_PROPERTIES", BindingFlags.NonPublic | BindingFlags.Static)
+            ?.GetValue(null)!;
+
+        // This adds a note property for each explicitly requested property, excluding the ones the object
+        // naturally exposes. Also adds the DomainController property to denote what DC the response came from.
+        // Adds a note property for the DomainController that the response came from.
+        PSObject adPSObj = PSObject.AsPSObject(adObj);
+        adPSObj.Properties.Add(new PSNoteProperty("DomainController", session.DomainController));
+
+        // Adds a note property for all the attributes in the result as well as all the properties requested. If the
+        // requested property doesn't have a value, then null is used.
+        IEnumerable<string> orderedProps = props.Keys;
+        if (requestedProperties != null)
+        {
+            orderedProps = orderedProps.Union(requestedProperties, StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (string p in orderedProps.Where(v => !defaultProperties.Contains((v, true))))
+        {
+            object? value = null;
+            if (props.ContainsKey(p))
+            {
+                (value, bool isSingleValue) = props[p];
+                if (isSingleValue)
+                {
+                    value = ((IList<PSObject>)value)[0];
+                }
+            }
+
+            // To make the properties more PowerShell like make sure the first char is in upper case.
+            // PowerShell is case insensitive so users can still select it based on the lower case LDAP name.
+            string propertyName = p[0..1].ToUpperInvariant() + p[1..];
+            adPSObj.Properties.Add(new PSNoteProperty(propertyName, value));
+        }
+
+        return adObj;
+    }
 }
 
 [Cmdlet(

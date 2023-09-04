@@ -1,6 +1,7 @@
 using PSOpenAD.LDAP;
 using PSOpenAD.Security;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
@@ -249,6 +250,50 @@ internal sealed class SchemaMetadata
 
         return (processed.ToArray(), attrInfo?.SingleValue ?? false);
     }
+
+    internal static byte[][] ConvertToRawAttributeCollection(object? value)
+    {
+        if (value is null)
+        {
+            return Array.Empty<byte[]>();
+        }
+        else if (value is IEnumerable<byte> valueBytes)
+        {
+            return new byte[][]
+            {
+                valueBytes.ToArray(),
+            };
+        }
+        else if (value is not string && value is IEnumerable valueEnumerable)
+        {
+            return valueEnumerable.Cast<object?>().Select(v => ConvertToRawAttributeValue(v)).ToArray();
+        }
+        else
+        {
+            return new byte[][]
+            {
+                ConvertToRawAttributeValue(value),
+            };
+        }
+    }
+
+    internal static byte[] ConvertToRawAttributeValue(object? value) => value switch
+    {
+        null => Array.Empty<byte>(),
+        bool b => UTF8Bytes(b == true ? "TRUE" : "FALSE"),
+        IEnumerable<byte> bytes => bytes.ToArray(),
+        CommonSecurityDescriptor sd => sd.ToByteArray(),
+        Enum e => UTF8Bytes(Convert.ChangeType(e, e.GetTypeCode()).ToString() ?? ""),
+        DateTime dt => UTF8Bytes(dt.ToFileTimeUtc().ToString()),
+        DateTimeOffset dto => UTF8Bytes(dto.UtcDateTime.ToFileTimeUtc().ToString()),
+        Guid g => g.ToByteArray(),
+        SecurityIdentifier sid => sid.ToByteArray(),
+        TimeSpan ts => UTF8Bytes(ts.Ticks.ToString()),
+        X509Certificate cert => cert.Export(X509ContentType.Cert),
+        _ => UTF8Bytes(LanguagePrimitives.ConvertTo<string>(value)),
+    };
+
+    private static byte[] UTF8Bytes(string value) => Encoding.UTF8.GetBytes(value);
 
     private static object ProcessAttributeValue(string oid, ReadOnlySpan<byte> value) => oid switch
     {

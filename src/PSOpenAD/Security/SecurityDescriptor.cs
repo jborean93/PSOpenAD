@@ -98,8 +98,12 @@ public enum ControlFlags : ushort
 
 public sealed class CommonSecurityDescriptor
 {
-    public int BinaryLength => 20 + ((Owner?.BinaryLength + Group?.BinaryLength + SystemAcl?.BinaryLength +
-        DiscretionaryAcl?.BinaryLength) ?? 0);
+    public int BinaryLength => 20 + (
+        (Owner?.BinaryLength ?? 0) +
+        (Group?.BinaryLength ?? 0) +
+        (SystemAcl?.BinaryLength ?? 0) +
+        (DiscretionaryAcl?.BinaryLength ?? 0)
+    );
 
     public byte Revision { get; }
 
@@ -157,6 +161,14 @@ public sealed class CommonSecurityDescriptor
     {
         Span<byte> data = binaryForm.AsSpan()[offset..];
         WriteBinaryForm(data);
+    }
+
+    internal byte[] ToByteArray()
+    {
+        byte[] data = new byte[BinaryLength];
+        WriteBinaryForm(data);
+
+        return data;
     }
 
     internal void WriteBinaryForm(Span<byte> data)

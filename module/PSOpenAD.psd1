@@ -81,8 +81,10 @@
         'Get-OpenADSession'
         'Get-OpenADUser'
         'Get-OpenADWhoami'
+        'New-OpenADObject'
         'New-OpenADSession'
         'New-OpenADSessionOption'
+        'Remove-OpenADObject'
         'Remove-OpenADSession'
     )
 

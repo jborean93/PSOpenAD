@@ -1,8 +1,8 @@
 using PSOpenAD.LDAP;
+using PSOpenAD.Security;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using System.Threading;
 
 namespace PSOpenAD.Module.Commands;
 
@@ -25,12 +25,17 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
     internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
         => new OpenADGroup(attributes);
 
-    internal override IEnumerable<SearchResultEntry> SearchRequest(OpenADSession session, string searchBase,
-        LDAP.LDAPFilter filter, string[] attributes, IList<LDAPControl>? serverControls, CancellationToken cancelToken)
+    internal override IEnumerable<SearchResultEntry> SearchRequest(
+        OpenADSession session,
+        string searchBase,
+        LDAPFilter filter,
+        string[] attributes,
+        IList<LDAPControl>? serverControls
+    )
     {
         foreach (SearchResultEntry principal in Operations.LdapSearchRequest(session.Connection, searchBase,
             SearchScope, 1, session.OperationTimeout, filter, new[] { "memberOf", "objectSid", "primaryGroupID" },
-            serverControls, cancelToken, this, false))
+            serverControls, CancelToken, this, false))
         {
             FilterEquality? primaryGroupFilter = null;
             LDAPFilter groupMembershipFilter;
@@ -43,7 +48,7 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
                     LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName));
             }
 
-            PSOpenAD.Security.SecurityIdentifier objectSid = new PSOpenAD.Security.SecurityIdentifier(principal.Attributes
+            SecurityIdentifier objectSid = new SecurityIdentifier(principal.Attributes
                 .Where(a => a.Name == "objectSid")
                 .Select(a => a.Values[0])
                 .FirstOrDefault());
@@ -62,13 +67,13 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
             {
                 string[] splitSid = objectSid.ToString().Split('-');
                 splitSid[splitSid.Length-1] = primaryGroupId;
-                string primaryGroupSid = System.String.Join('-', splitSid);
+                string primaryGroupSid = string.Join('-', splitSid);
                 primaryGroupFilter =
                     new FilterEquality("objectSid", LDAP.LDAPFilter.EncodeSimpleFilterValue(primaryGroupSid));
             }
 
             if (primaryGroupFilter != null) {
-                groupMembershipFilter = new FilterOr(new LDAP.LDAPFilter[] {primaryGroupFilter, groupMembershipFilter});
+                groupMembershipFilter = new FilterOr(new LDAPFilter[] {primaryGroupFilter, groupMembershipFilter});
             }
 
             _currentPrincipalDN = principal.ObjectName;
@@ -76,8 +81,8 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
             try
             {
                 foreach (SearchResultEntry result in Operations.LdapSearchRequest(session.Connection, searchBase,
-                    SearchScope, 0, session.OperationTimeout, groupMembershipFilter, attributes, serverControls, cancelToken,
-                    this, false))
+                    SearchScope, 0, session.OperationTimeout, groupMembershipFilter, attributes, serverControls,
+                    CancelToken, this, false))
                 {
                     yield return result;
                 }

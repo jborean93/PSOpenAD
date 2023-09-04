@@ -1,6 +1,5 @@
 using System;
 using System.Management.Automation;
-using System.Threading;
 
 namespace PSOpenAD.Module.Commands;
 
@@ -23,7 +22,7 @@ public class GetOpenADSession : PSCmdlet
     DefaultParameterSetName = "ComputerName"
 )]
 [OutputType(typeof(OpenADSession))]
-public class NewOpenADSession : PSCmdlet
+public class NewOpenADSession : OpenADCancellableCmdlet
 {
     [Parameter(
         Mandatory = true,
@@ -67,8 +66,6 @@ public class NewOpenADSession : PSCmdlet
     [Parameter()]
     public OpenADSessionOptions SessionOption { get; set; } = new OpenADSessionOptions();
 
-    private CancellationTokenSource? CurrentCancelToken { get; set; }
-
     protected override void ProcessRecord()
     {
         if (Uri == null)
@@ -78,21 +75,21 @@ public class NewOpenADSession : PSCmdlet
             Uri = new Uri($"{scheme}://{ComputerName}:{port}");
         }
 
-        using (CurrentCancelToken = new CancellationTokenSource())
+        OpenADSession? session = OpenADSessionFactory.CreateOrUseDefault(
+            Uri.ToString(),
+            Credential,
+            AuthType,
+            StartTLS,
+            SessionOption,
+            CancelToken,
+            this,
+            skipCache: true
+        );
+
+        if (session != null)
         {
-            OpenADSession? session = OpenADSessionFactory.CreateOrUseDefault(Uri.ToString(), Credential, AuthType,
-                StartTLS, SessionOption, CurrentCancelToken.Token, this, skipCache: true);
-
-            if (session != null)
-            {
-                WriteObject(session);
-            }
+            WriteObject(session);
         }
-    }
-
-    protected override void StopProcessing()
-    {
-        CurrentCancelToken?.Cancel();
     }
 }
 
