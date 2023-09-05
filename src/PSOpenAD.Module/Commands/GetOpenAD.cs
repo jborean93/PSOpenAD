@@ -8,7 +8,7 @@ using System.Reflection;
 
 namespace PSOpenAD.Module.Commands;
 
-internal delegate OpenADObject CreateADObjectDelegate(Dictionary<string, (PSObject[], bool)> attributes);
+internal delegate OpenADEntity CreateADObjectDelegate(Dictionary<string, (PSObject[], bool)> attributes);
 
 public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
     where T : ADObjectIdentity
@@ -236,7 +236,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
         foreach (SearchResultEntry result in SearchRequest(session, searchBase, finalFilter,
             requestedProperties.ToArray(), serverControls))
         {
-            OpenADObject adObj = CreateOutputObject(
+            OpenADEntity adObj = CreateOutputObject(
                 session,
                 result,
                 finalObjectProperties,
@@ -280,7 +280,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
     /// <param name="createFunc">If set is called to create the OpenADObject, otherwise OpenADObject is used.</param>
     /// <param name="cmdlet">The cmdlet to write verbose messages to.</param>
     /// <returns>The created ADObject</returns>
-    internal static OpenADObject CreateOutputObject(
+    internal static OpenADEntity CreateOutputObject(
         OpenADSession session,
         SearchResultEntry result,
         HashSet<string>? requestedProperties,
@@ -298,7 +298,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
             );
         }
 
-        OpenADObject adObj = createFunc == null ? new OpenADObject(props) : createFunc(props);
+        OpenADEntity adObj = createFunc == null ? new OpenADObject(props) : createFunc(props);
         (string, bool)[] defaultProperties = ((string, bool)[])adObj
             .GetType()
             .GetField("DEFAULT_PROPERTIES", BindingFlags.NonPublic | BindingFlags.Static)
@@ -312,10 +312,14 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
 
         // Adds a note property for all the attributes in the result as well as all the properties requested. If the
         // requested property doesn't have a value, then null is used.
-        IEnumerable<string> orderedProps = props.Keys;
+        IEnumerable<string> orderedProps;
         if (requestedProperties != null)
         {
-            orderedProps = orderedProps.Union(requestedProperties, StringComparer.OrdinalIgnoreCase);
+            orderedProps = requestedProperties.Union(props.Keys, StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            orderedProps = props.Keys;
         }
 
         foreach (string p in orderedProps.Where(v => !defaultProperties.Contains((v, true))))
@@ -370,8 +374,8 @@ public class GetOpenADComputer : GetOpenADOperation<ADPrincipalIdentityWithDolla
     internal override LDAPFilter FilteredClass
         => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("computer"));
 
-    internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
-        => new OpenADComputer(attributes);
+    internal override OpenADComputer CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
+        => new(attributes);
 }
 
 [Cmdlet(
@@ -389,8 +393,8 @@ public class GetOpenADUser : GetOpenADOperation<ADPrincipalIdentity>
             new FilterEquality("objectClass", LDAP.LDAPFilter.EncodeSimpleFilterValue("user"))
         });
 
-    internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
-        => new OpenADUser(attributes);
+    internal override OpenADUser CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
+        => new(attributes);
 }
 
 [Cmdlet(
@@ -405,8 +409,8 @@ public class GetOpenADGroup : GetOpenADOperation<ADPrincipalIdentity>
     internal override LDAPFilter FilteredClass
         => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("group"));
 
-    internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
-        => new OpenADGroup(attributes);
+    internal override OpenADGroup CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
+        => new(attributes);
 }
 
 [Cmdlet(
@@ -421,6 +425,6 @@ public class GetOpenADServiceAccount : GetOpenADOperation<ADPrincipalIdentityWit
     internal override LDAPFilter FilteredClass
         => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("msDS-GroupManagedServiceAccount"));
 
-    internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
-        => new OpenADServiceAccount(attributes);
+    internal override OpenADServiceAccount CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
+        => new(attributes);
 }

@@ -77,6 +77,7 @@
         'Get-OpenADGroupMember'
         'Get-OpenADObject'
         'Get-OpenADPrincipalGroupMembership'
+        'Get-OpenADRootDSE'
         'Get-OpenADServiceAccount'
         'Get-OpenADSession'
         'Get-OpenADUser'

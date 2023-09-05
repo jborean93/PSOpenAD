@@ -162,7 +162,7 @@ public class NewOpenADObject : OpenADSessionCmdletBase
             return;
         }
 
-        OpenADObject resultObj = GetOpenADObject.CreateOutputObject(
+        OpenADEntity resultObj = GetOpenADObject.CreateOutputObject(
             session,
             searchResult,
             searchProperties,

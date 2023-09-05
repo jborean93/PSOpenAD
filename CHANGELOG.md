@@ -6,6 +6,7 @@
 + Added the following cmdlets:
   + [New-OpenADObject](./docs/en-US/New-OpenADObject.md): Creates new AD objects
   + [Remove-OpenADObject](./docs/en-US/Remove-OpenADObject.md): Removes AD objects
+  + [Get-OpenADRootDSE](./docs/en-US/Get-OpenADRootDSE.md): Get the root directory server information tree
 + Fixed up `-LDAPFilter` logic to align the `\` escaping behaviour with OpenLDAP and the `Get-AD*` cmdlets
   + Before a filter with the char `\` had to have 2 more chars `[A-F0-9]` which represented the characters hex value
   + Now if the `\` does not have 2 characters after or they don't match the hex pattern, the `\` and subsequent values are treated literally

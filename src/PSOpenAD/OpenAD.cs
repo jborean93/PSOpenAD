@@ -6,21 +6,38 @@ using System.Management.Automation;
 
 namespace PSOpenAD;
 
-public class OpenADObject
+public class OpenADEntity
 {
-    internal static (string, bool)[] DEFAULT_PROPERTIES = new (string, bool)[] {
-        ("distinguishedName", true),
-        ("name", true),
-        ("objectClass", true),
-        ("objectGUID", true),
-    };
+    internal static (string, bool)[] DEFAULT_PROPERTIES = Array.Empty<(string, bool)>();
+
+    public OpenADEntity(IDictionary<string, (PSObject[], bool)> attributes)
+    {}
+
+    internal static (string, bool)[] ExtendPropertyList((string, bool)[] existing, (string, bool)[] toAdd)
+    {
+        List<(string, bool)> properties = existing.ToList();
+        properties.AddRange(toAdd);
+        return properties.ToArray();
+    }
+}
+
+public class OpenADObject : OpenADEntity
+{
+    internal new static (string, bool)[] DEFAULT_PROPERTIES = ExtendPropertyList(
+        OpenADEntity.DEFAULT_PROPERTIES, new (string, bool)[] {
+            ("distinguishedName", true),
+            ("name", true),
+            ("objectClass", true),
+            ("objectGUID", true),
+        });
 
     public string DistinguishedName { get; }
     public string Name { get; }
     public string ObjectClass { get; }
     public Guid ObjectGuid { get; }
 
-    public OpenADObject(Dictionary<string, (PSObject[], bool)> attributes)
+    public OpenADObject(IDictionary<string, (PSObject[], bool)> attributes)
+        : base(attributes)
     {
         DistinguishedName = attributes.ContainsKey("distinguishedName")
             ? (string)attributes["distinguishedName"].Item1[0].BaseObject
@@ -37,13 +54,6 @@ public class OpenADObject
             ? (Guid)attributes["objectGUID"].Item1[0].BaseObject
             : Guid.Empty;
     }
-
-    internal static (string, bool)[] ExtendPropertyList((string, bool)[] existing, (string, bool)[] toAdd)
-    {
-        List<(string, bool)> properties = existing.ToList();
-        properties.AddRange(toAdd);
-        return properties.ToArray();
-    }
 }
 
 public class OpenADPrincipal : OpenADObject
@@ -57,7 +67,7 @@ public class OpenADPrincipal : OpenADObject
     public string SamAccountName { get; }
     public SecurityIdentifier SID { get; }
 
-    public OpenADPrincipal(Dictionary<string, (PSObject[], bool)> attributes) : base(attributes)
+    public OpenADPrincipal(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
         SamAccountName = attributes.ContainsKey("sAMAccountName")
             ? (string)attributes["sAMAccountName"].Item1[0].BaseObject
@@ -81,7 +91,7 @@ public class OpenADAccount : OpenADPrincipal
 
     public string UserPrincipalName { get; }
 
-    public OpenADAccount(Dictionary<string, (PSObject[], bool)> attributes) : base(attributes)
+    public OpenADAccount(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
         UserAccountControl control = attributes.ContainsKey("userAccountControl")
             ? (UserAccountControl)attributes["userAccountControl"].Item1[0].BaseObject
@@ -103,7 +113,7 @@ public class OpenADComputer : OpenADAccount
 
     public string DNSHostName { get; }
 
-    public OpenADComputer(Dictionary<string, (PSObject[], bool)> attributes) : base(attributes)
+    public OpenADComputer(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
         DNSHostName = attributes.ContainsKey("dNSHostName")
             ? (string)attributes["dNSHostName"].Item1[0].BaseObject
@@ -120,7 +130,7 @@ public class OpenADServiceAccount : OpenADAccount
 
     public string[] ServicePrincipalNames { get; }
 
-    public OpenADServiceAccount(Dictionary<string, (PSObject[], bool)> attributes) : base(attributes)
+    public OpenADServiceAccount(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
         ServicePrincipalNames = attributes.ContainsKey("servicePrincipalName")
             ? attributes["servicePrincipalName"].Item1.Select(v => (string)v.BaseObject).ToArray()
@@ -139,7 +149,7 @@ public class OpenADUser : OpenADAccount
     public string GivenName { get; }
     public string Surname { get; }
 
-    public OpenADUser(Dictionary<string, (PSObject[], bool)> attributes) : base(attributes)
+    public OpenADUser(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
         GivenName = attributes.ContainsKey("givenName")
             ? (string)attributes["givenName"].Item1[0].BaseObject
@@ -162,7 +172,7 @@ public class OpenADGroup : OpenADPrincipal
 
     public ADGroupScope GroupScope { get; }
 
-    public OpenADGroup(Dictionary<string, (PSObject[], bool)> attributes) : base(attributes)
+    public OpenADGroup(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
         GroupType groupType = attributes.ContainsKey("groupType")
             ? (GroupType)attributes["groupType"].Item1[0].BaseObject
@@ -191,6 +201,33 @@ public enum SupportedEncryptionTypes
     Aes256CtsHmacSha196 = 0x10,
 }
 
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/6dab41f1-e379-4404-a12e-30135b711729
+public enum ADDomainControllerMode
+{
+    Unknown = -1,
+    Windows2000,
+    Windows2003 = 2,
+    Windows2008,
+    Windows2008R2,
+    Windows2012,
+    Windows2012R2,
+    Windows2016,
+}
+
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/6dd88965-8feb-4369-ae7e-075985da8071
+public enum ADDomainMode
+{
+    UnknownDomain = -1,
+    Windows2000Domain,
+    Windows2003InterimDomain,
+    Windows2003Domain,
+    Windows2008Domain,
+    Windows2008R2Domain,
+    Windows2012Domain,
+    Windows2012R2Domain,
+    Windows2016Domain,
+}
+
 public enum ADGroupCategory
 {
     Distribution,
@@ -202,6 +239,20 @@ public enum ADGroupScope
     DomainLocal,
     Global,
     Universal,
+}
+
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/d49624d0-9320-4368-8b0c-a7998ac2abdb
+public enum ADForestMode
+{
+    UnknownForest = -1,
+    Windows2000Forest,
+    Windows2003InterimForest,
+    Windows2003Forest,
+    Windows2008Forest,
+    Windows2008R2Forest,
+    Windows2012Forest,
+    Windows2012R2Forest,
+    Windows2016Forest,
 }
 
 // https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/11972272-09ec-4a42-bf5e-3e99b321cf55

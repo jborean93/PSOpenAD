@@ -29,6 +29,9 @@ Gets one or more Active Directory objects.
 ### [Get-OpenADPrincipalGroupMembership](Get-OpenADPrincipalGroupMembership.md)
 Get the Active Directory groups that an object belongs to.
 
+### [Get-OpenADRootDSE](Get-OpenADRootDSE.md)
+Gets the root of a directory server information tree.
+
 ### [Get-OpenADServiceAccount](Get-OpenADServiceAccount.md)
 Gets one or more Active Directory managed service accounts or group managed service accounts.
 
