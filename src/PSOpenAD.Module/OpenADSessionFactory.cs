@@ -232,7 +232,7 @@ internal sealed class OpenADSessionFactory
         else if (startTls)
         {
             cmdlet.WriteVerbose("Sending StartTLS request to the server");
-            int startTlsId = connection.Session.ExtendedRequest("1.3.6.1.4.1.1466.20037");
+            int startTlsId = connection.Session.ExtendedRequest(ExtendedOperations.LDAP_SERVER_START_TLS_OID);
 
             ExtendedResponse extResp = (ExtendedResponse)connection.WaitForMessage(startTlsId,
                 cancelToken: cancelToken);

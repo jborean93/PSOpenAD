@@ -13,7 +13,7 @@ public class GetOpenADWhoami : OpenADSessionCmdletBase
 {
     protected override void ProcessRecordWithSession(OpenADSession session)
     {
-        int whoamiId = session.Ldap.ExtendedRequest("1.3.6.1.4.1.4203.1.11.3");
+        int whoamiId = session.Ldap.ExtendedRequest(ExtendedOperations.LDAP_SERVER_WHO_AM_I_OID);
         ExtendedResponse extResp = (ExtendedResponse)session.Connection.WaitForMessage(whoamiId,
             cancelToken: CancelToken);
         if (extResp.Result.ResultCode != LDAPResultCode.Success)
