@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.4.0 - TBD
+## v0.4.0 - 2023-09-05
 
 + Moved module code into a separate Assembly Load Context to avoid assembly conflicts for dependencies
 + Added the following cmdlets:
