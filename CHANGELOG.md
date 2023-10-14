@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.4.1 - TBD
+
++ Fix up safe SSPI context handle lifetime handling to avoid process crash
+
 ## v0.4.0 - 2023-09-05
 
 + Moved module code into a separate Assembly Load Context to avoid assembly conflicts for dependencies
