@@ -162,15 +162,15 @@ internal static class SSPI
 
     [DllImport("Secur32.dll", CharSet = CharSet.Unicode)]
     private static unsafe extern Int32 InitializeSecurityContextW(
-        SafeSspiCredentialHandle phCredential,
-        SafeSspiContextHandle phContext,
+        Helpers.SecHandle* phCredential,
+        Helpers.SecHandle* phContext,
         [MarshalAs(UnmanagedType.LPWStr)] string pszTargetName,
         InitiatorContextRequestFlags fContextReq,
         UInt32 Reserved1,
         TargetDataRep TargetDataRep,
         Helpers.SecBufferDesc* pInput,
         UInt32 Reserved2,
-        SafeSspiContextHandle phNewContext,
+        Helpers.SecHandle* phNewContext,
         Helpers.SecBufferDesc* pOutput,
         out InitiatorContextReturnFlags pfContextAttr,
         out Helpers.SECURITY_INTEGER ptsExpiry);
@@ -223,6 +223,7 @@ internal static class SSPI
                 if (res != 0)
                     throw new SspiException(res, "AcquireCredentialsHandle");
 
+                cred.SSPIFree = true;
                 UInt64 expiry = (UInt64)expiryStruct.HighPart << 32 | (UInt64)expiryStruct.LowPart;
                 return new SspiCredential(cred, expiry);
             }
@@ -320,17 +321,25 @@ internal static class SSPI
         {
             fixed (Helpers.SecBuffer* inputBuffers = input, outputBuffers = output)
             {
-                SafeSspiContextHandle inputContext;
-                SafeSspiContextHandle outputContext;
-                if (context == null)
+                Helpers.SecHandle* credPtr = null;
+                if (cred != null)
                 {
-                    inputContext = SafeSspiContextHandle.NULL_CONTEXT;
-                    outputContext = new SafeSspiContextHandle();
+                    credPtr = (Helpers.SecHandle*)cred.DangerousGetHandle();
+                }
+
+                Helpers.SecHandle* inputContextPtr = null;
+                Helpers.SecHandle* outputContextPtr = null;
+                SafeSspiContextHandle newContext;
+                if (context == null || context.DangerousGetHandle() == IntPtr.Zero)
+                {
+                    newContext = new();
+                    outputContextPtr = (Helpers.SecHandle*)newContext.DangerousGetHandle();
                 }
                 else
                 {
-                    inputContext = context;
-                    outputContext = context;
+                    newContext = context;
+                    inputContextPtr = (Helpers.SecHandle*)context.DangerousGetHandle();
+                    outputContextPtr = inputContextPtr;
                 }
 
                 Helpers.SecBufferDesc inputBuffer = new();
@@ -353,11 +362,13 @@ internal static class SSPI
                     outputPtr = &outputBuffer;
                 }
 
-                int res = InitializeSecurityContextW(cred, inputContext, targetName, contextReq, 0, dataRep,
-                    inputPtr, 0, outputContext, outputPtr, out var contextattr, out var expiryStruct);
+                int res = InitializeSecurityContextW(credPtr, inputContextPtr, targetName, contextReq, 0, dataRep,
+                    inputPtr, 0, outputContextPtr, outputPtr, out var contextattr, out var expiryStruct);
 
                 if (res != 0 && res != SEC_I_CONTINUE_NEEDED)
                     throw new SspiException(res, "InitializeSecurityContext");
+
+                newContext.SSPIFree = true;
 
                 try
                 {
@@ -374,7 +385,7 @@ internal static class SSPI
                         outputTokens.Add(data);
                     }
 
-                    return new SspiSecContext(outputContext, outputTokens.ToArray(), expiry, contextattr,
+                    return new SspiSecContext(newContext, outputTokens.ToArray(), expiry, contextattr,
                         moreNeeded);
                 }
                 finally
@@ -615,13 +626,20 @@ internal enum WinNTAuthIdentityFlags : uint
 
 internal class SafeSspiCredentialHandle : SafeHandle
 {
-    internal SafeSspiCredentialHandle() : base(Marshal.AllocHGlobal(Marshal.SizeOf<Helpers.SecHandle>()), true) { }
+    internal bool SSPIFree = false;
+
+    internal SafeSspiCredentialHandle()
+        : base(Marshal.AllocHGlobal(Marshal.SizeOf<Helpers.SecHandle>()), true)
+    {}
 
     public override bool IsInvalid => handle == IntPtr.Zero;
 
     protected override bool ReleaseHandle()
     {
-        SSPI.FreeCredentialsHandle(handle);
+        if (SSPIFree)
+        {
+            SSPI.FreeCredentialsHandle(handle);
+        }
         Marshal.FreeHGlobal(handle);
 
         return true;
@@ -630,16 +648,25 @@ internal class SafeSspiCredentialHandle : SafeHandle
 
 internal class SafeSspiContextHandle : SafeHandle
 {
-    public static readonly SafeSspiContextHandle NULL_CONTEXT = new(IntPtr.Zero, false);
+    internal bool SSPIFree = false;
 
-    internal SafeSspiContextHandle() : base(Marshal.AllocHGlobal(Marshal.SizeOf<Helpers.SecHandle>()), true) { }
-    internal SafeSspiContextHandle(IntPtr handle, bool ownsHandle) : base(handle, ownsHandle) { }
+    internal SafeSspiContextHandle()
+        : base(Marshal.AllocHGlobal(Marshal.SizeOf<Helpers.SecHandle>()), true)
+    {}
+
+    internal SafeSspiContextHandle(IntPtr handle, bool ownsHandle)
+        : base(handle, ownsHandle)
+    {}
 
     public override bool IsInvalid => handle == IntPtr.Zero;
 
     protected override bool ReleaseHandle()
     {
-        SSPI.DeleteSecurityContext(handle);
+        if (SSPIFree)
+        {
+            SSPI.DeleteSecurityContext(handle);
+        }
+
         Marshal.FreeHGlobal(handle);
 
         return true;

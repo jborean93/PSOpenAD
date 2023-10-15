@@ -90,8 +90,6 @@ task Sign {
         return
     }
 
-    Import-Module -Name (Join-Path $ReleasePath "$ModuleName.psd1") -ErrorAction Stop
-
     $key = Get-OpenAuthenticodeAzKey -Vault $vaultName -Certificate $vaultCert
     $signParams = @{
         Key = $key
