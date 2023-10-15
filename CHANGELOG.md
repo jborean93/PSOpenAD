@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.4.1 - TBD
+## v0.4.1 - 2023-10-16
 
 + Fix up safe SSPI context handle lifetime handling to avoid process crash
 
