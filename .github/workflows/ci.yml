@@ -57,21 +57,26 @@ jobs:
       fail-fast: false
       matrix:
         info:
-        - name: Fedora_37_72_MIT
-          container: fedora:37
+        - name: Linux_37_72_MIT
+          container: almalinux:9
           os: ubuntu-latest
           gssapi_provider: mit
           version: '7.2.0'
-        - name: Fedora_37_73_MIT
-          container: fedora:37
+        - name: Linux_37_73_MIT
+          container: almalinux:9
           os: ubuntu-latest
           gssapi_provider: mit
           version: '7.3.0'
-        - name: Fedora_37_73_Heimdal
-          container: fedora:37
+        - name: Linux_37_74_MIT
+          container: almalinux:9
+          os: ubuntu-latest
+          gssapi_provider: mit
+          version: '7.4.0'
+        - name: Linux_37_74_Heimdal
+          container: almalinux:9
           os: ubuntu-latest
           gssapi_provider: heimdal
-          version: '7.3.0'
+          version: '7.4.0'
 
     steps:
     - uses: actions/checkout@v4

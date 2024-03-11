@@ -20,7 +20,13 @@ lib::setup::system_requirements() {
 }
 
 lib::setup::system_requirements::el() {
-    rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm
+    rpm -Uvh https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
+
+    dnf install -y \
+        --nogpgcheck \
+        --disablerepo=\*modul\* \
+        epel-release \
+        powershell
 
     if [ x"${GSSAPI_PROVIDER}" = "xheimdal" ]; then
         # heimdal-libs - Provides the Heimdal GSSAPI/Krb5 Library
@@ -28,12 +34,13 @@ lib::setup::system_requirements::el() {
         # heimdal-workstation - Provides kinit for tests but not needed by PSOpenAD
         dnf install -y \
             --nogpgcheck \
-            --disablerepo=\*modul\* \
+            --disablerepo=\*module\* \
+            --disablerepo=packages-microsoft-com-prod \
             heimdal-libs \
             heimdal-path \
             heimdal-workstation \
-            dotnet-sdk-6.0 \
-            wget
+            dotnet-runtime-6.0 \
+            dotnet-sdk-8.0
 
         source /etc/profile.d/heimdal.sh
 
@@ -49,27 +56,15 @@ lib::setup::system_requirements::el() {
         # krb5-workstation - Provides kinit for tests but not needed by PSOpenAD
         dnf install -y \
             --nogpgcheck \
-            --disablerepo=\*modul\* \
+            --disablerepo=\*module\* \
+            --disablerepo=packages-microsoft-com-prod \
             krb5-libs \
             krb5-workstation \
-            dotnet-sdk-6.0 \
-            wget
+            dotnet-runtime-6.0 \
+            dotnet-sdk-8.0
     fi
 
-    mkdir "/tmp/PowerShell-${PWSH_VERSION}"
-    echo "Downloading PowerShell ${PWSH_VERSION}"
-    wget \
-        --quiet \
-        --output-document "/tmp/powershell.tar.gz" \
-        "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz"
-
-    echo "Extracting PowerShell ${PWSH_VERSION}"
-    tar xf \
-        "/tmp/powershell.tar.gz" \
-        --directory "/tmp/PowerShell-${PWSH_VERSION}"
-    chmod +x "/tmp/PowerShell-${PWSH_VERSION}/pwsh"
-
-    export PATH="/tmp/PowerShell-${PWSH_VERSION}:~/.dotnet/tools:${PATH}"
+    export PATH="/opt/microsoft/powershell/7:${PATH}"
 }
 
 lib::setup::gssapi() {
