@@ -7,10 +7,19 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="System.Formats.Asn1" Version="6.0.0" PrivateAssets="all" />
     <PackageReference Include="System.Management.Automation" Version="7.2.0" PrivateAssets="all" />
     <InternalsVisibleTo Include="PSOpenADTests" />
     <InternalsVisibleTo Include="$(AssemblyName).Module" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all"/>
   </ItemGroup>
 </Project>

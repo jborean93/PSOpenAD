@@ -7,20 +7,21 @@ on:
 jobs:
   build:
     name: publish
+    if: startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Needed for GitHub release asset task
 
     steps:
     - name: Download
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       with:
         workflow: ci.yml
         commit: ${{ github.sha }}
         name: PSModule
 
     - name: Upload nupkg as release asset
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: '*.nupkg'
 

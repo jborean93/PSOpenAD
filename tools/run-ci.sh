@@ -100,8 +100,6 @@ $DOCKER_BIN run \
 
 source ./tools/lib.sh
 
-rm -f output/PSOpenAD*.nupkg
-
 lib::setup::system_requirements
 lib::setup::gssapi
 lib::tests::run

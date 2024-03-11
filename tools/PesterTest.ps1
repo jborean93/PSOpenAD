@@ -1,3 +1,7 @@
+using namespace System.IO
+
+#Requires -Module Pester
+
 <#
 .SYNOPSIS
 Run Pester test
@@ -21,11 +25,6 @@ param (
 
 $ErrorActionPreference = 'Stop'
 
-$requirements = Import-PowerShellDataFile ([IO.Path]::Combine($PSScriptRoot, '..', 'requirements-dev.psd1'))
-foreach ($req in $requirements.GetEnumerator()) {
-    Import-Module -Name ([IO.Path]::Combine($PSScriptRoot, 'Modules', $req.Key))
-}
-
 [PSCustomObject]$PSVersionTable |
     Select-Object -Property *, @{N = 'Architecture'; E = {
             switch ([IntPtr]::Size) {
@@ -40,8 +39,8 @@ foreach ($req in $requirements.GetEnumerator()) {
 
 $configuration = [PesterConfiguration]::Default
 $configuration.Output.Verbosity = 'Detailed'
-$configuration.Run.Exit = $true
 $configuration.Run.Path = $TestPath
+$configuration.Run.Throw = $true
 $configuration.TestResult.Enabled = $true
 $configuration.TestResult.OutputPath = $OutputFile
 $configuration.TestResult.OutputFormat = 'NUnitXml'

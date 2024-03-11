@@ -16,8 +16,42 @@ env:
   BUILD_CONFIGURATION: ${{ fromJSON('["Debug", "Release"]')[github.ref == 'refs/heads/main'] }}
 
 jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Azure OIDC auth
+      contents: read  # Repo checkout
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: OIDC Login to Azure
+      if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Build module
+      shell: pwsh
+      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
+      env:
+        AZURE_KEYVAULT_NAME: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_KEYVAULT_NAME || '' }}
+        AZURE_KEYVAULT_CERT: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_KEYVAULT_CERT || '' }}
+
+    - name: Capture PowerShell Module
+      uses: actions/upload-artifact@v4
+      with:
+        name: PSModule
+        path: output/*.nupkg
+
   test:
     name: test
+    needs:
+    - build
     runs-on: ${{ matrix.info.os }}
     strategy:
       fail-fast: false
@@ -40,7 +74,13 @@ jobs:
           version: '7.3.0'
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+
+    - name: Restore Built PowerShell Module
+      uses: actions/download-artifact@v4
+      with:
+        name: PSModule
+        path: output
 
     - name: Run Tests
       shell: bash
@@ -53,58 +93,22 @@ jobs:
 
     - name: Upload Test Results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Unit Test Results (${{ matrix.info.name }})
         path: ./output/TestResults/Pester.xml
 
     - name: Upload Coverage Results
-      if: always() && !startsWith(github.ref, 'refs/tags/v')
-      uses: actions/upload-artifact@v3
+      if: always()
+      uses: actions/upload-artifact@v4
       with:
         name: Coverage Results (${{ matrix.info.name }})
         path: ./output/TestResults/Coverage.xml
 
     - name: Upload Coverage to codecov
-      if: always() && !startsWith(github.ref, 'refs/tags/v')
-      uses: codecov/codecov-action@v3
+      if: always()
+      uses: codecov/codecov-action@v4
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         files: ./output/TestResults/Coverage.xml
         flags: ${{ matrix.info.name }}
-
-  # Would like to build for testing but it break coverage, need to reinvestigate if this gets fixed.
-  # https://github.com/coverlet-coverage/coverlet/issues/1271
-  build:
-    name: build
-    needs:
-    - test
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # Azure OIDC auth
-      contents: read  # Repo checkout
-
-    steps:
-    - name: Check out repository
-      uses: actions/checkout@v3
-
-    - name: OIDC Login to Azure
-      if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-    - name: Build module - Release
-      if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
-      shell: pwsh
-      run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
-      env:
-        AZURE_KEYVAULT_NAME: ${{ secrets.AZURE_KEYVAULT_NAME }}
-        AZURE_KEYVAULT_CERT: ${{ secrets.AZURE_KEYVAULT_CERT }}
-
-    - name: Capture PowerShell Module
-      uses: actions/upload-artifact@v3
-      with:
-        name: PSModule
-        path: output/*.nupkg

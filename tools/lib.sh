@@ -122,8 +122,10 @@ ConvertTo-Json -InputObject ([Ordered]@{
 exit
 EOF
 
-    pwsh -File ./build.ps1 -Configuration "${BUILD_CONFIGURATION:-Debug}" -Task Build
-    pwsh -File ./build.ps1 -Configuration "${BUILD_CONFIGURATION:-Debug}" -Task Test
+    pwsh -File ./build.ps1 \
+        -Configuration "${BUILD_CONFIGURATION:-Debug}" \
+        -Task Test \
+        -ModuleNupkg output/*.nupkg
 
     if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
         echo "::endgroup::"
