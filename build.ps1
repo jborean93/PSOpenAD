@@ -1,3 +1,8 @@
+using namespace System.IO
+using namespace System.Runtime.InteropServices
+
+#Requires -Version 7.2
+
 [CmdletBinding()]
 param(
     [Parameter()]
@@ -6,61 +11,43 @@ param(
     $Configuration = 'Debug',
 
     [Parameter()]
-    [string[]]
-    $Task = 'Build'
+    [ValidateSet('Build', 'Test')]
+    [string]
+    $Task = 'Build',
+
+    [Parameter()]
+    [Version]
+    $PowerShellVersion = $PSVersionTable.PSVersion,
+
+    [Parameter()]
+    [Architecture]
+    $PowerShellArch = [RuntimeInformation]::ProcessArchitecture,
+
+    [Parameter()]
+    [string]
+    $ModuleNupkg
 )
 
-end {
-    if ($PSEdition -eq 'Desktop') {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 'Tls12'
-    }
+$ErrorActionPreference = 'Stop'
 
-    $modulePath = [IO.Path]::Combine($PSScriptRoot, 'tools', 'Modules')
-    $requirements = Import-PowerShellDataFile ([IO.Path]::Combine($PSScriptRoot, 'requirements-dev.psd1'))
-    foreach ($req in $requirements.GetEnumerator()) {
-        $targetPath = [IO.Path]::Combine($modulePath, $req.Key)
+. ([Path]::Combine($PSScriptRoot, "tools", "common.ps1"))
 
-        if (Test-Path -LiteralPath $targetPath) {
-            Import-Module -Name $targetPath -Force -ErrorAction Stop
-            continue
-        }
+$manifestPath = ([Path]::Combine($PSScriptRoot, 'manifest.psd1'))
+$Manifest = [Manifest]::new($Configuration, $PowerShellVersion, $PowerShellArch, $manifestPath)
 
-        Write-Host "Installing build pre-req $($req.Key) as it is not installed"
-        New-Item -Path $targetPath -ItemType Directory | Out-Null
-
-        $webParams = @{
-            Uri = "https://www.powershellgallery.com/api/v2/package/$($req.Key)/$($req.Value)"
-            OutFile = [IO.Path]::Combine($modulePath, "$($req.Key).zip")  # WinPS requires the .zip extension to extract
-            UseBasicParsing = $true
-        }
-        if ('Authentication' -in (Get-Command -Name Invoke-WebRequest).Parameters.Keys) {
-            $webParams.Authentication = 'None'
-        }
-
-        $oldProgress = $ProgressPreference
-        $ProgressPreference = 'SilentlyContinue'
-        try {
-            Invoke-WebRequest @webParams
-            Expand-Archive -Path $webParams.OutFile -DestinationPath $targetPath -Force
-            Remove-Item -LiteralPath $webParams.OutFile -Force
-        }
-        finally {
-            $ProgressPreference = $oldProgress
-        }
-
-        Import-Module -Name $targetPath -Force -ErrorAction Stop
-    }
-
-    $dotnetTools = @(dotnet tool list --global) -join "`n"
-    if (-not $dotnetTools.Contains('coverlet.console')) {
-        Write-Host 'Installing dotnet tool coverlet.console'
-        dotnet tool install --global coverlet.console
-    }
-
-    $invokeBuildSplat = @{
-        Task = $Task
-        File = (Get-Item ([IO.Path]::Combine($PSScriptRoot, '*.build.ps1'))).FullName
-        Configuration = $Configuration
-    }
-    Invoke-Build @invokeBuildSplat
+if ($ModuleNupkg) {
+    Write-Host "Expanding module nupkg to '$($Manifest.ReleasePath)'" -ForegroundColor Cyan
+    Expand-Nupkg -Path $ModuleNupkg -DestinationPath $Manifest.ReleasePath
 }
+
+Write-Host "Installing PowerShell dependencies" -ForegroundColor Cyan
+$deps = $Task -eq 'Build' ? $Manifest.BuildRequirements : $Manifest.TestRequirements
+$deps | Install-BuildDependencies
+
+$buildScript = [Path]::Combine($PSScriptRoot, "tools", "InvokeBuild.ps1")
+$invokeBuildSplat = @{
+    Task = $Task
+    File = $buildScript
+    Manifest = $manifest
+}
+Invoke-Build @invokeBuildSplat

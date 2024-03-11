@@ -5,20 +5,30 @@
 # an ALC for the moulde and any dependencies of that module to be loaded in
 # that ALC.
 
+$importModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 $moduleName = [System.IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
-Add-Type -Path ([System.IO.Path]::Combine($PSScriptRoot, 'bin', 'net6.0', "$moduleName.dll"))
+
+$isReload = $true
+if (-not ('PSOpenAD.LoadContext' -as [type])) {
+    $isReload = $true
+    Add-Type -Path ([System.IO.Path]::Combine($PSScriptRoot, 'bin', 'net6.0', "$moduleName.dll"))
+}
 
 $mainModule = [PSOpenAD.LoadContext]::Initialize()
-Import-Module -Assembly $mainModule
+$innerMod = &$importModule -Assembly $mainModule -PassThru:$isReload
 
-# Use this for testing that the dlls are loaded correctly and outside the Default ALC.
-# [System.AppDomain]::CurrentDomain.GetAssemblies() |
-#     Where-Object { $_.GetName().Name -like "*PSOpenAD*" } |
-#     ForEach-Object {
-#         $alc = [Runtime.Loader.AssemblyLoadContext]::GetLoadContext($_)
-#         [PSCustomObject]@{
-#             Name = $_.FullName
-#             Location = $_.Location
-#             ALC = $alc
-#         }
-#     } | Format-List
+if ($innterMod) {
+    # Bug in pwsh, Import-Module in an assembly will pick up a cached instance
+    # and not call the same path to set the nested module's cmdlets to the
+    # current module scope. This is only technically needed if someone is
+    # calling 'Import-Module -Name PSEtw -Force' a second time. The first
+    # import is still fine.
+    # https://github.com/PowerShell/PowerShell/issues/20710
+    $addExportedCmdlet = [System.Management.Automation.PSModuleInfo].GetMethod(
+        'AddExportedCmdlet',
+        [System.Reflection.BindingFlags]'Instance, NonPublic'
+    )
+    foreach ($cmd in $innerMod.ExportedCmdlets.Values) {
+        $addExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $cmd))
+    }
+}
