@@ -2,11 +2,8 @@
 
 Describe "Get-OpenADPrincipalGroupMembership cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
     BeforeAll {
-        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
-        $cred = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-
-        $session = New-OpenADSession -ComputerName $PSOpenADSettings.Server -Credential $cred
-        $dcName = @($PSOpenADSettings.Server -split '\.')[0]
+        $session = New-TestOpenADSession
+        $dcName = @($session.DomainController -split '\.')[0]
         $dn = Get-OpenADComputer -Session $session -Identity $dcName | Select-Object -ExpandProperty DistinguishedName
     }
 
@@ -68,7 +65,7 @@ Describe "Get-OpenADPrincipalGroupMembership cmdlet" -Skip:(-not $PSOpenADSettin
         }
 
         It "Finds test user's groups" {
-            $user = Get-OpenADUser -Identity 'TestGroupSubMember'
+            $user = Get-OpenADUser -Session $session -Identity 'TestGroupSubMember'
             $actual = $user | Get-OpenADPrincipalGroupMembership -Session $session |
                 Sort-Object -Property SamAccountName
             $actual.Count | Should -Be 2
@@ -85,7 +82,7 @@ Describe "Get-OpenADPrincipalGroupMembership cmdlet" -Skip:(-not $PSOpenADSettin
         }
 
         It "Finds test user's groups recursively" {
-            $user = Get-OpenADUser -Identity 'TestGroupSubMember'
+            $user = Get-OpenADUser -Session $session -Identity 'TestGroupSubMember'
             $actual = $user | Get-OpenADPrincipalGroupMembership -Recursive -Session $session |
                 Sort-Object -Property SamAccountName
             $actual.Count | Should -Be 3

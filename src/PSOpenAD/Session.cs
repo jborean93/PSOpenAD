@@ -128,7 +128,7 @@ internal static class GlobalState
     public static int SessionCounter = 1;
 
     /// <summary>Information about LDAP classes and their attributes.</summary>
-    public static Dictionary<string, ObjectClass> ClassDefinitions = new();
+    public static SchemaMetadata? SchemaMetadata;
 
     /// <summary>The GSSAPI/SSPI provider that is used.</summary>
     public static GssapiProvider GssapiProvider;

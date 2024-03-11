@@ -11,6 +11,8 @@ Currently the module is limited to just getting data from an LDAP/AD environment
 
 A list of the cmdlets in this module can be found at [PSOpenAD](./PSOpenAD.md).
 
+The [about_OpenADAttributeFormats](./about_OpenADAttributeFormats.md) docs explain how LDAP attributes can be set and the behaviour around type conversions.
+
 The [about_OpenADAuthentication](./about_OpenADAuthentication.md) docs go into futher detail how authentication works against an LDAP/AD server.
 It also explains how to set up authentication on non-Windows hosts.
 

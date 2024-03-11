@@ -87,6 +87,7 @@
         'New-OpenADSessionOption'
         'Remove-OpenADObject'
         'Remove-OpenADSession'
+        'Set-OpenADObject'
     )
 
     # Variables to export from this module

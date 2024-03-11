@@ -16,26 +16,29 @@ Gets one or more Active Directory objects.
 ```
 Get-OpenADObject [-IncludeDeletedObjects] [-Server <String>] [-AuthType <AuthenticationMethod>]
  [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-LDAPFilter <String>]
- [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
+ [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
 Get-OpenADObject [-IncludeDeletedObjects] -Session <OpenADSession> [-Identity] <ADObjectIdentity>
- [-Property <String[]>] [<CommonParameters>]
+ [-Property <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
 ```
 Get-OpenADObject [-IncludeDeletedObjects] -Session <OpenADSession> [-LDAPFilter <String>]
- [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
+ [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ServerIdentity
 ```
 Get-OpenADObject [-IncludeDeletedObjects] [-Server <String>] [-AuthType <AuthenticationMethod>]
  [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
- [-Identity] <ADObjectIdentity> [-Property <String[]>] [<CommonParameters>]
+ [-Identity] <ADObjectIdentity> [-Property <String[]>] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -127,7 +130,7 @@ Accept wildcard characters: False
 ```
 
 ### -Identity
-Specifies the Active Directory object to search for using one fo the following formats:
+Specifies the Active Directory object to search for using one of the following formats:
 
 + `DistinguishedName`
 
@@ -180,6 +183,21 @@ Required: False
 Position: Named
 Default value: None
 Accept pipeline input: True (ByPropertyName)
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 

@@ -15,7 +15,7 @@ Creates an object that contains advanced options for an `OpenAD` session.
 ```
 New-OpenADSessionOption [-NoEncryption] [-NoSigning] [-NoChannelBinding] [-SkipCertificateCheck]
  [-ConnectTimeout <Int32>] [-OperationTimeout <Int32>] [-TracePath <String>]
- [-ClientCertificate <X509Certificate>] [<CommonParameters>]
+ [-ClientCertificate <X509Certificate>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -177,6 +177,21 @@ The time, in milliseconds to wait until an individual request like a search requ
 Type: Int32
 Parameter Sets: (All)
 Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
 
 Required: False
 Position: Named

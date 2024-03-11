@@ -214,37 +214,36 @@ internal sealed class ObjectClass
     private HashSet<string>? _validAttributes;
 
     public string Name { get; }
-    public ObjectClass[] SuperTypes { get; }
-    public ObjectClass[] AuxiliaryTypes { get; }
-    internal List<ObjectClass> SubTypes { get; }
-    public string[] Must { get; }
-    public string[] May { get; }
+    public HashSet<string> SuperTypes { get; }
+    internal HashSet<string> SubTypes { get; }
+    public HashSet<string> Must { get; }
+    public HashSet<string> May { get; }
 
-    public HashSet<string> ValidAttributes => _validAttributes ?? GetValidAttributes();
-
-    public ObjectClass(string name, ObjectClass[] superTypes, ObjectClass[] auxTypes, string[] must, string[] may)
+    public ObjectClass(
+        string name,
+        string[] superTypes,
+        string[] must,
+        string[] may)
     {
         Name = name;
-        SuperTypes = superTypes;
-        AuxiliaryTypes = auxTypes;
+        SuperTypes = superTypes.ToHashSet();
         SubTypes = new();
-        Must = must;
-        May = may;
-
-        foreach (ObjectClass superType in superTypes)
-        {
-            superType.SubTypes.Add(this);
-        }
+        Must = must.ToHashSet();
+        May = may.ToHashSet();
     }
 
-    private HashSet<string> GetValidAttributes()
+    public HashSet<string> GetValidAttributes(Dictionary<string, ObjectClass> registry)
     {
-        _validAttributes = Must.Concat(May).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (ObjectClass subType in SubTypes)
+        if (_validAttributes == null)
         {
-            _validAttributes.UnionWith(subType.ValidAttributes);
+            HashSet<string> attributes = Must.Concat(May).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (string subType in SubTypes)
+            {
+                ObjectClass subClass = registry[subType];
+                attributes.UnionWith(subClass.GetValidAttributes(registry));
+            }
+            _validAttributes = attributes.OrderBy(p => p).ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
-        _validAttributes = _validAttributes.OrderBy(p => p).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return _validAttributes;
     }
@@ -255,86 +254,66 @@ internal sealed class SchemaMetadata
     private readonly Dictionary<string, AttributeTypeDescription> _typeInformation;
     private readonly Dictionary<string, ObjectClass> _classInformation = new();
 
-    public SchemaMetadata(Dictionary<string, AttributeTypeDescription> typeInformation,
+    public SchemaMetadata(
+        Dictionary<string, AttributeTypeDescription> typeInformation,
         Dictionary<string, DITContentRuleDescription> ditInformation,
-        Dictionary<string, ObjectClassDescription> classInformation)
+        Dictionary<string, ObjectClassDescription> abstractClassInformation,
+        Dictionary<string, ObjectClassDescription> auxClassInformation,
+        Dictionary<string, ObjectClassDescription> structClassInformation)
     {
         _typeInformation = typeInformation;
 
-        Queue<ObjectClassDescription> processing = new(classInformation.Values);
-        while (processing.Count > 0)
+        // process abstract classes as they can only inherit from each other.
+        // top is special we want to process that one first as the rest will
+        // inherit from it.
+        if (abstractClassInformation.Remove("top", out ObjectClassDescription? topClass))
         {
-            ObjectClassDescription desc = processing.Dequeue();
-            bool ready = true;
+            RegisterClassInformation(new[] { topClass });
+        }
+        RegisterClassInformation(abstractClassInformation.Values);
 
-            List<ObjectClass> superTypes = new();
-            List<ObjectClass> auxTypes = new();
-            HashSet<string> must = new();
-            HashSet<string> may = new();
-            foreach (string superType in desc.SuperTypes)
-            {
-                if (_classInformation.ContainsKey(superType))
-                {
-                    ObjectClass super = _classInformation[superType];
-                    superTypes.Add(super);
-                    must.UnionWith(super.Must);
-                    may.UnionWith(super.May);
-                }
-                else
-                {
-                    ready = false;
-                    break;
-                }
-            }
+        // process auxiliary classes as they can inherit from abstract or other
+        // auxiliary classes
+        RegisterClassInformation(auxClassInformation.Values);
 
-            if (ready && ditInformation.ContainsKey(desc.OID))
-            {
-                DITContentRuleDescription ditRule = ditInformation[desc.OID];
-                foreach (string auxType in ditRule.Auxiliary)
-                {
-                    if (_classInformation.ContainsKey(auxType))
-                    {
-                        ObjectClass aux = _classInformation[auxType];
-                        auxTypes.Add(aux);
-                        must.UnionWith(aux.Must);
-                        may.UnionWith(aux.May);
-                    }
-                    else
-                    {
-                        ready = false;
-                        break;
-                    }
-                }
-            }
+        // process structural classes at the end.
+        RegisterClassInformation(structClassInformation.Values);
 
-            if (ready)
+        // Add the auxiliary class mappings to each class and its sub types.
+        foreach (DITContentRuleDescription auxRule in ditInformation.Values)
+        {
+            Queue<string> classQueue = new(new[] { auxRule.Names[0] });
+            while (classQueue.Count > 0)
             {
-                must.UnionWith(desc.Must);
-                may.UnionWith(desc.May);
-                string className = desc.Names[0];
-                _classInformation[className] = new(className, superTypes.ToArray(), auxTypes.ToArray(), must.ToArray(),
-                    may.ToArray());
+                string className = classQueue.Dequeue();
+                ObjectClass rawInfo = _classInformation[className];
+                rawInfo.May.UnionWith(auxRule.May);
+                rawInfo.Must.UnionWith(auxRule.Must);
 
-                // Store this info in the global state if this class hasn't been cached yet. This is used for the
-                // property argument completer.
-                if (!GlobalState.ClassDefinitions.ContainsKey(className))
+                foreach (string subType in rawInfo.SubTypes)
                 {
-                    GlobalState.ClassDefinitions[className] = _classInformation[className];
+                    classQueue.Enqueue(subType);
                 }
-            }
-            else
-            {
-                processing.Enqueue(desc);
             }
         }
+
+        // Used by argument completors.
+        GlobalState.SchemaMetadata ??= this;
     }
 
     public void RegisterTransformer(string attribute, DefaultOverrider.CustomTransform transformer)
         => DefaultOverrider.Overrides[attribute] = transformer;
 
-    public ObjectClass? GetClassInformation(string name)
+    public HashSet<string>? GetClassAttributesInformation(string name)
     {
-        return _classInformation.GetValueOrDefault(name);
+        if (_classInformation.TryGetValue(name, out ObjectClass? classInfo))
+        {
+            return classInfo.GetValidAttributes(_classInformation);
+        }
+        else
+        {
+            return null;
+        }
     }
 
     public (PSObject[], bool) TransformAttributeValue(string attribute, IList<byte[]> value, PSCmdlet? cmdlet)
@@ -427,6 +406,80 @@ internal sealed class SchemaMetadata
         X509Certificate cert => cert.Export(X509ContentType.Cert),
         _ => UTF8Bytes(LanguagePrimitives.ConvertTo<string>(value)),
     };
+
+    private void RegisterClassInformation(IEnumerable<ObjectClassDescription> classes)
+    {
+        Queue<ObjectClass> classQueue = new();
+        foreach (ObjectClassDescription desc in classes)
+        {
+            string className = desc.Names[0];
+            ObjectClass rawInfo = new(className, desc.SuperTypes, desc.Must, desc.May);
+
+            bool ready = true;
+            foreach (string superType in rawInfo.SuperTypes)
+            {
+                if (!_classInformation.ContainsKey(superType))
+                {
+                    ready = false;
+                    break;
+                }
+            }
+
+            if (ready)
+            {
+                foreach (string superType in rawInfo.SuperTypes)
+                {
+                    ObjectClass rawSuperType = _classInformation[superType];
+                    rawInfo.Must.UnionWith(rawSuperType.Must);
+                    rawInfo.May.UnionWith(rawSuperType.May);
+                    rawSuperType.SubTypes.Add(className);
+                }
+                _classInformation[className] = rawInfo;
+            }
+            else
+            {
+                classQueue.Enqueue(rawInfo);
+            }
+        }
+
+        HashSet<string> attempted = new();
+        while (classQueue.Count > 0)
+        {
+            ObjectClass rawInfo = classQueue.Dequeue();
+            if (!attempted.Add(rawInfo.Name))
+            {
+                throw new RuntimeException($"Found circular loop when attempting to process schema definition of '{rawInfo.Name}'");
+            }
+
+            bool ready = true;
+            foreach (string superType in rawInfo.SuperTypes)
+            {
+                if (!_classInformation.ContainsKey(superType))
+                {
+                    ready = false;
+                    break;
+                }
+            }
+
+            if (ready)
+            {
+                foreach (string superType in rawInfo.SuperTypes)
+                {
+                    ObjectClass rawSuperType = _classInformation[superType];
+                    rawInfo.Must.UnionWith(rawSuperType.Must);
+                    rawInfo.May.UnionWith(rawSuperType.May);
+                    rawSuperType.SubTypes.Add(rawInfo.Name);
+                }
+                // Now that we added one we can clear out the attempts and try again.
+                _classInformation[rawInfo.Name] = rawInfo;
+                attempted = new();
+            }
+            else
+            {
+                classQueue.Enqueue(rawInfo);
+            }
+        }
+    }
 
     private static byte[] UTF8Bytes(string value) => Encoding.UTF8.GetBytes(value);
 

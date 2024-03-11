@@ -2,6 +2,10 @@
 
 ## v0.5.0 - TBD
 
++ Added the following cmdlets:
+  + [Set-OpenADObject](./docs/en-US/Set-OpenADObject.md): Sets existing AD objects
++ Fix up deadlock when reading the AD schema with an auxiliary class that inherits from `top`
+
 ## v0.4.1 - 2023-10-16
 
 + Fix up safe SSPI context handle lifetime handling to avoid process crash

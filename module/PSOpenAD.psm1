@@ -17,7 +17,7 @@ if (-not ('PSOpenAD.LoadContext' -as [type])) {
 $mainModule = [PSOpenAD.LoadContext]::Initialize()
 $innerMod = &$importModule -Assembly $mainModule -PassThru:$isReload
 
-if ($innterMod) {
+if ($innerMod) {
     # Bug in pwsh, Import-Module in an assembly will pick up a cached instance
     # and not call the same path to set the nested module's cmdlets to the
     # current module scope. This is only technically needed if someone is

@@ -171,6 +171,10 @@ internal abstract class LDAPMessage
                 return SearchResultDone.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
                     ruleSet: ruleSet);
 
+            case ModifyResponse.TAG_NUMBER:
+                return ModifyResponse.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
+                    ruleSet: ruleSet);
+
             case AddResponse.TAG_NUMBER:
                 return AddResponse.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
                     ruleSet: ruleSet);
@@ -563,6 +567,86 @@ internal class SearchResultDone : LDAPMessage
         bytesConsumed += consumed;
 
         return new SearchResultDone(messageId, controls, result);
+    }
+}
+
+/// <summary>LDAP Modify Operation</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     ModifyRequest ::= [APPLICATION 6] SEQUENCE {
+///          object          LDAPDN,
+///          changes         SEQUENCE OF change SEQUENCE {
+///               operation       ENUMERATED {
+///                    add     (0),
+///                    delete  (1),
+///                    replace (2),
+///                    ...  },
+///               modification    PartialAttribute } }
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.6">4.6. Modify Operation</see>
+internal class ModifyRequest : LDAPMessage
+{
+    public const int TAG_NUMBER = 6;
+
+    public string Entry { get; set; }
+
+    public ModifyChange[] Changes { get; set; }
+
+    public ModifyRequest(int messageId, IEnumerable<LDAPControl>? controls, string entry, ModifyChange[] changes)
+        : base(messageId, controls)
+    {
+        Entry = entry;
+        Changes = changes;
+    }
+
+    public override void ToBytes(AsnWriter writer)
+    {
+        using AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.Application, TAG_NUMBER,
+            true));
+
+        writer.WriteOctetString(Encoding.UTF8.GetBytes(Entry));
+
+        using AsnWriter.Scope _2 = writer.PushSequence();
+        foreach (ModifyChange change in Changes)
+        {
+            change.ToBytes(writer);
+        }
+    }
+}
+
+/// <summary>LDAP Modify Response</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     ModifyResponse ::= [APPLICATION 7] LDAPResult
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.6">4.6. Modify Operation</see>
+internal class ModifyResponse : LDAPMessage
+{
+    public const int TAG_NUMBER = 7;
+
+    /// <summary>The final result of a search operation.</summary>
+    public LDAPResult Result { get; internal set; }
+
+    public ModifyResponse(int messageId, IEnumerable<LDAPControl>? controls, LDAPResult result)
+        : base(messageId, controls)
+    {
+        Result = result;
+    }
+
+    public static ModifyResponse FromBytes(
+        int messageId,
+        IEnumerable<LDAPControl>? controls,
+        ReadOnlySpan<byte> data,
+        out int bytesConsumed,
+        AsnEncodingRules ruleSet = AsnEncodingRules.BER)
+    {
+        bytesConsumed = 0;
+
+        LDAPResult result = LDAPResult.FromBytes(data, out var consumed, ruleSet: ruleSet);
+        data = data[consumed..];
+        bytesConsumed += consumed;
+
+        return new ModifyResponse(messageId, controls, result);
     }
 }
 
@@ -973,5 +1057,44 @@ internal class PartialAttribute
         {
             writer.WriteOctetString(val);
         }
+    }
+}
+
+internal enum ModifyOperation
+{
+    Add = 0,
+    Delete = 1,
+    Replace = 2,
+}
+
+/// <summary>LDAP Modify Operation Change</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     change SEQUENCE {
+///         operation       ENUMERATED {
+///             add     (0),
+///             delete  (1),
+///             replace (2),
+///             ...  },
+///         modification    PartialAttribute } }
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.6">4.6. Modify Operation</see>
+internal class ModifyChange
+{
+    public ModifyOperation Operation { get; set; }
+    public PartialAttribute Modification { get; set; }
+
+    public ModifyChange(ModifyOperation operation, PartialAttribute modification)
+    {
+        Operation = operation;
+        Modification = modification;
+    }
+
+    public void ToBytes(AsnWriter writer)
+    {
+        using AsnWriter.Scope _1 = writer.PushSequence();
+
+        writer.WriteEnumeratedValue(Operation);
+        Modification.ToBytes(writer);
     }
 }

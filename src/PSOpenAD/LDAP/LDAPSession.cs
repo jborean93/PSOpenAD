@@ -139,6 +139,27 @@ internal abstract class LDAPSession
         return request.MessageId;
     }
 
+    public int Modify(
+        string distinguishedName,
+        ModifyChange[] changes,
+        IEnumerable<LDAPControl>? controls = null)
+    {
+        if (State == SessionState.Closed)
+        {
+            throw new InvalidOperationException(
+                "Cannot perform an ModifyRequest on a closed connection");
+        }
+        else if (changes.Length < 1)
+        {
+            throw new ArgumentException("Modify operation requires at least 1 change");
+        }
+
+        ModifyRequest request = new(NextMessageId(), controls, distinguishedName, changes);
+        PutRequest(request);
+
+        return request.MessageId;
+    }
+
     public int Search(string baseObject, SearchScope scope, DereferencingPolicy derefAliases, int sizeLimit,
         int timeLimit, bool typesOnly, LDAPFilter filter, string[] attributeSelection,
         IEnumerable<LDAPControl>? controls = null)

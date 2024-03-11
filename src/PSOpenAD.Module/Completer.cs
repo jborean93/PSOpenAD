@@ -37,10 +37,11 @@ internal class PropertyCompleter : IArgumentCompleter
             wordToComplete = "";
 
         string className = GetClassNameForCommand(commandName);
-        if (GlobalState.ClassDefinitions.ContainsKey(className))
+
+        HashSet<string>? classAttributes = GlobalState.SchemaMetadata?.GetClassAttributesInformation(className);
+        if (classAttributes != null)
         {
-            ObjectClass info = GlobalState.ClassDefinitions[className];
-            foreach (string attribute in info.ValidAttributes)
+            foreach (string attribute in classAttributes)
             {
                 if (attribute.StartsWith(wordToComplete, true, CultureInfo.InvariantCulture))
                 {

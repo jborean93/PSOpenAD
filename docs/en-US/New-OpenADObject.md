@@ -17,14 +17,14 @@ Creates an Active Directory object.
 New-OpenADObject [-Name] <String> [-Type] <String> [-Description <String>] [-DisplayName <String>]
  [-Path <String>] [-OtherAttributes <IDictionary>] [-PassThru] [-Server <String>]
  [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>] [-StartTLS]
- [-Credential <PSCredential>] [-WhatIf] [-Confirm] [<CommonParameters>]
+ [-Credential <PSCredential>] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Session
 ```
 New-OpenADObject [-Name] <String> [-Type] <String> [-Description <String>] [-DisplayName <String>]
- [-Path <String>] [-OtherAttributes <IDictionary>] [-PassThru] -Session <OpenADSession> [-WhatIf] [-Confirm]
- [<CommonParameters>]
+ [-Path <String>] [-OtherAttributes <IDictionary>] [-PassThru] -Session <OpenADSession>
+ [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -37,6 +37,8 @@ The `-Type` parameter specifies the LDAP `objectClass` of the object to create, 
 
 The `-Path` parameter specifies the container where the object is created.
 If no `-Path` is specified, the default path will be the default naming context container for the AD session.
+
+See [about_OpenADAttributeFormats](./about_OpenADAttributeFormats.md) for more information on setting attribute values.
 
 ## EXAMPLES
 
@@ -263,6 +265,21 @@ If no path is specified, the default path is the default naming context of the t
 Type: String
 Parameter Sets: (All)
 Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
 
 Required: False
 Position: Named
