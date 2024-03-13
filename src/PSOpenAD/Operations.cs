@@ -115,6 +115,51 @@ internal static class Operations
         return modifyRes;
     }
 
+    /// <summary>Performs an LDAP modify DN operation.</summary>
+    /// <param name="connection">The LDAP connection to perform the modify on.</param>
+    /// <param name="entry">The entry DN to manage.</param>
+    /// <param name="newRDN">The new RDN of the entry</param>
+    /// <param name="deleteOldRDN">Delete the old RDN attribute</param>
+    /// <param name="newSuperior">If not null or whitespace, the new object to move the entry to.</param>
+    /// <param name="controls">Custom controls to use with the request</param>
+    /// <param name="cancelToken">Token to cancel any network IO waits</param>
+    /// <param name="cmdlet">The PSCmdlet that is running the operation.</param>
+    /// <returns>The ModifyDNResponse from the request.</returns>
+    public static ModifyDNResponse LdapModifyDNRequest(
+        IADConnection connection,
+        string entry,
+        string newRDN,
+        bool deleteOldRDN,
+        string? newSuperior,
+        IList<LDAPControl>? controls,
+        CancellationToken cancelToken,
+        PSCmdlet? cmdlet)
+    {
+        string targetDN = string.IsNullOrWhiteSpace(newSuperior) ? string.Empty : $",{newSuperior}";
+        cmdlet?.WriteVerbose($"Starting LDAP modify DN request for '{entry}'->'{newRDN}{targetDN}'");
+
+        int addId = connection.Session.ModifyDN(
+            entry,
+            newRDN,
+            deleteOldRDN,
+            newSuperior: newSuperior,
+            controls: controls);
+        ModifyDNResponse modifyRes = (ModifyDNResponse)connection.WaitForMessage(addId, cancelToken: cancelToken);
+        connection.RemoveMessageQueue(addId);
+
+        if (modifyRes.Result.ResultCode != LDAPResultCode.Success)
+        {
+            ErrorRecord error = new(
+                new LDAPException($"Failed to modify DN '{entry}'->'{newRDN}{targetDN}'", modifyRes.Result),
+                "LDAPModifyFailure",
+                ErrorCategory.InvalidOperation,
+                null);
+            cmdlet?.WriteError(error);
+        }
+
+        return modifyRes;
+    }
+
     /// <summary>Performs an LDAP search operation.</summary>
     /// <param name="connection">The LDAP connection to perform the search on.</param>
     /// <param name="searchBase">The search base of the query.</param>

@@ -3,6 +3,8 @@
 ## v0.5.0 - TBD
 
 + Added the following cmdlets:
+  + [Move-OpenADObject](./docs/en-US/Move-OpenADObject.md): Moves an AD object to another container
+  + [Rename-OpenADObject](./docs/en-US/Rename-OpenADObject.md): Changes the name of an AD object
   + [Set-OpenADObject](./docs/en-US/Set-OpenADObject.md): Sets existing AD objects
 + Fix up deadlock when reading the AD schema with an auxiliary class that inherits from `top`
 

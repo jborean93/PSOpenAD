@@ -183,6 +183,10 @@ internal abstract class LDAPMessage
                 return DelResponse.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
                     ruleSet: ruleSet);
 
+            case ModifyDNResponse.TAG_NUMBER:
+                return ModifyDNResponse.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
+                    ruleSet: ruleSet);
+
             case SearchResultReference.TAG_NUMBER:
                 return SearchResultReference.FromBytes(messageId, controls?.ToArray(), protocolOpBuffer, out var _,
                     ruleSet: ruleSet);
@@ -775,6 +779,95 @@ internal class DelResponse : LDAPMessage
         bytesConsumed += consumed;
 
         return new DelResponse(messageId, controls, result);
+    }
+}
+
+/// <summary>LDAP Modify DN Operation</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     ModifyDNRequest ::= [APPLICATION 12] SEQUENCE {
+///             entry           LDAPDN,
+///             newrdn          RelativeLDAPDN,
+///             deleteoldrdn    BOOLEAN,
+///             newSuperior     [0] LDAPDN OPTIONAL }
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.9">4.9. Modify DNOperation</see>
+internal class ModifyDNRequest : LDAPMessage
+{
+    public const int TAG_NUMBER = 12;
+
+    public string Entry { get; set; }
+
+    public string NewRDN { get; set; }
+
+    public bool DeleteOldRDN { get; set; }
+
+    public string? NewSuperior { get; set; }
+
+    public ModifyDNRequest(
+        int messageId,
+        IEnumerable<LDAPControl>? controls,
+        string entry,
+        string newRDN,
+        bool deleteOldRDN,
+        string? newSuperior)
+        : base(messageId, controls)
+    {
+        Entry = entry;
+        NewRDN = newRDN;
+        DeleteOldRDN = deleteOldRDN;
+        NewSuperior = newSuperior;
+    }
+
+    public override void ToBytes(AsnWriter writer)
+    {
+        using AsnWriter.Scope _1 = writer.PushSequence(new Asn1Tag(TagClass.Application, TAG_NUMBER,
+            true));
+
+        writer.WriteOctetString(Encoding.UTF8.GetBytes(Entry));
+        writer.WriteOctetString(Encoding.UTF8.GetBytes(NewRDN));
+        writer.WriteBoolean(DeleteOldRDN);
+        if (!string.IsNullOrWhiteSpace(NewSuperior))
+        {
+            writer.WriteOctetString(
+                Encoding.UTF8.GetBytes(NewSuperior),
+                new Asn1Tag(TagClass.ContextSpecific, 0));
+        }
+    }
+}
+
+/// <summary>LDAP Modify DN Response</summary>
+/// <remarks>
+/// The ASN.1 structure is defined as
+///     ModifyDNResponse ::= [APPLICATION 13] LDAPResult
+/// </remarks>
+/// <see href="https://datatracker.ietf.org/doc/html/rfc4511#section-4.9">4.9. Modify DN Operation</see>
+internal class ModifyDNResponse : LDAPMessage
+{
+    public const int TAG_NUMBER = 13;
+
+    /// <summary>The final result of a search operation.</summary>
+    public LDAPResult Result { get; internal set; }
+
+    public ModifyDNResponse(
+        int messageId,
+        IEnumerable<LDAPControl>? controls,
+        LDAPResult result)
+        : base(messageId, controls)
+    {
+        Result = result;
+    }
+
+    public static ModifyDNResponse FromBytes(int messageId, IEnumerable<LDAPControl>? controls,
+        ReadOnlySpan<byte> data, out int bytesConsumed, AsnEncodingRules ruleSet = AsnEncodingRules.BER)
+    {
+        bytesConsumed = 0;
+
+        LDAPResult result = LDAPResult.FromBytes(data, out var consumed, ruleSet: ruleSet);
+        data = data[consumed..];
+        bytesConsumed += consumed;
+
+        return new ModifyDNResponse(messageId, controls, result);
     }
 }
 

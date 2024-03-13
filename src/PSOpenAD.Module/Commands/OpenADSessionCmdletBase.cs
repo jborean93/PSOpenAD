@@ -1,4 +1,6 @@
+using PSOpenAD.LDAP;
 using System;
+using System.Linq;
 using System.Management.Automation;
 using System.Threading;
 
@@ -83,4 +85,46 @@ public abstract class OpenADSessionCmdletBase : OpenADCancellableCmdlet
     }
 
     protected abstract void ProcessRecordWithSession(OpenADSession session);
+
+    internal string? GetIdentityDistinguishedName(
+        ADObjectIdentity identity,
+        OpenADSession session,
+        string verb)
+    {
+        WriteVerbose($"Attempting to get distinguishedName for object with filter '{identity.LDAPFilter}'");
+
+        SearchResultEntry? entryResult = Operations.LdapSearchRequest(
+            session.Connection,
+            session.DefaultNamingContext,
+            SearchScope.Subtree,
+            0,
+            session.OperationTimeout,
+            identity.LDAPFilter,
+            new[] { "distinguishedName" },
+            null,
+            CancelToken,
+            this,
+            false
+        ).FirstOrDefault();
+
+        PartialAttribute? dnResult = entryResult?.Attributes
+            .Where(a => string.Equals(a.Name, "distinguishedName", StringComparison.InvariantCultureIgnoreCase))
+            .FirstOrDefault();
+        if (dnResult == null)
+        {
+            ErrorRecord error = new(
+                new ArgumentException($"Failed to find object to set using the filter '{identity.LDAPFilter}'"),
+                $"CannotFind{verb}ObjectWithFilter",
+                ErrorCategory.InvalidArgument,
+                identity);
+            WriteError(error);
+            return null;
+        }
+
+        (PSObject[] rawDn, bool _) = session.SchemaMetadata.TransformAttributeValue(
+            dnResult.Name,
+            dnResult.Values,
+            this);
+        return (string)rawDn[0].BaseObject;
+    }
 }

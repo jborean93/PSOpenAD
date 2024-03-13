@@ -160,6 +160,25 @@ internal abstract class LDAPSession
         return request.MessageId;
     }
 
+    public int ModifyDN(
+        string entry,
+        string newRDN,
+        bool deleteOldRDN,
+        string? newSuperior = null,
+        IEnumerable<LDAPControl>? controls = null)
+    {
+        if (State == SessionState.Closed)
+        {
+            throw new InvalidOperationException(
+                "Cannot perform an ModifyDNRequest on a closed connection");
+        }
+
+        ModifyDNRequest request = new(NextMessageId(), controls, entry, newRDN, deleteOldRDN, newSuperior);
+        PutRequest(request);
+
+        return request.MessageId;
+    }
+
     public int Search(string baseObject, SearchScope scope, DereferencingPolicy derefAliases, int sizeLimit,
         int timeLimit, bool typesOnly, LDAPFilter filter, string[] attributeSelection,
         IEnumerable<LDAPControl>? controls = null)

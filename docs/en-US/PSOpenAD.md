@@ -44,6 +44,9 @@ Gets one or more Active Directory users.
 ### [Get-OpenADWhoami](Get-OpenADWhoami.md)
 Performs an LDAP Whoami extended operation on the target server.
 
+### [Move-OpenADObject](Move-OpenADObject.md)
+Moves an Active Directory object or a container of objects to a different container.
+
 ### [New-OpenADObject](New-OpenADObject.md)
 Creates an Active Directory object.
 
@@ -58,6 +61,9 @@ Removes an Active Directory object.
 
 ### [Remove-OpenADSession](Remove-OpenADSession.md)
 Disconnects an LDAP/AD session.
+
+### [Rename-OpenADObject](Rename-OpenADObject.md)
+Changes the name of an Active Directory object.
 
 ### [Set-OpenADObject](Set-OpenADObject.md)
 Modifies an Active Directory object.
