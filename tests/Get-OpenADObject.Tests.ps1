@@ -2,11 +2,8 @@
 
 Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     BeforeAll {
-        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
-        $cred = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-
-        $session = New-OpenADSession -ComputerName $PSOpenADSettings.Server -Credential $cred
-        $dcName = @($PSOpenADSettings.Server -split '\.')[0]
+        $session = New-TestOpenADSession
+        $dcName = @($session.DomainController -split '\.')[0]
     }
 
     AfterAll {
@@ -14,7 +11,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     Context "Get-OpenADObject" {
-        It "Creates session using hostname" {
+        It "Creates session using hostname" -Skip:(-not ($PSOpenADSettings.SupportsNegotiateAuth -and $PSOpenADSettings.DefaultCredsAvailable)) {
             $actual = Get-OpenADObject -Server $PSOpenADSettings.Server
             $actual | ForEach-Object {
                 $_.PSObject.Properties.Name | Should -Contain 'DistinguishedName'
@@ -25,7 +22,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             }
         }
 
-        It "Creates session using hostname:port" {
+        It "Creates session using hostname:port" -Skip:(-not ($PSOpenADSettings.SupportsNegotiateAuth -and $PSOpenADSettings.DefaultCredsAvailable)) {
             Get-OpenADObject -Server "$($PSOpenADSettings.Server):389" | Out-Null
         }
 
@@ -72,7 +69,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'UserPrincipalName'
                 $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
-                $_.DomainController | Should -Be $PSOpenADSettings.Server
+                $_.DomainController | Should -Be $session.DomainController
             }
         }
 
@@ -109,7 +106,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'UserPrincipalName'
             $actual.PSObject.Properties.Name | Should -Contain 'SamAccountName'
             $actual.PSObject.Properties.Name | Should -Contain 'SID'
-            $actual.DomainController | Should -Be $PSOpenADSettings.Server
+            $actual.DomainController | Should -Be $session.DomainController
             $actual.PSObject.Properties.Name | Should -Contain 'OperatingSystem'
         }
 
@@ -149,7 +146,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'GroupScope'
                 $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
-                $_.DomainController | Should -Be $PSOpenADSettings.Server
+                $_.DomainController | Should -Be $session.DomainController
             }
         }
 
@@ -164,7 +161,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'GroupScope'
             $actual.PSObject.Properties.Name | Should -Contain 'SamAccountName'
             $actual.PSObject.Properties.Name | Should -Contain 'SID'
-            $actual.DomainController | Should -Be $PSOpenADSettings.Server
+            $actual.DomainController | Should -Be $session.DomainController
             $actual.PSObject.Properties.Name | Should -Contain 'AdminCount'
         }
 
@@ -202,7 +199,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'UserPrincipalName'
                 $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
-                $_.DomainController | Should -Be $PSOpenADSettings.Server
+                $_.DomainController | Should -Be $session.DomainController
             }
         }
 
@@ -226,7 +223,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'UserPrincipalName'
             $actual.PSObject.Properties.Name | Should -Contain 'SamAccountName'
             $actual.PSObject.Properties.Name | Should -Contain 'SID'
-            $actual.DomainController | Should -Be $PSOpenADSettings.Server
+            $actual.DomainController | Should -Be $session.DomainController
             $actual.PSObject.Properties.Name | Should -Contain 'Title'
             $actual.Title | Should -BeNullOrEmpty
         }
@@ -251,15 +248,15 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
         }
 
         It "Ignores contacts in the default filter" {
-            $contact = New-OpenADObject -Type contact -Name MyTestContact -PassThru
+            $contact = New-OpenADObject -Session $session -Type contact -Name MyTestContact -PassThru
             try {
-                $actual = Get-OpenADUser -Identity MyTestContact -ErrorAction SilentlyContinue -ErrorVariable err
+                $actual = Get-OpenADUser -Session $session -Identity MyTestContact -ErrorAction SilentlyContinue -ErrorVariable err
                 $actual | Should -BeNullOrEmpty
                 $err.Count | Should -Be 1
                 $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter: '(&(&(objectCategory=person)(objectClass=user))(sAMAccountName=MyTestContact))' under: *"
             }
             finally {
-                $contact | Remove-OpenADObject
+                $contact | Remove-OpenADObject -Session $session
             }
         }
 

@@ -15,13 +15,14 @@ Creates an authenticated connection to an AD/LDAP host.
 ### ComputerName (Default)
 ```
 New-OpenADSession [-ComputerName] <String> [-Port <Int32>] [-UseTLS] [-Credential <PSCredential>]
- [-AuthType <AuthenticationMethod>] [-StartTLS] [-SessionOption <OpenADSessionOptions>] [<CommonParameters>]
+ [-AuthType <AuthenticationMethod>] [-StartTLS] [-SessionOption <OpenADSessionOptions>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### Uri
 ```
 New-OpenADSession [-Uri] <Uri> [-Credential <PSCredential>] [-AuthType <AuthenticationMethod>] [-StartTLS]
- [-SessionOption <OpenADSessionOptions>] [<CommonParameters>]
+ [-SessionOption <OpenADSessionOptions>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -178,6 +179,21 @@ This defaults to `389` for LDAP and `636` for LDAPS.
 Type: Int32
 Parameter Sets: ComputerName
 Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
 
 Required: False
 Position: Named

@@ -59,3 +59,6 @@ Removes an Active Directory object.
 ### [Remove-OpenADSession](Remove-OpenADSession.md)
 Disconnects an LDAP/AD session.
 
+### [Set-OpenADObject](Set-OpenADObject.md)
+Modifies an Active Directory object.
+

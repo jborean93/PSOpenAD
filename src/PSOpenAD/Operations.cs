@@ -79,6 +79,42 @@ internal static class Operations
         return delRes;
     }
 
+    /// <summary>Performs an LDAP modify operation.</summary>
+    /// <param name="connection">The LDAP connection to perform the modify on.</param>
+    /// <param name="entry">The entry DN to modify.</param>
+    /// <param name="changes">The changes to perform on the object.</param>
+    /// <param name="controls">Custom controls to use with the request</param>
+    /// <param name="cancelToken">Token to cancel any network IO waits</param>
+    /// <param name="cmdlet">The PSCmdlet that is running the operation.</param>
+    /// <returns>The ModifyResponse from the request.</returns>
+    public static ModifyResponse LdapModifyRequest(
+        IADConnection connection,
+        string entry,
+        ModifyChange[] changes,
+        IList<LDAPControl>? controls,
+        CancellationToken cancelToken,
+        PSCmdlet? cmdlet
+    )
+    {
+        cmdlet?.WriteVerbose($"Starting LDAP modify request for '{entry}'");
+
+        int addId = connection.Session.Modify(entry, changes, controls: controls);
+        ModifyResponse modifyRes = (ModifyResponse)connection.WaitForMessage(addId, cancelToken: cancelToken);
+        connection.RemoveMessageQueue(addId);
+
+        if (modifyRes.Result.ResultCode != LDAPResultCode.Success)
+        {
+            ErrorRecord error = new(
+                new LDAPException($"Failed to modify '{entry}'", modifyRes.Result),
+                "LDAPModifyFailure",
+                ErrorCategory.InvalidOperation,
+                null);
+            cmdlet?.WriteError(error);
+        }
+
+        return modifyRes;
+    }
+
     /// <summary>Performs an LDAP search operation.</summary>
     /// <param name="connection">The LDAP connection to perform the search on.</param>
     /// <param name="searchBase">The search base of the query.</param>

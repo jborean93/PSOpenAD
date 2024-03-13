@@ -15,14 +15,14 @@ Removes an Active Directory object.
 ### Server (Default)
 ```
 Remove-OpenADObject [-Identity] <ADObjectIdentity> [-Server <String>] [-AuthType <AuthenticationMethod>]
- [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-WhatIf] [-Confirm]
- [<CommonParameters>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
+ [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Session
 ```
-Remove-OpenADObject [-Identity] <ADObjectIdentity> -Session <OpenADSession> [-WhatIf] [-Confirm]
- [<CommonParameters>]
+Remove-OpenADObject [-Identity] <ADObjectIdentity> -Session <OpenADSession>
+ [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -97,7 +97,7 @@ Accept wildcard characters: False
 ```
 
 ### -Identity
-Specifies the Active Directory user object to remove using one fo the following formats:
+Specifies the Active Directory user object to remove using one of the following formats:
 
 + `DistinguishedName`
 
@@ -116,6 +116,21 @@ Required: True
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName, ByValue)
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 

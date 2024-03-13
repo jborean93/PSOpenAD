@@ -15,12 +15,12 @@ Performs an LDAP Whoami extended operation on the target server.
 ### Server (Default)
 ```
 Get-OpenADWhoami [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>]
- [-StartTLS] [-Credential <PSCredential>] [<CommonParameters>]
+ [-StartTLS] [-Credential <PSCredential>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### Session
 ```
-Get-OpenADWhoami -Session <OpenADSession> [<CommonParameters>]
+Get-OpenADWhoami -Session <OpenADSession> [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -84,6 +84,21 @@ This is used when the cmdlet creates a new connection to the `-Server` specified
 Type: PSCredential
 Parameter Sets: Server
 Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
 
 Required: False
 Position: Named

@@ -2,11 +2,7 @@
 
 Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
     BeforeAll {
-        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
-        $cred = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-
-        $session = New-OpenADSession -ComputerName $PSOpenADSettings.Server -Credential $cred
-        $dcName = @($PSOpenADSettings.Server -split '\.')[0]
+        $session = New-TestOpenADSession
     }
 
     AfterAll {
@@ -27,7 +23,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
                 $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
-                $_.DomainController | Should -Be $PSOpenADSettings.Server
+                $_.DomainController | Should -Be $session.DomainController
             }
         }
 
@@ -46,7 +42,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
                 $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
-                $_.DomainController | Should -Be $PSOpenADSettings.Server
+                $_.DomainController | Should -Be $session.DomainController
             }
         }
 
@@ -63,7 +59,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
                 $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
-                $_.DomainController | Should -Be $PSOpenADSettings.Server
+                $_.DomainController | Should -Be $session.DomainController
             }
         }
 
@@ -80,12 +76,12 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
                 $_.PSObject.Properties.Name | Should -Contain 'SamAccountName'
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
-                $_.DomainController | Should -Be $PSOpenADSettings.Server
+                $_.DomainController | Should -Be $session.DomainController
             }
         }
 
         It "Finds test group" {
-            $group = Get-OpenADGroup -Identity 'TestGroup'
+            $group = Get-OpenADGroup -Identity 'TestGroup' -Session $session
             $actual = $group | Get-OpenADGroupMember -Session $session |
                 Sort-Object -Property SamAccountName
             $actual.Count | Should -Be 2
@@ -102,7 +98,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
         }
 
         It "Finds test group recursively" {
-            $group = Get-OpenADGroup -Identity 'TestGroup'
+            $group = Get-OpenADGroup -Identity 'TestGroup' -Session $session
             $actual = $group | Get-OpenADGroupMember -Recursive -Session $session |
                 Sort-Object -Property SamAccountName
             $actual.Count | Should -Be 2
@@ -127,7 +123,7 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'ObjectGuid'
             $actual.PSObject.Properties.Name | Should -Contain 'SamAccountName'
             $actual.PSObject.Properties.Name | Should -Contain 'SID'
-            $actual.DomainController | Should -Be $PSOpenADSettings.Server
+            $actual.DomainController | Should -Be $session.DomainController
             $actual.PSObject.Properties.Name | Should -Contain 'AdminCount'
         }
 

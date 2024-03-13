@@ -13,7 +13,7 @@ Disconnects an LDAP/AD session.
 ## SYNTAX
 
 ```
-Remove-OpenADSession [-Session] <OpenADSession[]> [<CommonParameters>]
+Remove-OpenADSession [-Session] <OpenADSession[]> [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -32,6 +32,21 @@ PS C:\> $s | Remove-OpenADSession
 Creates a session and then disconnects it.
 
 ## PARAMETERS
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -Session
 The session to disconnect.

@@ -15,10 +15,12 @@ class PSOpenADCredential {
 
 class PSOpenADSettings {
     [string]$Server
+    [int]$Port
     [PSOpenADCredential[]]$Credentials = @()
     [bool]$DefaultCredsAvailable = $false
     [bool]$TlsAvailable = $false
     [bool]$TlsTrusted = $false
+    [int]$TlsPort
     [bool]$SupportsNegotiateAuth = $false
     [bool]$ImplicitServerAvailable = $false
 }
@@ -36,24 +38,25 @@ if (-not $global:PSOpenADSettings) {
                 [PSOpenADCredential]@{
                     Username = $_.username
                     Password = $pass
-                    Cached   = $_.cached
+                    Cached = $_.cached
                 }
             })
 
         $global:PSOpenADSettings = [PSOpenADSettings]@{
-            Server                  = $settingsRaw.server
-            Credentials             = $credentials
-            DefaultCredsAvailable   = $cached
-            TlsAvailable            = ([bool]$settingsRaw.tls)
-            TlsTrusted              = $settingsRaw.tls.trusted
-            SupportsNegotiateAuth   = $settingsRaw.features.negotiate_auth
+            Server = $settingsRaw.server
+            Port = $settingsRaw.port
+            Credentials = $credentials
+            DefaultCredsAvailable = $cached
+            TlsAvailable = ([bool]$settingsRaw.tls)
+            TlsTrusted = $settingsRaw.tls.trusted
+            TlsPort = $settingsRaw.tls.port
+            SupportsNegotiateAuth = $settingsRaw.features.negotiate_auth
             ImplicitServerAvailable = $settingsRaw.features.implicit_server
         }
     }
     else {
         $global:PSOpenADSettings = [PSOpenADSettings]::new()
     }
-
 }
 
 Function Global:Complete {
@@ -69,4 +72,46 @@ Function Global:Complete {
         $Expression,
         $Expression.Length,
         $null).CompletionMatches
+}
+
+Function Global:New-TestOpenADSession {
+    [OutputType([PSOpenAD.OpenADSession])]
+    param(
+        [Parameter()]
+        [System.Collections.IDictionary]
+        $SessionOptions = @{}
+    )
+
+    $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
+    $cred = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+
+    $sessionParams = @{
+        ComputerName = $PSOpenADSettings.Server
+        Credential = $cred
+    }
+
+    if (-not $PSOpenADSettings.SupportsNegotiateAuth) {
+        $sessionParams.AuthType = 'Simple'
+
+        if ($PSOpenADSettings.TlsAvailable) {
+            $sessionParams.UseTLS = $true
+            if ($PSOpenADSettings.TlsPort) {
+                $sessionParams.Port = $PSOpenADSettings.TlsPort
+            }
+
+            $SessionOptions.SkipCertificateCheck = -not $PSOpenADSettings.TlsTrusted
+        }
+        else {
+            $SessionOptions.NoEncryption = $true
+            $SessionOptions.NoSigning = $true
+
+        }
+        $sessionParams.SessionOption = $so
+    }
+    elseif ($PSOpenADSettings.Port) {
+        $sessionParams.Port = $PSOpenADSettings.Port
+    }
+    $sessionParams.SessionOption = New-OpenADSessionOption @SessionOptions
+
+    New-OpenADSession @sessionParams
 }

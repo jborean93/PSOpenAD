@@ -179,16 +179,8 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
 
         // We can only validate modules if there was metadata. Metadata may not be present on all systems and
         // when unauthenticated authentication was used.
-        HashSet<string> validProperties;
-        ObjectClass? objectClass = session.SchemaMetadata.GetClassInformation(className);
-        if (objectClass is null)
-        {
-            validProperties = explicitProperties.ToHashSet(_caseInsensitiveComparer);
-        }
-        else
-        {
-            validProperties = objectClass.ValidAttributes;
-        }
+        HashSet<string> validProperties = session.SchemaMetadata.GetClassAttributesInformation(className)
+            ?? explicitProperties.ToHashSet(_caseInsensitiveComparer);
 
         HashSet<string> invalidProperties = new();
 

@@ -593,7 +593,9 @@ internal sealed class OpenADSessionFactory
     {
         Dictionary<string, AttributeTypeDescription> attrInfo = new();
         Dictionary<string, DITContentRuleDescription> ditInfo = new();
-        Dictionary<string, ObjectClassDescription> classInfo = new();
+        Dictionary<string, ObjectClassDescription> abstractClassInfo = new();
+        Dictionary<string, ObjectClassDescription> auxClassInfo = new();
+        Dictionary<string, ObjectClassDescription> structClassInfo = new();
 
         foreach (SearchResultEntry result in Operations.LdapSearchRequest(connection, subschemaSubentry,
             SearchScope.Base, 0, sessionOptions.OperationTimeout, new FilterPresent("objectClass"),
@@ -618,12 +620,29 @@ internal sealed class OpenADSessionFactory
                     else if (attribute.Name == "objectClasses")
                     {
                         ObjectClassDescription objClass = new(rawValue);
-                        classInfo[objClass.Names[0]] = objClass;
+                        string className = objClass.Names[0];
+                        switch  (objClass.Kind)
+                        {
+                            case ObjectClassKind.Abstract:
+                                abstractClassInfo[className] = objClass;
+                                break;
+                            case ObjectClassKind.Auxiliary:
+                                auxClassInfo[className] = objClass;
+                                break;
+                            case ObjectClassKind.Structural:
+                                structClassInfo[className] = objClass;
+                                break;
+                        }
                     }
                 }
             }
         }
 
-        return new SchemaMetadata(attrInfo, ditInfo, classInfo);
+        return new SchemaMetadata(
+            attrInfo,
+            ditInfo,
+            abstractClassInfo,
+            auxClassInfo,
+            structClassInfo);
     }
 }

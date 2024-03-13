@@ -38,6 +38,12 @@
                 "dc.psopenad.test"
             ]
         },
+        "port": {
+            "$id": "#/properties/port",
+            "type": "number",
+            "title": "PSOpenAD Test Server LDAP Port",
+            "description": "The custom port for the LDAP server to test again."
+        },
         "credentials": {
             "$id": "#/properties/credentials",
             "type": "array",
@@ -126,6 +132,12 @@
                         true,
                         false
                     ]
+                },
+                "port": {
+                    "$id": "#/properties/tls/properties/port",
+                    "type": "number",
+                    "title": "LDAPS Port",
+                    "description": "Custom port used for LDAPS connection"
                 }
             }
         },

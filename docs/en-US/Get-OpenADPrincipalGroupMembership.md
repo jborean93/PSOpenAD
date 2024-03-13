@@ -16,26 +16,29 @@ Get the Active Directory groups that an object belongs to.
 ```
 Get-OpenADPrincipalGroupMembership [-Recursive] [-Server <String>] [-AuthType <AuthenticationMethod>]
  [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
- [-Identity] <ADPrincipalIdentity> [-Property <String[]>] [<CommonParameters>]
+ [-Identity] <ADPrincipalIdentity> [-Property <String[]>] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
 Get-OpenADPrincipalGroupMembership [-Recursive] -Session <OpenADSession> [-Identity] <ADPrincipalIdentity>
- [-Property <String[]>] [<CommonParameters>]
+ [-Property <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
 ```
 Get-OpenADPrincipalGroupMembership [-Recursive] -Session <OpenADSession> [-LDAPFilter <String>]
- [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
+ [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ServerLDAPFilter
 ```
 Get-OpenADPrincipalGroupMembership [-Recursive] [-Server <String>] [-AuthType <AuthenticationMethod>]
  [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-LDAPFilter <String>]
- [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>] [<CommonParameters>]
+ [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -154,6 +157,21 @@ Required: False
 Position: Named
 Default value: None
 Accept pipeline input: True (ByPropertyName)
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+New common parameter introduced in PowerShell 7.4.
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 

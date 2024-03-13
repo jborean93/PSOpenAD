@@ -2,10 +2,7 @@
 
 Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     BeforeAll {
-        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
-        $cred = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-
-        $session = New-OpenADSession -ComputerName $PSOpenADSettings.Server -Credential $cred
+        $session = New-TestOpenADSession
     }
 
     AfterAll {
@@ -14,7 +11,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
 
     Context "Get-OpenADRootDSE" {
         It "Gets default properties" {
-            $actual = Get-OpenADRootDSE
+            $actual = Get-OpenADRootDSE -Session $session
             $actual | Should -BeOfType ([PSOpenAD.OpenADEntity])
             $actual.PSObject.Properties.Name | Should -Contain 'ConfigurationNamingContext'
             $actual.PSObject.Properties.Name | Should -Contain 'CurrentTime'
@@ -38,11 +35,11 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'SupportedLDAPPolicies'
             $actual.PSObject.Properties.Name | Should -Contain 'SupportedLDAPVersion'
             $actual.PSObject.Properties.Name | Should -Contain 'SupportedSASLMechanisms'
-            $actual.DomainController | Should -Be $PSOpenADSettings.Server
+            $actual.DomainController | Should -Be $session.DomainController
         }
 
         It "Gets extra properties" {
-            $actual = Get-OpenADRootDSE -Property supportedExtension
+            $actual = Get-OpenADRootDSE -Session $session -Property supportedExtension
             $actual | Should -BeOfType ([PSOpenAD.OpenADEntity])
             $actual.PSObject.Properties.Name | Should -Contain 'ConfigurationNamingContext'
             $actual.PSObject.Properties.Name | Should -Contain 'CurrentTime'
@@ -67,7 +64,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'SupportedLDAPVersion'
             $actual.PSObject.Properties.Name | Should -Contain 'SupportedSASLMechanisms'
             $actual.PSObject.Properties.Name | Should -Contain 'SupportedExtension'
-            $actual.DomainController | Should -Be $PSOpenADSettings.Server
+            $actual.DomainController | Should -Be $session.DomainController
 
             # Samba doesn't return this value so will be $null
             if ($actual.SupportedExtension) {

@@ -39,7 +39,7 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
     ) {
         param ([string]$AuthType)
 
-        $selectedCred = $PSOpenADSettings.Credentials | Where-Object Cached -Eq $true | Select-Object -First 1
+        $selectedCred = $PSOpenADSettings.Credentials | Where-Object Cached -EQ $true | Select-Object -First 1
         $cred = [pscredential]::new($selectedCred.Username, [securestring]::new())
 
         $s = New-OpenADSession -ComputerName $PSOpenADSettings.Server -AuthType $AuthType -Credential $cred
@@ -53,7 +53,7 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
         }
     }
 
-    It "Creates session using explicit username and password - <AuthType>" -TestCases @(
+    It "Creates session using explicit username and password - <AuthType>" -Skip:(-not $PSOpenADSettings.SupportsNegotiateAuth) -TestCases @(
         @{ AuthType = 'Negotiate' }
         @{ AuthType = 'Kerberos' }
     ) {
@@ -73,7 +73,7 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
         }
     }
 
-    It "Connects using a URI - <AuthType>" -TestCases @(
+    It "Connects using a URI - <AuthType>" -Skip:(-not $PSOpenADSettings.SupportsNegotiateAuth) -TestCases @(
         @{ AuthType = 'Negotiate' }
         @{ AuthType = 'Kerberos' }
     ) {
@@ -82,8 +82,8 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
         $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
 
         $sessionParams = @{
-            Uri        = "ldap://$($PSOpenADSettings.Server)"
-            AuthType   = $AuthType
+            Uri = "ldap://$($PSOpenADSettings.Server)"
+            AuthType = $AuthType
             Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
         }
 
@@ -98,13 +98,13 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
         }
     }
 
-    It "Disables encryption over Kerberos" {
+    It "Disables encryption over Kerberos" -Skip:(-not $PSOpenADSettings.SupportsNegotiateAuth) {
         $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
 
         $sessionParams = @{
-            ComputerName  = $PSOpenADSettings.Server
-            AuthType      = "Kerberos"
-            Credential    = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+            ComputerName = $PSOpenADSettings.Server
+            AuthType = "Kerberos"
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
             SessionOption = (New-OpenADSessionOption -NoEncryption)
         }
         $s = New-OpenADSession @sessionParams
@@ -119,16 +119,8 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     It "Creates session with trace logging" {
-        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
-
         $logPath = "temp:/PSOpenAD-$([Guid]::NewGuid())"
-        $sessionParams = @{
-            Uri           = "ldap://$($PSOpenADSettings.Server)"
-            Credential    = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-            SessionOption = (New-OpenADSessionOption -TracePath $logPath)
-        }
-
-        $s = New-OpenADSession @sessionParams
+        $s = New-TestOpenADSession -SessionOption @{ TracePath = $logPath }
         try {
             Test-Path -LiteralPath $logPath | Should -BeTrue
             $currentSize = (Get-Item -LiteralPath $logPath).Size
@@ -148,7 +140,7 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
     It "Fails to create cert auth session without certificate set" {
         $sessionParams = @{
             ComputerName = $PSOpenADSettings.Server
-            AuthType     = "Certificate"
+            AuthType = "Certificate"
         }
         $result = New-OpenADSession @sessionParams -ErrorAction SilentlyContinue -ErrorVariable err
         $result | Should -BeNullOrEmpty
@@ -156,7 +148,7 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
         $err[0].Exception.Message | Should -Be "Certificate authentication is requested but ClientCertificate has not been set"
     }
 
-    It "Fails to create cert auth that's not using StartTLS or LDAP" {
+    It "Fails to create cert auth that's not using StartTLS or LDAP" -Skip:(-not $PSOpenADSettings.TlsAvailable) {
         $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPem(@'
 -----BEGIN CERTIFICATE-----
 MIICsDCCAhmgAwIBAgIJALwzrJEIBOaeMA0GCSqGSIb3DQEBBQUAMEUxCzAJBgNV
@@ -177,9 +169,12 @@ cciS5hf80XzIFqwhzaVS9gmiyM8=
 -----END CERTIFICATE-----
 '@)
         $sessionParams = @{
-            ComputerName  = $PSOpenADSettings.Server
-            AuthType      = "Certificate"
+            ComputerName = $PSOpenADSettings.Server
+            AuthType = "Certificate"
             SessionOption = (New-OpenADSessionOption -ClientCertificate $cert)
+        }
+        if ($PSOpenADSettings.TlsPort) {
+            $sessionParams.Port = $PSOpenADSettings.TlsPort
         }
         $result = New-OpenADSession @sessionParams -ErrorAction SilentlyContinue -ErrorVariable err
         $result | Should -BeNullOrEmpty
@@ -196,13 +191,20 @@ Describe "New-OpenADSession over StartTLS" -Skip:(-not $PSOpenADSettings.Server 
     ) {
         param ([string]$AuthType)
 
+        if ($AuthType -in @('Negotiate', 'Kerberos') -and -not $PSOpenADSettings.SupportsNegotiateAuth) {
+            Set-ItResult -Skipped -Because "test server does not support negotiate auth"
+        }
+
         $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
 
         $sessionParams = @{
             ComputerName = $PSOpenADSettings.Server
-            AuthType     = $AuthType
-            Credential   = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-            StartTLS     = $true
+            AuthType = $AuthType
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+            StartTLS = $true
+        }
+        if ($PSOpenADSettings.Port) {
+            $sessionParams.Port = $PSOpenADSettings.Port
         }
         if (-not $PSOpenADSettings.TlsTrusted) {
             $sessionParams.SessionOption = (New-OpenADSessionOption -SkipCertificateCheck)
@@ -220,7 +222,7 @@ Describe "New-OpenADSession over StartTLS" -Skip:(-not $PSOpenADSettings.Server 
     }
 }
 
-Describe "New-OpenADSession over TLS" -Skip:(-not $PSOpenADSettings.Server -or -not $PSOpenADSettings.TlsAvailable) {
+Describe "New-OpenADSession over TLS" -Skip:(-not $PSOpenADSettings.Server -or -not $PSOpenADSettings.TlsAvailable -or $true) {
     It "Creates TLS session ignoring cert checks - <AuthType>" -TestCases @(
         @{ AuthType = 'Simple' }
         @{ AuthType = 'Negotiate' }
@@ -228,13 +230,20 @@ Describe "New-OpenADSession over TLS" -Skip:(-not $PSOpenADSettings.Server -or -
     ) {
         param ([string]$AuthType)
 
+        if ($AuthType -in @('Negotiate', 'Kerberos') -and -not $PSOpenADSettings.SupportsNegotiateAuth) {
+            Set-ItResult -Skipped -Because "test server does not support negotiate auth"
+        }
+
         $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
 
         $sessionParams = @{
             ComputerName = $PSOpenADSettings.Server
-            AuthType     = $AuthType
-            Credential   = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-            UseTLS       = $true
+            AuthType = $AuthType
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+            UseTLS = $true
+        }
+        if ($PSOpenADSettings.TlsPort) {
+            $sessionParams.Port = $PSOpenADSettings.TlsPort
         }
         if (-not $PSOpenADSettings.TlsTrusted) {
             $sessionParams.SessionOption = (New-OpenADSessionOption -SkipCertificateCheck)
@@ -258,11 +267,19 @@ Describe "New-OpenADSession over TLS" -Skip:(-not $PSOpenADSettings.Server -or -
     ) {
         param ([string]$AuthType)
 
+        if ($AuthType -in @('Negotiate', 'Kerberos') -and -not $PSOpenADSettings.SupportsNegotiateAuth) {
+            Set-ItResult -Skipped -Because "test server does not support negotiate auth"
+        }
+
         $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
 
+        $port = '636'
+        if ($PSOpenADSettings.TlsPort) {
+            $port = $PSOpenADSettings.TlsPort
+        }
         $sessionParams = @{
-            Uri        = "ldaps://$($PSOpenADSettings.Server):636"
-            AuthType   = $AuthType
+            Uri = "ldaps://$($PSOpenADSettings.Server):$port"
+            AuthType = $AuthType
             Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
         }
         if (-not $PSOpenADSettings.TlsTrusted) {
@@ -291,14 +308,7 @@ Describe "PSSession management" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     It "Creates a session which can be returned by Get-PSSession" {
-        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
-
-        $sessionParams = @{
-            Uri        = "ldap://$($PSOpenADSettings.Server)"
-            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-        }
-
-        $s = New-OpenADSession @sessionParams
+        $s = New-TestOpenADSession
         try {
             $actual = Get-OpenADSession
             $actual.Id -eq $s.Id | Should -Not -BeNullOrEmpty
@@ -309,14 +319,7 @@ Describe "PSSession management" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     It "Fails to use a session that is closed" {
-        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
-
-        $sessionParams = @{
-            Uri        = "ldap://$($PSOpenADSettings.Server)"
-            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
-        }
-
-        $s = New-OpenADSession @sessionParams
+        $s = New-TestOpenADSession
         try {
             $null = Get-OpenADUser -Session $s
         }
