@@ -54,44 +54,11 @@ public class SetOpenADObject : OpenADSessionCmdletBase
     {
         ArgumentNullException.ThrowIfNull(Identity);
 
-        string? entry = Identity.DistinguishedName;
-        if (string.IsNullOrWhiteSpace(entry))
+        string? entry = Identity.DistinguishedName ?? GetIdentityDistinguishedName(Identity, session, "Set");
+        if (entry == null)
         {
-            WriteVerbose($"Attempting to get distinguishedName for object with filter '{Identity.LDAPFilter}'");
-
-            SearchResultEntry? entryResult = Operations.LdapSearchRequest(
-                session.Connection,
-                session.DefaultNamingContext,
-                SearchScope.Subtree,
-                0,
-                session.OperationTimeout,
-                Identity.LDAPFilter,
-                new[] { "distinguishedName" },
-                null,
-                CancelToken,
-                this,
-                false
-            ).FirstOrDefault();
-
-            PartialAttribute? dnResult = entryResult?.Attributes
-                .Where(a => string.Equals(a.Name, "distinguishedName", StringComparison.InvariantCultureIgnoreCase))
-                .FirstOrDefault();
-            if (dnResult == null)
-            {
-                ErrorRecord error = new(
-                    new ArgumentException($"Failed to find object to set using the filter '{Identity.LDAPFilter}'"),
-                    "CannotFindSetObjectWithFilter",
-                    ErrorCategory.InvalidArgument,
-                    Identity);
-                WriteError(error);
-                return;
-            }
-
-            (PSObject[] rawDn, bool _) = session.SchemaMetadata.TransformAttributeValue(
-                dnResult.Name,
-                dnResult.Values,
-                this);
-            entry = (string)rawDn[0].BaseObject;
+            // Errors already written.
+            return;
         }
 
         List<ModifyChange> changes = new();

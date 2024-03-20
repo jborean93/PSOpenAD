@@ -85,8 +85,10 @@
         'New-OpenADObject'
         'New-OpenADSession'
         'New-OpenADSessionOption'
+        'Move-OpenADObject'
         'Remove-OpenADObject'
         'Remove-OpenADSession'
+        'Rename-OpenADObject'
         'Set-OpenADObject'
     )
 
