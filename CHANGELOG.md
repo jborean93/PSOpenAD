@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.5.0 - TBD
+## v0.5.0 - 2024-03-21
 
 + Added the following cmdlets:
   + [Move-OpenADObject](./docs/en-US/Move-OpenADObject.md): Moves an AD object to another container
