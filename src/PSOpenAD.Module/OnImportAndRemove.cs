@@ -217,7 +217,11 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
                         }
                         catch (DnsResponseException e)
                         {
-                            GlobalState.DefaultDCError = $"Error looking up SRV records for _ldap._tcp.{baseDomain}: {e.Message}";
+                            GlobalState.DefaultDCError = $"DNS Error looking up SRV records for _ldap._tcp.{baseDomain}: {e.Message}";
+                        }
+                        catch (Exception e)
+                        {
+                            GlobalState.DefaultDCError = $"Unknown error looking up SRV records for _ldap._tcp.{baseDomain}: {e.GetType().Name} - {e.Message}";
                         }
                     }
                 }
