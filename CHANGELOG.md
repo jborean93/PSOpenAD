@@ -1,5 +1,9 @@
 # Changelog for PSOpenAD
 
+## v0.5.1 - TBD
+
++ Ensure a failure in a DNS lookup does not stop the module from importing but only errors when the value is used.
+
 ## v0.5.0 - 2024-03-21
 
 + Added the following cmdlets:
