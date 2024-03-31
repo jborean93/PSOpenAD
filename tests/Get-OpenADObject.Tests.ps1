@@ -47,6 +47,11 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter: '(&(objectClass=*)(distinguishedName=invalid-id))' under: *"
         }
 
+        It "Requests non-default property with case insensitive name" {
+            $actual = Get-OpenADObject -Session $session -Identity $session.DefaultNamingContext -Property ServerState
+            $actual.ServerState | Should -Be 1
+        }
+
         It "Does not fail if no match on filter" {
             $actual = Get-OpenADObject -Session $session -LDAPFilter '(objectClass=some-invalid-class)'
             $actual | Should -BeNullOrEmpty
