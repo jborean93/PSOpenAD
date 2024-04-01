@@ -13,7 +13,7 @@ internal delegate OpenADEntity CreateADObjectDelegate(Dictionary<string, (PSObje
 public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
     where T : ADObjectIdentity
 {
-    internal StringComparer _caseInsensitiveComparer = StringComparer.OrdinalIgnoreCase;
+    internal static StringComparer _caseInsensitiveComparer = StringComparer.OrdinalIgnoreCase;
 
     internal bool _includeDeleted = false;
 
@@ -280,7 +280,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
         PSCmdlet? cmdlet
     )
     {
-        Dictionary<string, (PSObject[], bool)> props = new();
+        Dictionary<string, (PSObject[], bool)> props = new(_caseInsensitiveComparer);
         foreach (PartialAttribute attribute in result.Attributes)
         {
             props[attribute.Name] = session.SchemaMetadata.TransformAttributeValue(

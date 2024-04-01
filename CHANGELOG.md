@@ -3,6 +3,7 @@
 ## v0.5.1 - TBD
 
 + Ensure a failure in a DNS lookup does not stop the module from importing but only errors when the value is used.
++ Use a case insensitive lookup for requested properties and the returned LDAP attributes
 
 ## v0.5.0 - 2024-03-21
 
