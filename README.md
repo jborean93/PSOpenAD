@@ -5,6 +5,8 @@
 [![PowerShell Gallery](https://img.shields.io/powershellgallery/dt/PSOpenAD.svg)](https://www.powershellgallery.com/packages/PSOpenAD)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jborean93/PSOpenAD/blob/main/LICENSE)
 
+PSOpenAD aims to be a cross-platform PowerShell module alternative to Microsoft's Active Directory module, enhancing AD management with modern capabilities.
+
 See [about_PSOpenAD](docs/en-US/about_PSOpenAD.md) for more details.
 
 ## Documentation
