@@ -91,6 +91,7 @@ $DOCKER_BIN run \
   --env GSSAPI_PROVIDER="${GSSAPI_PROVIDER}" \
   --env BUILD_CONFIGURATION="${BUILD_CONFIGURATION}" \
   --env PWSH_VERSION="${PWSH_VERSION}" \
+  --env GITHUB_ACTIONS="${GITHUB_ACTIONS:-false}" \
   --hostname "app.${REALM,,}" \
   --network "${NETWORK_NAME}" \
   --network-alias app \
