@@ -8,6 +8,8 @@ internal static class Kerberos
 {
     public const string LIB_KRB5 = "PSOpenAD.libkrb5";
 
+    private const int KRB5_CONFIG_NODEFREALM = -1765328160;
+
     [DllImport(LIB_KRB5)]
     public static extern void krb5_free_default_realm(
         SafeKrb5Context context,
@@ -28,6 +30,22 @@ internal static class Kerberos
         out SafeKrb5Realm lrealm);
 
     [DllImport(LIB_KRB5)]
+    public static extern int krb5_get_default_principal(
+        SafeKrb5Context context,
+        out SafeKrb5Principal principal);
+
+    [DllImport(LIB_KRB5)]
+    public static extern int krb5_unparse_name(
+        SafeKrb5Context context,
+        SafeKrb5Principal principal,
+        out IntPtr name);
+
+    [DllImport(LIB_KRB5)]
+    public static extern void krb5_free_principal(
+        SafeKrb5Context context,
+        IntPtr principal);
+
+    [DllImport(LIB_KRB5)]
     public static extern SafeKrb5ErrorMessage krb5_get_error_message(
         SafeKrb5Context ctx,
         int code);
@@ -42,23 +60,34 @@ internal static class Kerberos
 
     /// <summary>Get the default realm of the Kerberos context.</summary>
     /// <remarks>
-    /// The API first tries to lookup the default realm configured in the krb5.conf file of the environment. If
-    /// the file does not exist or does not contain a default_realm entry then it will attempt to lookup the realm
-    /// through a DNS SRV lookup. If that fails then a KerberosException is thrown.
+    /// The API first tries to look up the default realm configured in the krb5.conf file of the environment. If
+    /// the file does not exist or does not contain a default_realm entry then it will attempt to extract the
+    /// default realm from the default principal. If that fails then a KerberosException is thrown.
     /// </remarks>
     /// <param name="context">The Kerberos context handle.</param>
-    /// <returns>The the default realm.</returns>
+    /// <returns>The default realm.</returns>
     /// <exception cref="KerberosException">Kerberos error reported, most likely no realm was found.</exception>
     /// <see href="https://web.mit.edu/kerberos/krb5-latest/doc/appdev/refs/api/krb5_get_default_realm.html">krb5_get_default_realm</see>
     public static string GetDefaultRealm(SafeKrb5Context context)
     {
         int res = krb5_get_default_realm(context, out var realm);
-        if (res != 0)
-            throw new KerberosException(context, res, "krb5_get_default_realm");
+        if (res == 0)
+        {
+            realm.Context = context;
+            using (realm)
+                return realm.ToString();
+        }
 
-        realm.Context = context;
-        using (realm)
-            return realm.ToString();
+        if (res == KRB5_CONFIG_NODEFREALM)
+        {
+            using SafeKrb5Principal principal = context.GetDefaultPrincipal();
+            string name = principal.ToString();
+            int atIndex = name.IndexOf('@');
+            if (atIndex != -1)
+                return name[(atIndex + 1)..];
+        }
+
+        throw new KerberosException(context, res, "krb5_get_default_realm");
     }
 
     /// <summary>Create Kerberos Context.</summary>
@@ -80,6 +109,44 @@ internal class SafeKrb5Context : SafeHandle
     protected override bool ReleaseHandle()
     {
         Kerberos.krb5_free_context(handle);
+        return true;
+    }
+
+    public SafeKrb5Principal GetDefaultPrincipal()
+    {
+        int res = Kerberos.krb5_get_default_principal(this, out var principal);
+        if (res != 0)
+            throw new KerberosException(this, res, "krb5_get_default_principal");
+
+        principal.Context = this;
+        return principal;
+    }
+}
+
+internal class SafeKrb5Principal : SafeHandle
+{
+    internal SafeKrb5Context Context = new();
+
+    internal SafeKrb5Principal() : base(IntPtr.Zero, true) { }
+
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
+    public override string ToString()
+    {
+        int res = Kerberos.krb5_unparse_name(Context, this, out var name);
+        if (res != 0)
+            throw new KerberosException(Context, res, "krb5_unparse_name");
+
+        string? result =  Marshal.PtrToStringUTF8(name);
+
+        Kerberos.krb5_xfree(name);
+
+        return result ?? "";
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        Kerberos.krb5_free_principal(Context, handle);
         return true;
     }
 }
