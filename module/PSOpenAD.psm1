@@ -11,7 +11,7 @@ $moduleName = [System.IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
 $isReload = $true
 if (-not ('PSOpenAD.LoadContext' -as [type])) {
     $isReload = $true
-    Add-Type -Path ([System.IO.Path]::Combine($PSScriptRoot, 'bin', 'net6.0', "$moduleName.dll"))
+    Add-Type -Path ([System.IO.Path]::Combine($PSScriptRoot, 'bin', 'net8.0', "$moduleName.dll"))
 }
 
 $mainModule = [PSOpenAD.LoadContext]::Initialize()

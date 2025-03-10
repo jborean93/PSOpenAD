@@ -20,13 +20,9 @@ lib::setup::system_requirements() {
 }
 
 lib::setup::system_requirements::el() {
-    rpm -Uvh https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm
-
     dnf install -y \
         --nogpgcheck \
-        --disablerepo=\*modul\* \
-        epel-release \
-        powershell
+        epel-release
 
     if [ x"${GSSAPI_PROVIDER}" = "xheimdal" ]; then
         # heimdal-libs - Provides the Heimdal GSSAPI/Krb5 Library
@@ -34,13 +30,10 @@ lib::setup::system_requirements::el() {
         # heimdal-workstation - Provides kinit for tests but not needed by PSOpenAD
         dnf install -y \
             --nogpgcheck \
-            --disablerepo=\*module\* \
-            --disablerepo=packages-microsoft-com-prod \
             heimdal-libs \
             heimdal-path \
             heimdal-workstation \
-            dotnet-runtime-6.0 \
-            dotnet-sdk-8.0
+            dotnet-sdk-9.0
 
         source /etc/profile.d/heimdal.sh
 
@@ -56,15 +49,19 @@ lib::setup::system_requirements::el() {
         # krb5-workstation - Provides kinit for tests but not needed by PSOpenAD
         dnf install -y \
             --nogpgcheck \
-            --disablerepo=\*module\* \
-            --disablerepo=packages-microsoft-com-prod \
             krb5-libs \
             krb5-workstation \
-            dotnet-runtime-6.0 \
-            dotnet-sdk-8.0
+            dotnet-sdk-9.0
     fi
 
-    export PATH="/opt/microsoft/powershell/7:${PATH}"
+    # We don't care about the version for the initial bootstrap script, it'll handle
+    # the installation of the correct version when testing.
+    dotnet tool install --global PowerShell
+    export PATH="$PATH:~/.dotnet/tools"
+
+    # Unit tests might run on a different version than the SDK that is installed
+    # this allows it to rull forward to the earliest major version available.
+    export DOTNET_ROLL_FORWARD=Major
 }
 
 lib::setup::gssapi() {
@@ -93,33 +90,30 @@ lib::tests::run() {
         echo "::group::Running Tests"
     fi
 
-    pwsh -NoProfile -NoLogo -Command - << EOF
-\$ErrorActionPreference = 'Stop'
-
-ConvertTo-Json -InputObject ([Ordered]@{
-    server = 'dc.${AD_REALM,,}'
-    credentials = @(
-        [Ordered]@{
-            username = 'Administrator@${AD_REALM^^}'
-            password = '${AD_PASSWORD}'
-            cached = \$true
-        }
-    )
-    tls = [Ordered]@{
-        trusted = \$false
+    cat > "./test.settings.json" << EOF
+{
+  "server": "dc.${AD_REALM,,}",
+  "credentials": [
+    {
+      "username": "Administrator@${AD_REALM^^}",
+      "password": "${AD_PASSWORD}",
+      "cached": true
     }
-    features = [Ordered]@{
-        negotiate_auth = \$true
-        implicit_server = \$true
-    }
-}) | Out-File ./test.settings.json
-
-exit
+  ],
+  "tls": {
+    "trusted": false
+  },
+  "features": {
+    "negotiate_auth": true,
+    "implicit_server": true
+  }
+}
 EOF
 
     pwsh -File ./build.ps1 \
         -Configuration "${BUILD_CONFIGURATION:-Debug}" \
         -Task Test \
+        -PowerShellVersion "${PWSH_VERSION:-7.4}" \
         -ModuleNupkg output/*.nupkg
 
     if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
