@@ -92,6 +92,10 @@ $DOCKER_BIN run \
   --env BUILD_CONFIGURATION="${BUILD_CONFIGURATION}" \
   --env PWSH_VERSION="${PWSH_VERSION}" \
   --env GITHUB_ACTIONS="${GITHUB_ACTIONS:-false}" \
+  --env DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+  --env POWERSHELL_TELEMETRY_OPTOUT=1 \
+  --env DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+  --env DOTNET_NOLOGO=1 \
   --hostname "app.${REALM,,}" \
   --network "${NETWORK_NAME}" \
   --network-alias app \

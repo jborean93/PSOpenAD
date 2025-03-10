@@ -136,7 +136,7 @@ class Manifest {
         foreach ($framework in $availableFrameworks) {
             foreach ($actualFramework in $this.TargetFrameworks) {
                 if ($actualFramework.StartsWith($framework)) {
-                    $this.TestFramework = $framework
+                    $this.TestFramework = $actualFramework
                     break
                 }
             }
@@ -180,6 +180,7 @@ Function Assert-PowerShell {
     $releaseArch = switch ($Arch) {
         X64 { 'x64' }
         X86 { 'x86' }
+        ARM64 { 'arm64' }
         default {
             $err = [ErrorRecord]::new(
                 [Exception]::new("Unsupported archecture requests '$_'"),
@@ -237,7 +238,7 @@ Function Assert-PowerShell {
     $pwshExe = [Path]::Combine($targetFolder, "pwsh$nativeExt")
 
     if (Test-Path -LiteralPath $pwshExe) {
-        return
+        return $pwshExe
     }
 
     if ($IsWindows) {

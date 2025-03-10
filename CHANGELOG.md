@@ -1,7 +1,9 @@
 # Changelog for PSOpenAD
 
-## v0.5.1 - TBD
+## v0.6.0 - TBD
 
++ Raised minimum PowerShell version to 7.4
++ Updated `DnsClient` to `1.8.0` for some minor bugfixes
 + Ensure a failure in a DNS lookup does not stop the module from importing but only errors when the value is used.
 + Use a case insensitive lookup for requested properties and the returned LDAP attributes
 

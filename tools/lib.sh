@@ -20,7 +20,9 @@ lib::setup::system_requirements() {
 }
 
 lib::setup::system_requirements::el() {
-    rpm -Uvh https://packages.microsoft.com/config/rhel/8/packages-microsoft-prod.rpm
+    dnf install -y \
+        --nogpgcheck \
+        epel-release
 
     if [ x"${GSSAPI_PROVIDER}" = "xheimdal" ]; then
         # heimdal-libs - Provides the Heimdal GSSAPI/Krb5 Library
@@ -28,12 +30,10 @@ lib::setup::system_requirements::el() {
         # heimdal-workstation - Provides kinit for tests but not needed by PSOpenAD
         dnf install -y \
             --nogpgcheck \
-            --disablerepo=\*modul\* \
             heimdal-libs \
             heimdal-path \
             heimdal-workstation \
-            dotnet-sdk-6.0 \
-            wget
+            dotnet-sdk-9.0
 
         source /etc/profile.d/heimdal.sh
 
@@ -49,27 +49,19 @@ lib::setup::system_requirements::el() {
         # krb5-workstation - Provides kinit for tests but not needed by PSOpenAD
         dnf install -y \
             --nogpgcheck \
-            --disablerepo=\*modul\* \
             krb5-libs \
             krb5-workstation \
-            dotnet-sdk-6.0 \
-            wget
+            dotnet-sdk-9.0
     fi
 
-    mkdir "/tmp/PowerShell-${PWSH_VERSION}"
-    echo "Downloading PowerShell ${PWSH_VERSION}"
-    wget \
-        --quiet \
-        --output-document "/tmp/powershell.tar.gz" \
-        "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz"
+    # We don't care about the version for the initial bootstrap script, it'll handle
+    # the installation of the correct version when testing.
+    dotnet tool install --global PowerShell
+    export PATH="$PATH:~/.dotnet/tools"
 
-    echo "Extracting PowerShell ${PWSH_VERSION}"
-    tar xf \
-        "/tmp/powershell.tar.gz" \
-        --directory "/tmp/PowerShell-${PWSH_VERSION}"
-    chmod +x "/tmp/PowerShell-${PWSH_VERSION}/pwsh"
-
-    export PATH="/tmp/PowerShell-${PWSH_VERSION}:~/.dotnet/tools:${PATH}"
+    # Unit tests might run on a different version than the SDK that is installed
+    # this allows it to rull forward to the earliest major version available.
+    export DOTNET_ROLL_FORWARD=Major
 }
 
 lib::setup::gssapi() {
@@ -98,33 +90,30 @@ lib::tests::run() {
         echo "::group::Running Tests"
     fi
 
-    pwsh -NoProfile -NoLogo -Command - << EOF
-\$ErrorActionPreference = 'Stop'
-
-ConvertTo-Json -InputObject ([Ordered]@{
-    server = 'dc.${AD_REALM,,}'
-    credentials = @(
-        [Ordered]@{
-            username = 'Administrator@${AD_REALM^^}'
-            password = '${AD_PASSWORD}'
-            cached = \$true
-        }
-    )
-    tls = [Ordered]@{
-        trusted = \$false
+    cat > "./test.settings.json" << EOF
+{
+  "server": "dc.${AD_REALM,,}",
+  "credentials": [
+    {
+      "username": "Administrator@${AD_REALM^^}",
+      "password": "${AD_PASSWORD}",
+      "cached": true
     }
-    features = [Ordered]@{
-        negotiate_auth = \$true
-        implicit_server = \$true
-    }
-}) | Out-File ./test.settings.json
-
-exit
+  ],
+  "tls": {
+    "trusted": false
+  },
+  "features": {
+    "negotiate_auth": true,
+    "implicit_server": true
+  }
+}
 EOF
 
     pwsh -File ./build.ps1 \
         -Configuration "${BUILD_CONFIGURATION:-Debug}" \
         -Task Test \
+        -PowerShellVersion "${PWSH_VERSION:-7.4}" \
         -ModuleNupkg output/*.nupkg
 
     if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then

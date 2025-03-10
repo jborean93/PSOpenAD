@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <AssemblyName>PSOpenAD</AssemblyName>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -13,10 +13,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Formats.Asn1" Version="6.0.0" PrivateAssets="all" />
-    <PackageReference Include="System.Management.Automation" Version="7.2.0" PrivateAssets="all" />
+    <PackageReference Include="System.Formats.Asn1" Version="8.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.Management.Automation" Version="7.4.0" PrivateAssets="all" />
     <InternalsVisibleTo Include="PSOpenADTests" />
     <InternalsVisibleTo Include="$(AssemblyName).Module" />
+
+    <!--
+    S.M.A brings in these deps but we don't rely on it directly. It's up to
+    the user to run with a newer PowerShell version that isn't affected.
+    -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-447r-wph3-92pm" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">

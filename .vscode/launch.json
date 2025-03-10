@@ -17,7 +17,7 @@
             ],
             "cwd": "${workspaceFolder}",
             "stopAtEntry": false,
-            "console": "externalTerminal",
+            "console": "integratedTerminal",
         },
         {
             "name": "PowerShell Launch Current File",
@@ -25,13 +25,6 @@
             "request": "launch",
             "script": "${file}",
             "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": ".NET FullCLR Attach",
-            "type": "clr",
-            "request": "attach",
-            "processId": "${command:pickProcess}",
-            "justMyCode": true,
         },
         {
             "name": ".NET CoreCLR Attach",
