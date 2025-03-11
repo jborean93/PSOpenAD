@@ -1,5 +1,7 @@
 # Changelog for PSOpenAD
 
+## v0.6.1 - TBD
+
 ## v0.6.0 - 2025-03-12
 
 + Raised minimum PowerShell version to 7.4
