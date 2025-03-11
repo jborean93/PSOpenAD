@@ -27,7 +27,15 @@ internal partial class Kerberos
             return false;
         }
 
-        name = Marshal.PtrToStringUTF8(namePtr) ?? "";
+        try
+        {
+            name = Marshal.PtrToStringUTF8(namePtr) ?? "";
+        }
+        finally
+        {
+            FreeUnparsedName(context, namePtr);
+        }
+
         return true;
     }
 }
