@@ -13,7 +13,7 @@ public class GetOpenADSession : PSCmdlet
     {
         // Ensure the sessions are their own collection to avoid something further down the line mutating the same
         // list during an enumeration, e.g. 'Get-OpenADSession | Remove-OpenADSession'
-        WriteObject(GlobalState.Sessions.ToArray(), true);
+        WriteObject(GlobalState.GetFromTLS().Sessions.ToArray(), true);
     }
 }
 

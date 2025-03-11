@@ -7,6 +7,7 @@
 + Ensure a failure in a DNS lookup does not stop the module from importing but only errors when the value is used.
 + Use a case insensitive lookup for requested properties and the returned LDAP attributes
 + Add fallback for Linux/macOS default realm lookup to use the ccache principal realm if present
++ Properly store AD sessions in a Runspace specific storage allowing multiple runspaces to run in parallel without affecting each other
 
 ## v0.5.0 - 2024-03-21
 

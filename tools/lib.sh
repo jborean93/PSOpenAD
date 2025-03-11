@@ -22,6 +22,7 @@ lib::setup::system_requirements() {
 lib::setup::system_requirements::el() {
     dnf install -y \
         --nogpgcheck \
+        gcc \
         epel-release
 
     if [ x"${GSSAPI_PROVIDER}" = "xheimdal" ]; then
@@ -62,6 +63,52 @@ lib::setup::system_requirements::el() {
     # Unit tests might run on a different version than the SDK that is installed
     # this allows it to rull forward to the earliest major version available.
     export DOTNET_ROLL_FORWARD=Major
+
+    # A test relies on being able to control the hostname returned by gethostname.
+    # This generates a shim that will return the desired test value before falling
+    # back to the libc call if unset.
+    cat > /tmp/gethostname.c << EOF
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <dlfcn.h>
+#include <errno.h>
+
+static int (*real_gethostname)(char *, size_t) = NULL;
+
+int gethostname(char *name, size_t len) {
+    const char *mock_hostname = getenv("_PSOPENAD_MOCK_HOSTNAME");
+    if (mock_hostname) {
+        size_t mock_len = strlen(mock_hostname);
+        if (mock_len >= len) {
+            errno = ENAMETOOLONG;
+            return -1;
+        }
+
+        strncpy(name, mock_hostname, len - 1);
+        name[len - 1] = '\0';  // Ensure null termination
+        return 0;
+    }
+
+    if (!real_gethostname) {
+        real_gethostname = dlsym(RTLD_NEXT, "gethostname");
+        if (!real_gethostname) {
+            fprintf(stderr, "Error loading original gethostname: %s\n", dlerror());
+            return -1;
+        }
+    }
+
+    return real_gethostname(name, len);
+}
+EOF
+    echo "Compiling gethostname shim"
+    gcc \
+        -fPIC -rdynamic -g -Wall -shared -Wl,-soname,libgethostnameshim.so.1 -lc -ldl \
+        -o /usr/lib64/libgethostnameshim.so.1 \
+        /tmp/gethostname.c
+    export LD_PRELOAD=/usr/lib64/libgethostnameshim.so.1
 }
 
 lib::setup::gssapi() {

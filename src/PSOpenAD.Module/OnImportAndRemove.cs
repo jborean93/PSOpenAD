@@ -3,6 +3,7 @@ using PSOpenAD.Native;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Management.Automation;
 using System.Reflection;
@@ -89,23 +90,25 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
     {
         Resolver = new NativeResolver();
 
+        GlobalState state = GlobalState.GetFromTLS();
+
         // While channel binding isn't technically done by both these methods an Active Directory implementation
         // doesn't validate it's presence so from the purpose of a client it does work even if it's enforced on the
         // server end.
-        GlobalState.Providers[AuthenticationMethod.Anonymous] = new(AuthenticationMethod.Anonymous, "ANONYMOUS",
+        state.Providers[AuthenticationMethod.Anonymous] = new(AuthenticationMethod.Anonymous, "ANONYMOUS",
             true, false, "");
-        GlobalState.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
+        state.Providers[AuthenticationMethod.Simple] = new(AuthenticationMethod.Simple, "PLAIN", true,
             false, "");
-        GlobalState.Providers[AuthenticationMethod.Certificate] = new(AuthenticationMethod.Certificate, "EXTERNAL",
+        state.Providers[AuthenticationMethod.Certificate] = new(AuthenticationMethod.Certificate, "EXTERNAL",
             true, true, "");
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             // Windows always has SSPI available.
-            GlobalState.GssapiProvider = GssapiProvider.SSPI;
-            GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
+            state.GssapiProvider = GssapiProvider.SSPI;
+            state.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos, "GSSAPI",
                 true, true, "");
-            GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+            state.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
                 "GSS-SPNEGO", true, true, "");
 
             const GetDcFlags getDcFlags = GetDcFlags.DS_IS_DNS_NAME | GetDcFlags.DS_ONLY_LDAP_NEEDED |
@@ -123,21 +126,21 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
             }
             catch (Exception e)
             {
-                GlobalState.DefaultDCError = $"Failure calling DsGetDcName to get default DC: {e.Message}";
+                state.DefaultDCError = $"Failure calling DsGetDcName to get default DC: {e.Message}";
             }
 
             if (!string.IsNullOrWhiteSpace(dcName))
             {
-                GlobalState.DefaultDC = new($"ldap://{dcName}:389/");
+                state.DefaultDC = new($"ldap://{dcName}:389/");
             }
-            else if (string.IsNullOrEmpty(GlobalState.DefaultDCError))
+            else if (string.IsNullOrEmpty(state.DefaultDCError))
             {
-                GlobalState.DefaultDCError = "No configured default DC on host";
+                state.DefaultDCError = "No configured default DC on host";
             }
         }
         else
         {
-            GlobalState.GssapiProvider = GssapiProvider.None;
+            state.GssapiProvider = GssapiProvider.None;
             LibraryInfo? gssapiLib = Resolver.CacheLibrary(GSSAPI.LIB_GSSAPI, new[] {
                 MACOS_GSS_FRAMEWORK, // macOS GSS Framework (technically Heimdal)
                 "libgssapi_krb5.so.2", // MIT krb5
@@ -151,51 +154,40 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
 
             if (gssapiLib == null)
             {
-                GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos,
+                state.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos,
                     "GSSAPI", false, false, "GSSAPI library not found");
-                GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+                state.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
                     "GSS-SPNEGO", false, false, "GSSAPI library not found");
 
-                GlobalState.DefaultDCError = "Failed to find GSSAPI library";
+                state.DefaultDCError = "Failed to find GSSAPI library";
             }
             else
             {
-                GlobalState.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos,
+                state.Providers[AuthenticationMethod.Kerberos] = new(AuthenticationMethod.Kerberos,
                     "GSSAPI", true, true, "");
-                GlobalState.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
+                state.Providers[AuthenticationMethod.Negotiate] = new(AuthenticationMethod.Negotiate,
                     "GSS-SPNEGO", true, true, "");
 
                 if (gssapiLib.Path == MACOS_GSS_FRAMEWORK)
                 {
-                    GlobalState.GssapiProvider = GssapiProvider.GSSFramework;
+                    state.GssapiProvider = GssapiProvider.GSSFramework;
                 }
                 else if (NativeLibrary.TryGetExport(gssapiLib.Handle, "krb5_xfree", out var _))
                 {
                     // While technically exported by the krb5 lib the Heimdal GSSAPI lib depends on it so the same
                     // symbol will be exported there and we can use that to detect if Heimdal is in use.
-                    GlobalState.GssapiProvider = GssapiProvider.Heimdal;
+                    state.GssapiProvider = GssapiProvider.Heimdal;
                 }
                 else
                 {
-                    GlobalState.GssapiProvider = GssapiProvider.MIT;
+                    state.GssapiProvider = GssapiProvider.MIT;
                 }
 
                 // If the krb5 API is available, attempt to get the default realm used when creating an implicit
                 // session.
                 if (krb5Lib != null)
                 {
-                    string defaultRealm = "";
-                    using SafeKrb5Context ctx = Kerberos.InitContext();
-                    try
-                    {
-                        defaultRealm = Kerberos.GetDefaultRealm(ctx);
-                    }
-                    catch (KerberosException e)
-                    {
-                        GlobalState.DefaultDCError = $"Failed to lookup krb5 default_realm: {e.Message}";
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(defaultRealm))
+                    if (TryGetDefaultKerberosRealm(out var defaultRealm, out var realmException))
                     {
                         // _ldap._tcp.dc._msdcs.domain.com
                         string baseDomain = $"dc._msdcs.{defaultRealm}";
@@ -208,26 +200,30 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
                             ServiceHostEntry? first = res.OrderBy(r => r.Priority).ThenBy(r => r.Weight).FirstOrDefault();
                             if (first != null)
                             {
-                                GlobalState.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");
+                                state.DefaultDC = new($"ldap://{first.HostName}:{first.Port}/");
                             }
                             else
                             {
-                                GlobalState.DefaultDCError = $"No SRV records for _ldap._tcp.{baseDomain} found";
+                                state.DefaultDCError = $"No SRV records for _ldap._tcp.{baseDomain} found";
                             }
                         }
                         catch (DnsResponseException e)
                         {
-                            GlobalState.DefaultDCError = $"DNS Error looking up SRV records for _ldap._tcp.{baseDomain}: {e.Message}";
+                            state.DefaultDCError = $"DNS Error looking up SRV records for _ldap._tcp.{baseDomain}: {e.Message}";
                         }
                         catch (Exception e)
                         {
-                            GlobalState.DefaultDCError = $"Unknown error looking up SRV records for _ldap._tcp.{baseDomain}: {e.GetType().Name} - {e.Message}";
+                            state.DefaultDCError = $"Unknown error looking up SRV records for _ldap._tcp.{baseDomain}: {e.GetType().Name} - {e.Message}";
                         }
+                    }
+                    else
+                    {
+                        state.DefaultDCError = $"Failed to lookup krb5 default realm: {realmException}";
                     }
                 }
                 else
                 {
-                    GlobalState.DefaultDCError = "Failed to find Kerberos library";
+                    state.DefaultDCError = "Failed to find Kerberos library";
                 }
             }
         }
@@ -235,10 +231,68 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
 
     public void OnRemove(PSModuleInfo module)
     {
-        foreach (OpenADSession session in GlobalState.Sessions)
+        GlobalState state = GlobalState.GetFromTLS();
+        foreach (OpenADSession session in state.Sessions)
             session.Close();
 
-        GlobalState.Sessions = new();
+        state.Sessions = new();
         Resolver?.Dispose();
+    }
+
+    /// <summary>
+    /// Attempt to get the default Kerberos realm from the system for the DC lookup.
+    /// </summary>
+    /// <param name="realm">The realm if the method returns true.</param>
+    /// <param name="errorMessage">The error details if the method returns false.</param>
+    /// <returns>True if the realm was successfully retrieved, otherwise false.</returns>
+    private static bool TryGetDefaultKerberosRealm(
+        [NotNullWhen(true)] out string? realm,
+        [NotNullWhen(false)] out string? errorMessage)
+    {
+        realm = null;
+        errorMessage = null;
+
+        using var ctx = Kerberos.InitContext();
+        if (Kerberos.TryGetDefaultRealm(ctx, out realm, out var defaultRealmException))
+        {
+            return true;
+        }
+
+        if (!Kerberos.TryGetDefaultCCache(ctx, out var ccache, out var defaultCCException))
+        {
+            errorMessage = $"{defaultRealmException.Message}, {defaultCCException.Message}";
+            return false;
+        }
+        using (ccache)
+        {
+            if (!Kerberos.TryGetCCachePrincipal(ctx, ccache, out var principal, out var defaultCCPrincipalException))
+            {
+                errorMessage = $"{defaultRealmException.Message}, {defaultCCPrincipalException.Message}";
+                return false;
+            }
+
+            using (principal)
+            {
+                if (Kerberos.TryUnparseName(ctx, principal, out var principalName, out var defaultUnparseException))
+                {
+                    int realmIdx = principalName.IndexOf('@');
+                    if (realmIdx != -1)
+                    {
+                        realm = principalName[(realmIdx + 1)..];
+                        return true;
+                    }
+                    else
+                    {
+                        errorMessage = $"{defaultRealmException.Message}, failed to find principal realm in name '{principalName}'";
+                        return false;
+                    }
+                }
+                else
+                {
+                    errorMessage = $"{defaultRealmException.Message}, {defaultUnparseException.Message}";
+                    return false;
+                }
+            }
+        }
     }
 }

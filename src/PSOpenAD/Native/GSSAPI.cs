@@ -782,7 +782,7 @@ internal static class GSSAPI
     internal static bool IsIntelMacOS()
     {
         // macOS on x86_64 need to use a specially packed structure when using GSS.Framework.
-        return GlobalState.GssapiProvider == GssapiProvider.GSSFramework && (
+        return GlobalState.GetFromTLS().GssapiProvider == GssapiProvider.GSSFramework && (
             RuntimeInformation.ProcessArchitecture == Architecture.X86 ||
             RuntimeInformation.ProcessArchitecture == Architecture.X64
         );

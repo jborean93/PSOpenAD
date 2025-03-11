@@ -16,7 +16,7 @@ internal class ServerCompleter : IArgumentCompleter
             wordToComplete = "";
 
         HashSet<Uri> emitted = new();
-        foreach (OpenADSession session in GlobalState.Sessions)
+        foreach (OpenADSession session in GlobalState.GetFromTLS().Sessions)
         {
             if ((session.Uri.ToString().StartsWith(wordToComplete, true, CultureInfo.InvariantCulture) ||
                 session.Uri.Host.StartsWith(wordToComplete, true, CultureInfo.InvariantCulture)) &&
@@ -38,7 +38,7 @@ internal class PropertyCompleter : IArgumentCompleter
 
         string className = GetClassNameForCommand(commandName);
 
-        HashSet<string>? classAttributes = GlobalState.SchemaMetadata?.GetClassAttributesInformation(className);
+        HashSet<string>? classAttributes = GlobalState.GetFromTLS().SchemaMetadata?.GetClassAttributesInformation(className);
         if (classAttributes != null)
         {
             foreach (string attribute in classAttributes)
