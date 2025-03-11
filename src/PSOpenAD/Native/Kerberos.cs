@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Security.Authentication;
 
@@ -8,7 +9,21 @@ internal static class Kerberos
 {
     public const string LIB_KRB5 = "PSOpenAD.libkrb5";
 
-    private const int KRB5_CONFIG_NODEFREALM = -1765328160;
+    [DllImport(LIB_KRB5)]
+    public static extern int krb5_cc_default(
+        SafeKrb5Context context,
+        out nint ccache);
+
+    [DllImport(LIB_KRB5)]
+    public static extern int krb5_cc_close(
+        SafeKrb5Context context,
+        nint ccache);
+
+    [DllImport(LIB_KRB5)]
+    public static extern int krb5_cc_get_principal(
+        SafeKrb5Context context,
+        SafeKrb5CCache ccache,
+        out nint principal);
 
     [DllImport(LIB_KRB5)]
     public static extern void krb5_free_default_realm(
@@ -25,25 +40,25 @@ internal static class Kerberos
         IntPtr msg);
 
     [DllImport(LIB_KRB5)]
-    public static extern int krb5_get_default_realm(
+    public static extern void krb5_free_principal(
         SafeKrb5Context context,
-        out SafeKrb5Realm lrealm);
+        nint principal);
 
     [DllImport(LIB_KRB5)]
-    public static extern int krb5_get_default_principal(
+    public static extern void krb5_free_unparsed_name(
         SafeKrb5Context context,
-        out SafeKrb5Principal principal);
+        nint name);
+
+    [DllImport(LIB_KRB5)]
+    public static extern int krb5_get_default_realm(
+        SafeKrb5Context context,
+        out nint lrealm);
 
     [DllImport(LIB_KRB5)]
     public static extern int krb5_unparse_name(
         SafeKrb5Context context,
         SafeKrb5Principal principal,
-        out IntPtr name);
-
-    [DllImport(LIB_KRB5)]
-    public static extern void krb5_free_principal(
-        SafeKrb5Context context,
-        IntPtr principal);
+        out nint name);
 
     [DllImport(LIB_KRB5)]
     public static extern SafeKrb5ErrorMessage krb5_get_error_message(
@@ -70,24 +85,20 @@ internal static class Kerberos
     /// <see href="https://web.mit.edu/kerberos/krb5-latest/doc/appdev/refs/api/krb5_get_default_realm.html">krb5_get_default_realm</see>
     public static string GetDefaultRealm(SafeKrb5Context context)
     {
-        int res = krb5_get_default_realm(context, out var realm);
+        int res = krb5_get_default_realm(context, out nint realmHandle);
         if (res == 0)
         {
-            realm.Context = context;
-            using (realm)
-                return realm.ToString();
+            using SafeKrb5Realm realm = new(context, realmHandle);
+            return realm.ToString();
         }
-
-        if (res == KRB5_CONFIG_NODEFREALM)
+        else if (TryGetDefaultPrincipalRealm(context, out string? principalRealm))
         {
-            using SafeKrb5Principal principal = context.GetDefaultPrincipal();
-            string name = principal.ToString();
-            int atIndex = name.IndexOf('@');
-            if (atIndex != -1)
-                return name[(atIndex + 1)..];
+            return principalRealm;
         }
-
-        throw new KerberosException(context, res, "krb5_get_default_realm");
+        else
+        {
+            throw new KerberosException(context, res, "krb5_get_default_realm");
+        }
     }
 
     /// <summary>Create Kerberos Context.</summary>
@@ -97,6 +108,57 @@ internal static class Kerberos
     {
         krb5_init_context(out var ctx);
         return ctx;
+    }
+
+    private static bool TryGetDefaultPrincipalRealm(
+        SafeKrb5Context context,
+        [NotNullWhen(true)] out string? realm)
+    {
+        realm = null;
+
+        int res = krb5_cc_default(context, out nint ccacheHandle);
+        if (res != 0)
+        {
+            return false;
+        }
+
+        using SafeKrb5CCache ccache = new(context, ccacheHandle);
+        res = krb5_cc_get_principal(context, ccache, out nint principalHandle);
+        if (res != 0)
+        {
+            return false;
+        }
+
+        using SafeKrb5Principal principal = new(context, principalHandle);
+        res = krb5_unparse_name(context, principal, out nint nameHandle);
+        if (res != 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            string? principalName = Marshal.PtrToStringUTF8(nameHandle);
+            int? index = principalName?.IndexOf('@');
+            if (index >= 0)
+            {
+                realm = principalName!.Substring(index.Value + 1);
+                return true;
+            }
+        }
+        finally
+        {
+            if (GlobalState.GssapiProvider == GssapiProvider.MIT)
+            {
+                krb5_free_unparsed_name(context, nameHandle);
+            }
+            else
+            {
+                krb5_xfree(nameHandle);
+            }
+        }
+
+        return false;
     }
 }
 
@@ -111,42 +173,22 @@ internal class SafeKrb5Context : SafeHandle
         Kerberos.krb5_free_context(handle);
         return true;
     }
-
-    public SafeKrb5Principal GetDefaultPrincipal()
-    {
-        int res = Kerberos.krb5_get_default_principal(this, out var principal);
-        if (res != 0)
-            throw new KerberosException(this, res, "krb5_get_default_principal");
-
-        principal.Context = this;
-        return principal;
-    }
 }
 
-internal class SafeKrb5Principal : SafeHandle
+internal class SafeKrb5CCache : SafeHandle
 {
-    internal SafeKrb5Context Context = new();
+    private SafeKrb5Context _context;
 
-    internal SafeKrb5Principal() : base(IntPtr.Zero, true) { }
+    internal SafeKrb5CCache(SafeKrb5Context context, nint ccache) : base(ccache, true)
+    {
+        _context = context;
+    }
 
     public override bool IsInvalid => handle == IntPtr.Zero;
 
-    public override string ToString()
-    {
-        int res = Kerberos.krb5_unparse_name(Context, this, out var name);
-        if (res != 0)
-            throw new KerberosException(Context, res, "krb5_unparse_name");
-
-        string? result =  Marshal.PtrToStringUTF8(name);
-
-        Kerberos.krb5_xfree(name);
-
-        return result ?? "";
-    }
-
     protected override bool ReleaseHandle()
     {
-        Kerberos.krb5_free_principal(Context, handle);
+        Kerberos.krb5_cc_close(_context, handle);
         return true;
     }
 }
@@ -171,11 +213,32 @@ internal class SafeKrb5ErrorMessage : SafeHandle
     }
 }
 
+internal class SafeKrb5Principal : SafeHandle
+{
+    private SafeKrb5Context _context;
+
+    internal SafeKrb5Principal(SafeKrb5Context context, nint principal) : base(principal, true)
+    {
+        _context = context;
+    }
+
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
+    protected override bool ReleaseHandle()
+    {
+        Kerberos.krb5_free_principal(_context, handle);
+        return true;
+    }
+}
+
 internal class SafeKrb5Realm : SafeHandle
 {
-    internal SafeKrb5Context Context = new();
+    internal SafeKrb5Context _context;
 
-    internal SafeKrb5Realm() : base(IntPtr.Zero, true) { }
+    internal SafeKrb5Realm(SafeKrb5Context context, nint realm) : base(realm, true)
+    {
+        _context = context;
+    }
 
     public override bool IsInvalid => handle == IntPtr.Zero;
 
@@ -189,7 +252,7 @@ internal class SafeKrb5Realm : SafeHandle
         // Heimdal does not include krb5_free_default_realm and instead uses krb5_xfree.
         if (GlobalState.GssapiProvider == GssapiProvider.MIT)
         {
-            Kerberos.krb5_free_default_realm(Context, handle);
+            Kerberos.krb5_free_default_realm(_context, handle);
         }
         else
         {
