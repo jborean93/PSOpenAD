@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.6.0 - TBD
+## v0.6.0 - 2025-03-12
 
 + Raised minimum PowerShell version to 7.4
 + Updated `DnsClient` to `1.8.0` for some minor bugfixes
