@@ -36,6 +36,8 @@ public sealed class OpenADSessionOptions
 /// <summary>The OpenADSession class used to encapsulate a session with the caller.</summary>
 public sealed class OpenADSession
 {
+    private readonly GlobalState _globalState;
+
     /// <summary>The unique identifier for the session.</summary>
     public int Id { get; }
 
@@ -79,12 +81,23 @@ public sealed class OpenADSession
     /// <summary>Extended control OIDs supported by the server.</summary>
     internal string[] SupportedControls { get; }
 
-    internal OpenADSession(IADConnection connection, Uri uri, AuthenticationMethod auth, bool isSigned,
-        bool isEncrypted, int operationTimeout, string defaultNamingContext, SchemaMetadata schema,
-        string[] supportedControls, string dcDnsHostName)
+    internal OpenADSession(
+        GlobalState state,
+        IADConnection connection,
+        Uri uri,
+        AuthenticationMethod auth,
+        bool isSigned,
+        bool isEncrypted,
+        int operationTimeout,
+        string defaultNamingContext,
+        SchemaMetadata schema,
+        string[] supportedControls,
+        string dcDnsHostName)
     {
-        Id = GlobalState.SessionCounter;
-        GlobalState.SessionCounter++;
+        _globalState = state;
+
+        Id = _globalState.SessionCounter;
+        _globalState.SessionCounter++;
 
         Connection = connection;
         Uri = uri;
@@ -97,7 +110,7 @@ public sealed class OpenADSession
         SchemaMetadata = schema;
         SupportedControls = supportedControls;
 
-        GlobalState.Sessions.Add(this);
+        _globalState.Sessions.Add(this);
         connection.Session.StateChanged += OnStateChanged;
     }
 
@@ -111,31 +124,7 @@ public sealed class OpenADSession
     {
         if (state == SessionState.Closed)
         {
-            GlobalState.Sessions.Remove(this);
+            _globalState.Sessions.Remove(this);
         }
     }
-}
-
-internal static class GlobalState
-{
-    /// <summary>Client authentication provider details.</summary>
-    public static Dictionary<AuthenticationMethod, AuthenticationProvider> Providers = new();
-
-    /// <summary>List of sessions that have been opened by the client.</summary>
-    public static List<OpenADSession> Sessions = new();
-
-    /// <summary>Keeps the current session count used to uniquely identify each new session.</summary>
-    public static int SessionCounter = 1;
-
-    /// <summary>Information about LDAP classes and their attributes.</summary>
-    public static SchemaMetadata? SchemaMetadata;
-
-    /// <summary>The GSSAPI/SSPI provider that is used.</summary>
-    public static GssapiProvider GssapiProvider;
-
-    /// <summary>The default domain controller hostname to use when none was provided.</summary>
-    public static Uri? DefaultDC;
-
-    /// <summary>If the default DC couldn't be detected this stores the details.</summary>
-    public static string? DefaultDCError;
 }

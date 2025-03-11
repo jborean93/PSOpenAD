@@ -139,7 +139,8 @@ internal class GssapiContext : SecurityContext
         _mech = method == AuthenticationMethod.Negotiate ? GSSAPI.SPNEGO : GSSAPI.KERBEROS;
         _targetSpn = GSSAPI.ImportName(target, GSSAPI.GSS_C_NT_HOSTBASED_SERVICE);
 
-        bool isHeimdal = GlobalState.GssapiProvider != GssapiProvider.MIT;
+        GlobalState state = GlobalState.GetFromTLS();
+        bool isHeimdal = state.GssapiProvider != GssapiProvider.MIT;
         List<byte[]> mechList = new() { _mech };
         if (isHeimdal && method == AuthenticationMethod.Negotiate)
         {
@@ -152,7 +153,7 @@ internal class GssapiContext : SecurityContext
             _credential = GSSAPI.AcquireCredWithPassword(name, password, 0, mechList,
                 GssapiCredUsage.GSS_C_INITIATE).Creds;
 
-            if (GlobalState.GssapiProvider != GssapiProvider.MIT)
+            if (state.GssapiProvider != GssapiProvider.MIT)
             {
                 _mech = null;
             }

@@ -298,7 +298,7 @@ internal sealed class SchemaMetadata
         }
 
         // Used by argument completors.
-        GlobalState.SchemaMetadata ??= this;
+        GlobalState.GetFromTLS().SchemaMetadata ??= this;
     }
 
     public void RegisterTransformer(string attribute, DefaultOverrider.CustomTransform transformer)

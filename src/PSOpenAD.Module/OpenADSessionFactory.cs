@@ -23,14 +23,16 @@ internal sealed class OpenADSessionFactory
         PSCmdlet cmdlet, bool skipCache = false)
     {
         Uri ldapUri;
+        GlobalState state = GlobalState.GetFromTLS();
+
         if (string.IsNullOrEmpty(server))
         {
-            if (GlobalState.DefaultDC == null)
+            if (state.DefaultDC == null)
             {
                 string msg = "Cannot determine default realm for implicit domain controller.";
-                if (!string.IsNullOrEmpty(GlobalState.DefaultDCError))
+                if (!string.IsNullOrEmpty(state.DefaultDCError))
                 {
-                    msg += $" {GlobalState.DefaultDCError}";
+                    msg += $" {state.DefaultDCError}";
                 }
                 cmdlet.WriteError(new ErrorRecord(
                     new ArgumentException(msg),
@@ -40,7 +42,7 @@ internal sealed class OpenADSessionFactory
                 return null;
             }
 
-            ldapUri = GlobalState.DefaultDC;
+            ldapUri = state.DefaultDC;
         }
         else if (server.StartsWith("ldap://", true, CultureInfo.InvariantCulture) ||
             server.StartsWith("ldaps://", true, CultureInfo.InvariantCulture))
@@ -74,14 +76,14 @@ internal sealed class OpenADSessionFactory
         OpenADSession? session = null;
         if (!skipCache)
         {
-            session = GlobalState.Sessions.Find(s => s.Uri == ldapUri);
+            session = state.Sessions.Find(s => s.Uri == ldapUri);
         }
 
         if (session == null)
         {
             try
             {
-                return Create(ldapUri, credential, auth, startTls, sessionOptions, cancelToken, cmdlet: cmdlet);
+                return Create(ldapUri, credential, auth, startTls, sessionOptions, cancelToken, cmdlet: cmdlet, state: state);
             }
             catch (LDAPException e)
             {
@@ -112,9 +114,11 @@ internal sealed class OpenADSessionFactory
         bool startTls,
         OpenADSessionOptions sessionOptions,
         CancellationToken cancelToken,
-        PSCmdlet cmdlet
-    )
+        PSCmdlet cmdlet,
+        GlobalState? state = null)
     {
+        state ??= GlobalState.GetFromTLS();
+
         if (auth == AuthenticationMethod.Certificate && sessionOptions.ClientCertificate is null)
         {
             throw new ArgumentException(
@@ -149,6 +153,7 @@ internal sealed class OpenADSessionFactory
             }
 
             auth = Authenticate(
+                state,
                 connection,
                 uri,
                 auth,
@@ -200,7 +205,7 @@ internal sealed class OpenADSessionFactory
             // the required PowerShell type.
             SchemaMetadata schema = QuerySchema(connection, subschemaSubentry, sessionOptions, cancelToken, cmdlet);
 
-            return new OpenADSession(connection, uri, auth, transportIsTls || authSigned,
+            return new OpenADSession(state, connection, uri, auth, transportIsTls || authSigned,
                 transportIsTls || authEncrypted, sessionOptions.OperationTimeout, defaultNamingContext, schema,
                 supportedControls, dnsHostName);
         }
@@ -327,6 +332,7 @@ internal sealed class OpenADSessionFactory
     /// <param name="encrypted">Whether the auth context will encrypt the messages.</param>
     /// <returns>The authentication method used</returns>
     private static AuthenticationMethod Authenticate(
+        GlobalState state,
         IADConnection connection,
         Uri uri,
         AuthenticationMethod auth,
@@ -350,7 +356,7 @@ internal sealed class OpenADSessionFactory
             // Use Certificate if a client certificate is specified, otherwise favour Negotiate auth if it is
             // available. Otherwise use Simple if both a credential and the exchange would be encrypted. If all else
             // fails use an anonymous bind.
-            AuthenticationProvider nego = GlobalState.Providers[AuthenticationMethod.Negotiate];
+            AuthenticationProvider nego = state.Providers[AuthenticationMethod.Negotiate];
             if (sessionOptions.ClientCertificate is not null && transportIsTls)
             {
                 auth = AuthenticationMethod.Certificate;
@@ -371,7 +377,7 @@ internal sealed class OpenADSessionFactory
             cmdlet.WriteVerbose($"Default authentication mechanism has been set to {auth}");
         }
 
-        AuthenticationProvider selectedAuth = GlobalState.Providers[auth];
+        AuthenticationProvider selectedAuth = state.Providers[auth];
         if (!selectedAuth.Available)
         {
             string msg = $"Authentication {selectedAuth.Method} is not available";

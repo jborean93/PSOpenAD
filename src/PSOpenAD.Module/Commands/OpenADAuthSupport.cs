@@ -10,7 +10,7 @@ public class GetOpenADAuthSupport : PSCmdlet
 {
     protected override void EndProcessing()
     {
-        foreach (AuthenticationProvider provider in GlobalState.Providers.Values)
+        foreach (AuthenticationProvider provider in GlobalState.GetFromTLS().Providers.Values)
             WriteObject(provider);
     }
 }

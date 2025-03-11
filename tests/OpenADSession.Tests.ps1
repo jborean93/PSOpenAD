@@ -1,6 +1,112 @@
 . ([IO.Path]::Combine($PSScriptRoot, 'common.ps1'))
 
 Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
+    BeforeAll {
+        if (-not $IsWindows) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace PSOpenAD.Tests;
+
+public static class Libc
+{
+    [DllImport("libc")]
+    public static extern void setenv(string name, string value);
+
+    [DllImport("libc")]
+    public static extern void unsetenv(string name);
+}
+'@
+        }
+
+        $moduleName = (Get-Item ([IO.Path]::Combine($PSScriptRoot, '..', 'module', '*.psd1'))).BaseName
+        $manifestPath = [IO.Path]::Combine($PSScriptRoot, '..', 'output', $moduleName)
+
+        Function Invoke-WithKrb5Context {
+            [CmdletBinding()]
+            param (
+                [Parameter(Mandatory)]
+                [ScriptBlock]
+                $ScriptBlock,
+
+                [Parameter()]
+                [switch]
+                $ClearCCache,
+
+                [Parameter()]
+                [string]
+                $NewRealm,
+
+                [Parameter()]
+                [string]
+                $NewHostname
+            )
+
+            $origEnv = $env:KRB5_CONFIG
+            $origCCache = $env:KRB5CCNAME
+            $ccachePath = $origEnv ?? "/etc/krb5.conf"
+
+            Get-Content -LiteralPath $ccachePath -ErrorAction Stop |
+                ForEach-Object {
+                    if ($_ -like "*default_realm =*") {
+                        if ($NewRealm) {
+                            "default_realm = $NewRealm"
+                        }
+                    }
+                    else {
+                        $_
+                    }
+                } |
+                Set-Content -LiteralPath "TestDrive:/krb5.test.conf"
+            $tempKrb5 = (Get-Item -LiteralPath "TestDrive:/krb5.test.conf").FullName
+            $tempKrb5CCache = "FILE:$(Join-Path ([IO.Path]::GetTempPath()) missing_ccache)"
+
+            $ps = $null
+            try {
+                [PSOpenAD.Tests.Libc]::setenv("KRB5_CONFIG", $tempKrb5)
+
+                if ($ClearCCache) {
+                    [PSOpenAD.Tests.Libc]::setenv("KRB5CCNAME", $tempKrb5CCache)
+                }
+                if ($NewHostname) {
+                    [PSOpenAD.Tests.Libc]::setenv("_PSOPENAD_MOCK_HOSTNAME", $NewHostname)
+                }
+
+                $ps = [PowerShell]::Create()
+                $null = $ps.AddScript('Import-Module -Name $args[0] -Force').AddArgument($manifestPath).AddStatement()
+                $null = $ps.AddScript('& $args[0].Ast.GetScriptBlock()').AddArgument($ScriptBlock)
+
+                $ps.Invoke()
+                foreach ($e in $ps.Streams.Error) {
+                    Write-Error -ErrorRecord $e
+                }
+            }
+            finally {
+                if ($origEnv) {
+                    [PSOpenAD.Tests.Libc]::setenv("KRB5_CONFIG", $origEnv)
+                }
+                else {
+                    [PSOpenAD.Tests.Libc]::unsetenv("KRB5_CONFIG")
+                }
+
+                if ($ClearCCache) {
+                    if ($origCCache) {
+                        [PSOpenAD.Tests.Libc]::setenv("KRB5CCNAME", $origCCache)
+                    }
+                    else {
+                        [PSOpenAD.Tests.Libc]::unsetenv("KRB5CCNAME")
+                    }
+                }
+
+                if ($NewHostname) {
+                    [PSOpenAD.Tests.Libc]::unsetenv("_PSOPENAD_MOCK_HOSTNAME")
+                }
+
+                ${ps}?.Dispose()
+            }
+        }
+    }
     BeforeEach {
         Get-OpenADSession | Remove-OpenADSession
     }
@@ -14,6 +120,42 @@ Describe "New-OpenADSession over LDAP" -Skip:(-not $PSOpenADSettings.Server) {
         $sessions = Get-OpenADSession
         $sessions.Count | Should -Be 1
         $sessions -is ([PSOpenAD.OpenADSession]) | Should -BeTrue
+    }
+
+    It "Creates a new session using implicit server and ccache fallback" -Skip:(
+        $IsWindows -or
+        -not ($PSOpenADSettings.DefaultCredsAvailable -and $PSOpenADSettings.ImplicitServerAvailable)
+    ) {
+        Invoke-WithKrb5Context -NewHostName TESTHOST {
+            $null = Get-OpenADObject -ErrorAction Stop
+            $sessions = Get-OpenADSession
+            $sessions.Count | Should -Be 1
+            $sessions -is ([PSOpenAD.OpenADSession]) | Should -BeTrue
+        }
+    }
+
+    It "Fails to to create a session session with implicit server - missing ccache fallback" -Skip:(
+        $IsWindows -or
+        -not ($PSOpenADSettings.DefaultCredsAvailable -and $PSOpenADSettings.ImplicitServerAvailable)
+    ) {
+        Invoke-WithKrb5Context -NewHostName TESTHOST -ClearCCache {
+            $exp = {
+                $null = Get-OpenADObject -ErrorAction Stop
+            } | Should -Throw -PassThru
+            [string]$exp | Should -BeLike "Cannot determine default realm for implicit domain controller. Failed to lookup krb5 default realm: krb5_get_default_realm failed *, krb5_cc_get_principal failed *"
+        }
+    }
+
+    It "Fails to to create a session session with implicit server - invalid DNS lookup" -Skip:(
+        $IsWindows -or
+        -not ($PSOpenADSettings.DefaultCredsAvailable -and $PSOpenADSettings.ImplicitServerAvailable)
+    ) {
+        Invoke-WithKrb5Context -NewHostName TESTHOST -NewRealm FAKE.REALM {
+            $exp = {
+                $null = Get-OpenADObject -ErrorAction Stop
+            } | Should -Throw -PassThru
+            [string]$exp | Should -Be "Cannot determine default realm for implicit domain controller. No SRV records for _ldap._tcp.dc._msdcs.FAKE.REALM found"
+        }
     }
 
     It "Creates a session using default credentials - <AuthType>" -Skip:(-not $PSOpenADSettings.DefaultCredsAvailable) -TestCases @(
