@@ -162,6 +162,10 @@ task PesterTests {
         return
     }
 
+    if (-not $Manifest.TestFramework) {
+        throw "No compatible target test framework for PowerShell '$($Manifest.PowerShellVersion)'"
+    }
+
     $dotnetTools = @(dotnet tool list --global) -join "`n"
     if (-not $dotnetTools.Contains('coverlet.console')) {
         Write-Host 'Installing dotnet tool coverlet.console' -ForegroundColor Yellow
