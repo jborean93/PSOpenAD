@@ -2,6 +2,8 @@
 
 ## v0.6.1 - TBD
 
++ Remove length check for `sAMAccountName` when used in the `-Identity` parameter
+
 ## v0.6.0 - 2025-03-12
 
 + Raised minimum PowerShell version to 7.4

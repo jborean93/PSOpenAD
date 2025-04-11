@@ -4,9 +4,16 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     BeforeAll {
         $session = New-TestOpenADSession
         $dcName = @($session.DomainController -split '\.')[0]
+
+        $container = (New-OpenADObject -Session $session -Name "PSOpenAD-Test-$([Guid]::NewGuid().Guid)" -Type container -PassThru).DistinguishedName
     }
 
     AfterAll {
+        if ($container) {
+            Get-OpenADObject -Session $session -LDAPFilter '(objectClass=*)' -SearchBase $container |
+                Sort-Object -Property { $_.DistinguishedName.Length } -Descending |
+                Remove-OpenADObject -Session $session
+        }
         Get-OpenADSession | Remove-OpenADSession
     }
 
@@ -153,6 +160,26 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.PSObject.Properties.Name | Should -Contain 'SID'
                 $_.DomainController | Should -Be $session.DomainController
             }
+        }
+
+        It "Gets group with name greater than 23 characters" {
+            $longGroupName = "MyGroup-$('a' * 55)"
+            $groupParams = @{
+                Name = $longGroupName
+                Type = 'group'
+                Path = $container
+                OtherAttributes = @{
+                    sAMAccountName = $longGroupName
+                }
+                PassThru = $true
+                Session = $session
+            }
+            $group = New-OpenADObject @groupParams
+            $actual = Get-OpenADGroup -Identity $longGroupName -Session $session
+            $actual.Name | Should -Be $longGroupName
+            $actual.DistinguishedName | Should -Be "CN=$longGroupName,$container"
+            $actual.SamAccountName | Should -Be $longGroupName
+            $group | Remove-OpenADObject
         }
 
         It "Requests a property that is not set" {
