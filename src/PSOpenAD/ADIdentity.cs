@@ -106,7 +106,7 @@ public class ADPrincipalIdentity : ADObjectIdentity
     {
         filter = new FilterPresent("");
 
-        Match m = Regex.Match(value, @"^(?:[^:*?""<>|\/\\]+\\)?(?<username>[^;:""<>|?,=\*\+\\\(\)]{1,20})$");
+        Match m = Regex.Match(value, @"^(?:[^:*?""<>|\/\\]+\\)?(?<username>[^;:""<>|?,=\*\+\\\(\)]+)$");
         if (m.Success)
         {
             string username = m.Groups["username"].Value;
