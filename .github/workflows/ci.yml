@@ -25,7 +25,7 @@ jobs:
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: OIDC Login to Azure
       if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
@@ -39,11 +39,12 @@ jobs:
       shell: pwsh
       run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
       env:
-        AZURE_KEYVAULT_NAME: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_KEYVAULT_NAME || '' }}
-        AZURE_KEYVAULT_CERT: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_KEYVAULT_CERT || '' }}
+        AZURE_TS_NAME: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_TS_NAME || '' }}
+        AZURE_TS_PROFILE: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_TS_PROFILE || '' }}
+        AZURE_TS_ENDPOINT: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_TS_ENDPOINT || '' }}
 
     - name: Capture PowerShell Module
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: PSModule
         path: output/*.nupkg
@@ -79,10 +80,10 @@ jobs:
           version: '7.5.0'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Restore Built PowerShell Module
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: PSModule
         path: output
@@ -98,21 +99,21 @@ jobs:
 
     - name: Upload Test Results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Unit Test Results (${{ matrix.info.name }})
         path: ./output/TestResults/Pester.xml
 
     - name: Upload Coverage Results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: Coverage Results (${{ matrix.info.name }})
         path: ./output/TestResults/Coverage.xml
 
     - name: Upload Coverage to codecov
       if: always()
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./output/TestResults/Coverage.xml
