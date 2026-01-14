@@ -3,6 +3,7 @@
 ## v0.6.1 - TBD
 
 + Remove length check for `sAMAccountName` when used in the `-Identity` parameter
++ Fix the search base and scope when using `Get-OpenAD*` with the `-Identity` parameter, it should now be possible to find objects not in the `defaultNamingContext`
 
 ## v0.6.0 - 2025-03-12
 

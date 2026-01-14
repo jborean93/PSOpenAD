@@ -48,10 +48,10 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
         }
 
         It "Fails to find entry with identity" {
-            $actual = Get-OpenADObject -Session $session -Identity invalid-id -ErrorAction SilentlyContinue -ErrorVariable err
+            $actual = Get-OpenADObject -Session $session -Identity CN=invalid-id -ErrorAction SilentlyContinue -ErrorVariable err
             $actual | Should -BeNullOrEmpty
             $err.Count | Should -Be 1
-            $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter: '(&(objectClass=*)(distinguishedName=invalid-id))' under: *"
+            $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter '(objectClass=*)' under search base 'CN=invalid-id' with scope Base"
         }
 
         It "Requests non-default property with case insensitive name" {
@@ -62,6 +62,12 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
         It "Does not fail if no match on filter" {
             $actual = Get-OpenADObject -Session $session -LDAPFilter '(objectClass=some-invalid-class)'
             $actual | Should -BeNullOrEmpty
+        }
+
+        It "Finds by identity in non default naming context" {
+            $dse = Get-OpenADRootDSE -Session $session
+            $actual = Get-OpenADObject -Session $session -Identity "CN=Directory Service,CN=Windows NT,CN=Services,$($dse.ConfigurationNamingContext)" -Properties sPNMappings
+            $actual.sPNMappings | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -285,7 +291,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 $actual = Get-OpenADUser -Session $session -Identity MyTestContact -ErrorAction SilentlyContinue -ErrorVariable err
                 $actual | Should -BeNullOrEmpty
                 $err.Count | Should -Be 1
-                $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter: '(&(&(objectCategory=person)(objectClass=user))(sAMAccountName=MyTestContact))' under: *"
+                $err[0].Exception.Message | Should -BeLike "Cannot find an object with identity filter '(&(&(objectCategory=person)(objectClass=user))(sAMAccountName=MyTestContact))' under search base * with scope Subtree"
             }
             finally {
                 $contact | Remove-OpenADObject -Session $session

@@ -171,6 +171,7 @@ internal static class Operations
     /// <param name="cancelToken">Token to cancel any network IO waits</param>
     /// <param name="cmdlet">The PSCmdlet that is running the operation.</param>
     /// <param name="ignoreErrors">Ignore errors and do not write to the error stream.</param>
+    /// <param name="state">Optional search state to track if errors occurred during the search.</param>
     /// <returns>Yields each returned result containing the attributes requested from the search request.</returns>
     public static IEnumerable<SearchResultEntry> LdapSearchRequest(
         IADConnection connection,
@@ -183,8 +184,8 @@ internal static class Operations
         IList<LDAPControl>? controls,
         CancellationToken cancelToken,
         PSCmdlet? cmdlet,
-        bool ignoreErrors
-    )
+        bool ignoreErrors,
+        Func<LDAPResult, bool>? errorHandler = null)
     {
         cmdlet?.WriteVerbose($"Starting LDAP search request at '{searchBase}' for {scope} - {filter}");
 
@@ -235,6 +236,10 @@ internal static class Operations
                         $"A referral was returned from the server that points to: '{referralUris}'");
                     error.ErrorDetails.RecommendedAction = "Perform request on one of the referral URIs";
                     cmdlet?.WriteError(error);
+                }
+                else if (errorHandler is not null && errorHandler(resultDone.Result))
+                {
+                    break;
                 }
                 else if (!ignoreErrors && resultDone.Result.ResultCode != LDAPResultCode.Success)
                 {

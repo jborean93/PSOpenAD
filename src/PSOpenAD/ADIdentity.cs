@@ -21,7 +21,7 @@ public class ADObjectIdentity
         }
         else
         {
-            LDAPFilter = DistinguishedNameFilter(value);
+            LDAPFilter = new FilterPresent("objectClass");
             DistinguishedName = value;
         }
 
@@ -53,11 +53,6 @@ public class ADObjectIdentity
     {
         return new FilterEquality("objectGUID", objectGuid.ToByteArray());
     }
-
-    internal static LDAPFilter DistinguishedNameFilter(string dn)
-    {
-        return new FilterEquality("distinguishedName", LDAPFilter.EncodeSimpleFilterValue(dn));
-    }
 }
 
 public class ADPrincipalIdentity : ADObjectIdentity
@@ -76,7 +71,7 @@ public class ADPrincipalIdentity : ADObjectIdentity
             LDAPFilter = filter;
         else
         {
-            LDAPFilter = DistinguishedNameFilter(value);
+            LDAPFilter = new FilterPresent("objectClass");
             DistinguishedName = value;
         }
     }
