@@ -113,6 +113,8 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
 
     protected override void ProcessRecordWithSession(OpenADSession session)
     {
+        string searchBase = SearchBase ?? session.DefaultNamingContext;
+        SearchScope searchScope = SearchScope;
         LDAPFilter finalFilter;
         if (!string.IsNullOrWhiteSpace(LDAPFilter))
         {
@@ -153,7 +155,17 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
         }
         else if (Identity != null)
         {
-            finalFilter = new FilterAnd(new[] { FilteredClass, Identity.LDAPFilter });
+            if (string.IsNullOrEmpty(Identity.DistinguishedName))
+            {
+                finalFilter = new FilterAnd(new[] { FilteredClass, Identity.LDAPFilter });
+            }
+            else
+            {
+                // If searching by DN we want to match just that object.
+                finalFilter = FilteredClass;
+                searchBase = Identity.DistinguishedName;
+                searchScope = SearchScope.Base;
+            }
         }
         else
         {
@@ -216,18 +228,17 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
             return;
         }
 
-        string searchBase = SearchBase ?? session.DefaultNamingContext;
-        bool outputResult = false;
-
         HashSet<string> finalObjectProperties = requestedProperties
             .Where(v =>
                 v != "*" &&
                 (showAll || explicitProperties.Contains(v, _caseInsensitiveComparer)))
             .ToHashSet();
 
-        foreach (SearchResultEntry result in SearchRequest(session, searchBase, finalFilter,
-            requestedProperties.ToArray(), serverControls))
+        bool noSuchObject = true;
+        foreach (SearchResultEntry result in SearchRequest(session, searchBase, searchScope, finalFilter,
+            requestedProperties.ToArray(), serverControls, (r) => r.ResultCode == LDAPResultCode.NoSuchObject))
         {
+            noSuchObject = false;
             OpenADEntity adObj = CreateOutputObject(
                 session,
                 result,
@@ -236,13 +247,12 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                 this
             );
             ProcessOutputObject(PSObject.AsPSObject(adObj));
-            outputResult = true;
             WriteObject(adObj);
         }
 
-        if (ParameterSetName.EndsWith("Identity") && !outputResult)
+        if (noSuchObject && ParameterSetName.EndsWith("Identity"))
         {
-            string msg = $"Cannot find an object with identity filter: '{finalFilter}' under: '{searchBase}'";
+            string msg = $"Cannot find an object with identity filter '{finalFilter}' under search base '{searchBase}' with scope {searchScope}";
             ErrorRecord rec = new(new ItemNotFoundException(msg), "IdentityNotFound",
                 ErrorCategory.ObjectNotFound, finalFilter.ToString());
             WriteError(rec);
@@ -252,13 +262,14 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
     internal virtual IEnumerable<SearchResultEntry> SearchRequest(
         OpenADSession session,
         string searchBase,
+        SearchScope searchScope,
         LDAPFilter filter,
         string[] attributes,
-        IList<LDAPControl>? serverControls
-    )
+        IList<LDAPControl>? serverControls,
+        Func<LDAPResult, bool> errorHandler)
     {
-        return Operations.LdapSearchRequest(session.Connection, searchBase, SearchScope, 0, session.OperationTimeout,
-            filter, attributes, serverControls, CancelToken, this, false);
+        return Operations.LdapSearchRequest(session.Connection, searchBase, searchScope, 0, session.OperationTimeout,
+            filter, attributes, serverControls, CancelToken, this, false, errorHandler);
     }
 
     internal virtual void ProcessOutputObject(PSObject obj) { }

@@ -1,5 +1,6 @@
 using PSOpenAD.LDAP;
 using PSOpenAD.Security;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
@@ -28,14 +29,15 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
     internal override IEnumerable<SearchResultEntry> SearchRequest(
         OpenADSession session,
         string searchBase,
+        SearchScope searchScope,
         LDAPFilter filter,
         string[] attributes,
-        IList<LDAPControl>? serverControls
-    )
+        IList<LDAPControl>? serverControls,
+        Func<LDAPResult, bool> errorHandler)
     {
         foreach (SearchResultEntry principal in Operations.LdapSearchRequest(session.Connection, searchBase,
-            SearchScope, 1, session.OperationTimeout, filter, new[] { "memberOf", "objectSid", "primaryGroupID" },
-            serverControls, CancelToken, this, false))
+            searchScope, 1, session.OperationTimeout, filter, new[] { "memberOf", "objectSid", "primaryGroupID" },
+            serverControls, CancelToken, this, false, errorHandler))
         {
             FilterEquality? primaryGroupFilter = null;
             LDAPFilter groupMembershipFilter;
@@ -80,8 +82,8 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
 
             try
             {
-                foreach (SearchResultEntry result in Operations.LdapSearchRequest(session.Connection, searchBase,
-                    SearchScope, 0, session.OperationTimeout, groupMembershipFilter, attributes, serverControls,
+                foreach (SearchResultEntry result in Operations.LdapSearchRequest(session.Connection, session.DefaultNamingContext,
+                    SearchScope.Subtree, 0, session.OperationTimeout, groupMembershipFilter, attributes, serverControls,
                     CancelToken, this, false))
                 {
                     yield return result;
