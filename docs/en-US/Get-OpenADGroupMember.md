@@ -44,7 +44,7 @@ Get-OpenADGroupMember [-Recursive] [-Server <String>] [-AuthType <Authentication
 The `Get-OpenADGroupMember` cmdlet returns the member objects of a group specified by `-Identity` or the groups found by `-LDAPFilter`.
 
 The `Identity` parameter specifies the active directory group to get the members for.
-You can specify the identity of the group with the distinguished name, GUID, User Principal Name (UPN), Security Account Manager (SAM) name, or security identifier.
+You can specify the identity of the group with the distinguished name, GUID, Security Account Manager (SAM) name, or security identifier.
 The group can also be specified by passing in a group object through the pipeline.
 
 The `LDAPFilter` parameter can be used to specify multiple groups to get the membership of.
@@ -94,7 +94,7 @@ This command retrieves the members of the Administrators group from the implicit
 
 ### -AuthType
 The authentication type to use when creating the `OpenAD` session.
-This is used when the cmdlet creates a new connection to the `-Server` specified`.
+This is used when the cmdlet creates a new connection to the `-Server` specified.
 
 ```yaml
 Type: AuthenticationMethod
@@ -133,8 +133,6 @@ Specifies the Active Directory group to list the members of using one of the fol
 + `ObjectGUID`
 
 + `ObjectSID`
-
-+ `UserPrincipalName`
 
 + `SamAccountName`
 
