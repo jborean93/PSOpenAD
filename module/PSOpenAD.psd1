@@ -71,6 +71,7 @@
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
     CmdletsToExport        = @(
+        'Add-OpenADGroupMember'
         'Get-OpenADAuthSupport'
         'Get-OpenADComputer'
         'Get-OpenADGroup'
@@ -86,6 +87,7 @@
         'New-OpenADSession'
         'New-OpenADSessionOption'
         'Move-OpenADObject'
+        'Remove-OpenADGroupMember'
         'Remove-OpenADObject'
         'Remove-OpenADSession'
         'Rename-OpenADObject'
