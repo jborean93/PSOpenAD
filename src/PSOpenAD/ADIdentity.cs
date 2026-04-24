@@ -63,11 +63,11 @@ public class ADPrincipalIdentity : ADObjectIdentity
     {
         if (TryParseGuid(value, out var filter))
             LDAPFilter = filter;
+        else if (TryParseSecurityIdentifier(value, out filter))
+            LDAPFilter = filter;
         else if (TryParseUPN(value, out filter))
             LDAPFilter = filter;
         else if (TryParseSamAccountName(value, out filter))
-            LDAPFilter = filter;
-        else if (TryParseSecurityIdentifier(value, out filter))
             LDAPFilter = filter;
         else
         {
