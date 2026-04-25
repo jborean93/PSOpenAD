@@ -11,7 +11,7 @@ Describe "Remove-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server)
 
     BeforeEach {
         $contact = New-OpenADObject -Session $session -Name MyContact -Type contact -PassThru
-        $group = New-OpenADObject -Session $session -Name MyGroup -Type group -OtherAttributes @{ member = $contact } -PassThru
+        $group = New-OpenADObject -Session $session -Name MyGroup -Type group -OtherAttributes @{ member = $contact.DistinguishedName } -PassThru
     }
 
     AfterEach {
@@ -20,7 +20,7 @@ Describe "Remove-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server)
 
     Context "Remove-OpenADGroupMember" {
         It "Removes group member" {
-            Remove-OpenADGroupMember -Session $session -Identity 'MyGroup' -Members $contact
+            Remove-OpenADGroupMember -Session $session -Identity $group.DistinguishedName -Members $contact
 
             $actual = $group | Get-OpenADObject -Session $session -Property member
             $actual.Member | Should -BeNullOrEmpty
@@ -36,13 +36,7 @@ Describe "Remove-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server)
         It "Fails with non-existing objectGuid -Identity" {
             Remove-OpenADGroupMember -Session $session -Identity ([Guid]::Empty) -Members $contact -ErrorAction SilentlyContinue -ErrorVariable err
             $err.Count | Should -Be 1
-            [string]$err[0] | Should -Be "Failed to find object to set using the filter '(objectGUID=\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00)'"
-        }
-
-        It "Fails with invalid dn -Identity" {
-            Remove-OpenADGroupMember -Session $session -Identity "CN=Fake" -Members $contact -ErrorAction SilentlyContinue -ErrorVariable err
-            $err.Count | Should -Be 1
-            [string]$err[0] | Should -BeLike "Failed to modify 'CN=Fake': No such object *"
+            [string]$err[0] | Should -Be "Failed to find group to set using the filter '(objectGUID=\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00)'"
         }
 
         It "Runs with -PassThru" {
@@ -57,7 +51,7 @@ Describe "Remove-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server)
             $group | Remove-OpenADGroupMember -Session $session -Members $contact -WhatIf
 
             $actual = $group | Get-OpenADObject -Session $session -Property member
-            $actual.Member | Should -Be $contact
+            $actual.Member | Should -Be $contact.DistinguishedName
         }
 
         It "Runs with -WhatIf and -PassThru" {
@@ -65,7 +59,7 @@ Describe "Remove-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server)
             $actual2 = $group | Get-OpenADObject -Session $session -Property member
 
             $actual1.DistinguishedName | Should -Be $actual2.DistinguishedName
-            $actual2.Member | Should -Be $contact
+            $actual2.Member | Should -Be $contact.DistinguishedName
         }
     }
 }

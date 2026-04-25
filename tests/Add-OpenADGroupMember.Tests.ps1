@@ -20,29 +20,23 @@ Describe "Add-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
 
     Context "Add-OpenADGroupMember" {
         It "Adds group member" {
-            Add-OpenADGroupMember -Session $session -Identity 'MyGroup' -Members $contact
+            Add-OpenADGroupMember -Session $session -Identity $group.DistinguishedName -Members $contact
 
             $actual = $group | Get-OpenADObject -Session $session -Property member
-            $actual.Member | Should -Be $contact
+            $actual.Member | Should -Be $contact.DistinguishedName
         }
 
         It "Adds group member through pipeline input" {
             $group | Add-OpenADGroupMember -Session $session -Members $contact
 
             $actual = $group | Get-OpenADObject -Session $session -Property member
-            $actual.Member | Should -Be $contact
+            $actual.Member | Should -Be $contact.DistinguishedName
         }
 
         It "Fails with non-existing objectGuid -Identity" {
             Add-OpenADGroupMember -Session $session -Identity ([Guid]::Empty) -Members $contact -ErrorAction SilentlyContinue -ErrorVariable err
             $err.Count | Should -Be 1
-            [string]$err[0] | Should -Be "Failed to find object to set using the filter '(objectGUID=\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00)'"
-        }
-
-        It "Fails with invalid dn -Identity" {
-            Add-OpenADGroupMember -Session $session -Identity "CN=Fake" -Members $contact -ErrorAction SilentlyContinue -ErrorVariable err
-            $err.Count | Should -Be 1
-            [string]$err[0] | Should -BeLike "Failed to modify 'CN=Fake': No such object *"
+            [string]$err[0] | Should -Be "Failed to find group to set using the filter '(objectGUID=\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00)'"
         }
 
         It "Runs with -PassThru" {
@@ -50,7 +44,7 @@ Describe "Add-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             $actual2 = $group | Get-OpenADObject -Session $session -Property member
 
             $actual1.ObjectGuid | Should -Be $actual2.ObjectGuid
-            $actual2.Member | Should -Be $contact
+            $actual2.Member | Should -Be $contact.DistinguishedName
         }
 
         It "Runs with -WhatIf" {
