@@ -27,6 +27,9 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
     public ADPrincipalIdentity[]? Members { get; set; }
 
     [Parameter]
+    public SwitchParameter DisablePermissiveModify { get; set; }
+
+    [Parameter]
     public SwitchParameter PassThru { get; set; }
 
     internal abstract ModifyOperation ChangeOperation { get; }
@@ -81,6 +84,10 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
             )
         );
 
+        List<LDAPControl>? serverControls = DisablePermissiveModify
+            ? null
+            : new() { new PermissiveModify(false) };
+
         HashSet<string> searchProperties = OpenADObject.DEFAULT_PROPERTIES
             .Select(p => p.Item1)
             .ToHashSet(_caseInsensitiveComparer);
@@ -93,7 +100,7 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
                 session.Connection,
                 entry,
                 new[] { change },
-                null,
+                serverControls,
                 CancelToken,
                 this
             );

@@ -73,6 +73,7 @@ internal class LDAPControl
             ShowDeleted.LDAP_SERVER_SHOW_DELETED_OID => new ShowDeleted(criticality),
             ShowDeactivatedLink.LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID => new ShowDeactivatedLink(criticality),
             PagedResultControl.LDAP_PAGED_RESULT_OID_STRING => new PagedResultControl(criticality, value, ruleSet),
+            PermissiveModify.LDAP_SERVER_PERMISSIVE_MODIFY_OID => new PermissiveModify(criticality),
             _ => new LDAPControl(controlType, criticality),
         };
     }
@@ -171,4 +172,16 @@ internal class PagedResultControl : LDAPControl
         writer.WriteInteger(Size);
         writer.WriteOctetString(Cookie);
     }
+}
+
+/// <summary>
+/// Used with an LDAP modify to specify that operations that would normally fail due to adding an attribute that
+/// already exists or deleting an attribute that does not instead succeed even though no modification was performed.
+/// </summary>
+/// <see href="https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ldap/ldap-server-permissive-modify-oid">LDAP_SERVER_PERMISSIVE_MODIFY_OID</see>
+internal class PermissiveModify : LDAPControl
+{
+    public const string LDAP_SERVER_PERMISSIVE_MODIFY_OID = "1.2.840.113556.1.4.1413";
+
+    public PermissiveModify(bool criticality) : base(LDAP_SERVER_PERMISSIVE_MODIFY_OID, criticality) { }
 }
