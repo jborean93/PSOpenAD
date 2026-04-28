@@ -29,21 +29,23 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
     [Parameter]
     public SwitchParameter PassThru { get; set; }
 
+    internal abstract ModifyOperation ChangeOperation { get; }
+
     protected override void ProcessRecordWithSession(OpenADSession session)
     {
         ArgumentNullException.ThrowIfNull(Identity);
         ArgumentNullException.ThrowIfNull(Members);
 
-        WriteVerbose($"Attempting to get distinguishedName and member for group with filter '{Identity.LDAPFilter}'");
+        WriteVerbose($"Attempting to get distinguishedName for group with filter '{Identity.LDAPFilter}'");
 
         SearchResultEntry? entryResult = Operations.LdapSearchRequest(
             session.Connection,
             Identity.DistinguishedName ?? session.DefaultNamingContext,
             SearchScope.Subtree,
-            0,
+            1,
             session.OperationTimeout,
             new FilterAnd(new[] { _filteredClass, Identity.LDAPFilter }),
-            new[] { "distinguishedName", "member" },
+            new[] { "distinguishedName" },
             null,
             CancelToken,
             this,
@@ -59,7 +61,7 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
         {
             ErrorRecord error = new(
                 new ArgumentException($"Failed to find group to set using the filter '{Identity.LDAPFilter}'"),
-                "CannotFindSetObjectWithFilter",
+                "CannotFindSetGroupWithFilter",
                 ErrorCategory.InvalidArgument,
                 Identity
             );
@@ -68,19 +70,13 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
         }
 
         ModifyChange change = new(
-            ModifyOperation.Replace,
+            ChangeOperation,
             new(
                 "member",
                 SchemaMetadata.ConvertToRawAttributeCollection(
-                    FilterMembers(
-                        entryResult.Attributes
-                            .Where(a => a.Name == "member")
-                            .SelectMany(a => a.Values)
-                            .Select(b => SyntaxDefinition.ReadDN(b)),
-                        Members
-                            .Select(m => m.DistinguishedName ?? GetIdentityDistinguishedName(m, session, "Member"))
-                            .Where(dn => !string.IsNullOrEmpty(dn))!
-                    )
+                    Members
+                        .Select(m => m.DistinguishedName ?? GetIdentityDistinguishedName(m, session, "Member"))
+                        .Where(dn => !string.IsNullOrEmpty(dn))!
                 )
             )
         );
@@ -154,8 +150,6 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
         );
         WriteObject(resultObj);
     }
-
-    abstract internal IEnumerable<string> FilterMembers(IEnumerable<string> first, IEnumerable<string> second);
 }
 
 [Cmdlet(
@@ -166,10 +160,7 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
 [OutputType(typeof(void))]
 public class AddOpenADGroupMember : SetOpenADGroupMember
 {
-    internal override IEnumerable<string> FilterMembers(IEnumerable<string> first, IEnumerable<string> second)
-    {
-        return first.Union(second, _caseInsensitiveComparer);
-    }
+    internal override ModifyOperation ChangeOperation => ModifyOperation.Add;
 }
 
 [Cmdlet(
@@ -180,8 +171,5 @@ public class AddOpenADGroupMember : SetOpenADGroupMember
 [OutputType(typeof(void))]
 public class RemoveOpenADGroupMember : SetOpenADGroupMember
 {
-    internal override IEnumerable<string> FilterMembers(IEnumerable<string> first, IEnumerable<string> second)
-    {
-        return first.Except(second, _caseInsensitiveComparer);
-    }
+    internal override ModifyOperation ChangeOperation => ModifyOperation.Delete;
 }
