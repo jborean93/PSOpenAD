@@ -101,6 +101,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -DisablePermissiveModify
+Group membership updates use permissive modify by default. This suppresses an error when removing a member that is not member of the group. When this parameter is used, an error "Attribute member already deleted for target" is returned.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Identity
 Specifies the Active Directory group to modify the members of using one of the following formats:
 
