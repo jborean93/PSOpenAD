@@ -1,15 +1,15 @@
 @{
     DotnetProject = 'PSOpenAD.Module'
-    InvokeBuildVersion = '5.12.1'
+    InvokeBuildVersion = '5.14.23'
     PesterVersion = '5.7.1'
     BuildRequirements = @(
         @{
             ModuleName = 'Microsoft.PowerShell.PSResourceGet'
-            ModuleVersion = '1.1.1'
+            ModuleVersion = '1.2.0'
         }
         @{
             ModuleName = 'OpenAuthenticode'
-            RequiredVersion = '0.6.1'
+            RequiredVersion = '0.6.3'
         }
         @{
             ModuleName = 'platyPS'

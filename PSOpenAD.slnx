@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PSOpenAD.Module/PSOpenAD.Module.csproj" />
+    <Project Path="src/PSOpenAD/PSOpenAD.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/units/">
+    <Project Path="tests/units/PSOpenADTests/PSOpenADTests.csproj" />
+  </Folder>
+</Solution>

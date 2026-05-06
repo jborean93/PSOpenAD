@@ -2,30 +2,12 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0</TargetFrameworks>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-    <EmbedUntrackedSources>true</EmbedUntrackedSources>
-    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DnsClient" Version="1.8.0" />
-    <PackageReference Include="System.IO.Pipelines" Version="8.0.0" />
-    <PackageReference Include="System.Management.Automation" Version="7.4.0" PrivateAssets="all" />
+    <PackageReference Include="DnsClient" />
+    <PackageReference Include="System.IO.Pipelines" />
+    <PackageReference Include="System.Management.Automation" PrivateAssets="all" />
     <ProjectReference Include="../PSOpenAD/PSOpenAD.csproj" />
-
-    <!--
-    S.M.A brings in these deps but we don't rely on it directly. It's up to
-    the user to run with a newer PowerShell version that isn't affected.
-    -->
-    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-447r-wph3-92pm" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all"/>
   </ItemGroup>
 </Project>

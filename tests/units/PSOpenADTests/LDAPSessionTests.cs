@@ -1,7 +1,8 @@
 using PSOpenAD.LDAP;
 using System;
+using System.Threading.Tasks;
 using System.Formats.Asn1;
-using Xunit;
+using TUnit.Core;
 
 namespace PSOpenADTests;
 
@@ -15,10 +16,10 @@ internal class CustomLDAPSession : LDAPSession
     {}
 }
 
-public static class LDAPSessionTests
+public class LDAPSessionTests
 {
-    [Fact]
-    public static void ReceiveFullMessage()
+    [Test]
+    public async Task ReceiveFullMessage()
     {
         const string MESSAGE = "MIQAAABBAgEEZYQAAAAHCgEABAAEAKCEAAAAKzCEAAAAJQQWMS4yLjg0MC4xMTM1NTYuMS40LjMxOQQLMIQAAAAFAgEABAA=";
         byte[] messageBytes = Convert.FromBase64String(MESSAGE);
@@ -26,12 +27,12 @@ public static class LDAPSessionTests
 
         LDAPMessage? parsedMessage = session.ReceiveData(messageBytes, out var consumed);
 
-        Assert.NotNull(parsedMessage);
-        Assert.Equal(messageBytes.Length, consumed);
+        await Assert.That(parsedMessage).IsNotNull();
+        await Assert.That(consumed).IsEqualTo(messageBytes.Length);
     }
 
-    [Fact]
-    public static void ReceiveFullMessageWithExtraData()
+    [Test]
+    public async Task ReceiveFullMessageWithExtraData()
     {
         // Contains 4 extra bytes
         const string MESSAGE = "MIQAAABBAgEEZYQAAAAHCgEABAAEAKCEAAAAKzCEAAAAJQQWMS4yLjg0MC4xMTM1NTYuMS40LjMxOQQLMIQAAAAFAgEABAB0ZXN0";
@@ -40,12 +41,12 @@ public static class LDAPSessionTests
 
         LDAPMessage? parsedMessage = session.ReceiveData(messageBytes, out var consumed);
 
-        Assert.NotNull(parsedMessage);
-        Assert.Equal(messageBytes.Length - 4, consumed);
+        await Assert.That(parsedMessage).IsNotNull();
+        await Assert.That(consumed).IsEqualTo(messageBytes.Length - 4);
     }
 
-    [Fact]
-    public static void ReceivePartialMessageOneByteLess()
+    [Test]
+    public async Task ReceivePartialMessageOneByteLess()
     {
         // Has 1 byte less than the full size
         const string MESSAGE = "MIQAAABBAgEEZYQAAAAHCgEABAAEAKCEAAAAKzCEAAAAJQQWMS4yLjg0MC4xMTM1NTYuMS40LjMxOQQLMIQAAAAFAgEABA==";
@@ -54,7 +55,7 @@ public static class LDAPSessionTests
 
         LDAPMessage? parsedMessage = session.ReceiveData(messageBytes, out var consumed);
 
-        Assert.Null(parsedMessage);
-        Assert.Equal(0, consumed);
+        await Assert.That(parsedMessage).IsNull();
+        await Assert.That(consumed).IsEqualTo(0);
     }
 }

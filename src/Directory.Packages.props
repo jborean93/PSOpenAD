@@ -1,0 +1,20 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Testing -->
+    <PackageVersion Include="TUnit" Version="1.43.11" />
+
+    <!-- Module Deps -->
+    <PackageVersion Include="DnsClient" Version="1.8.0" />
+    <PackageVersion Include="System.IO.Pipelines" Version="8.0.0" />
+    <PackageVersion Include="System.Management.Automation" Version="7.4.0" />
+
+    <!-- Build/CI -->
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
