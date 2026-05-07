@@ -69,6 +69,21 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual = Get-OpenADObject -Session $session -Identity "CN=Directory Service,CN=Windows NT,CN=Services,$($dse.ConfigurationNamingContext)" -Properties sPNMappings
             $actual.sPNMappings | Should -Not -BeNullOrEmpty
         }
+
+        It "Emits ParserError for invalid LDAP filter" {
+            $expected = "Extra data found at filter end"
+            $err = {
+                Get-OpenADObject -Session $session -LDAPFilter '(cn=test);2=1'
+            } | Should -Throw -ExpectedMessage $expected -PassThru
+
+            $err.FullyQualifiedErrorId | Should -Be 'InvalidLDAPFilterException,PSOpenAD.Module.Commands.GetOpenADObject'
+            $err.CategoryInfo.Category | Should -Be 'ParserError'
+            $err.TargetObject | Should -BeOfType ([Hashtable])
+            $err.TargetObject.Line | Should -Be 1
+            $err.TargetObject.LineText | Should -Be '(cn=test);2=1'
+            $err.TargetObject.StartColumn | Should -Be 10
+            $err.TargetObject.EndColumn | Should -Be 14
+        }
     }
 
     Context "Get-OpenADComputer" {

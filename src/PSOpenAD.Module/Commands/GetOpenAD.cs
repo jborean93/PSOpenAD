@@ -1,5 +1,6 @@
 using PSOpenAD.LDAP;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
@@ -131,23 +132,21 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                     e,
                     "InvalidLDAPFilterException",
                     ErrorCategory.ParserError,
-                    LDAPFilter);
-
-                rec.ErrorDetails = new($"Failed to parse LDAP Filter: {e.Message}");
-
-                // By setting the InvocationInfo we get a nice error description in PowerShell with positional
-                // details. Unfortunately this is not publicly settable so we have to use reflection.
-                if (!string.IsNullOrWhiteSpace(e.Filter))
+                    new Hashtable()
+                    {
+                        // PowerShell uses these properties to give a nicer
+                        // error message with the position of the error in the
+                        // message.
+                        { "Line", 1 },
+                        { "LineText", LDAPFilter.ToString() },
+                        // // Support for columns were added in PS 7.7, it is
+                        // // ignored on older versions.
+                        { "StartColumn", e.StartPosition + 1 },
+                        { "EndColumn", e.EndPosition + 1 }
+                    })
                 {
-                    ScriptPosition start = new("", 1, e.StartPosition + 1, e.Filter);
-                    ScriptPosition end = new("", 1, e.EndPosition + 1, e.Filter);
-                    InvocationInfo info = InvocationInfo.Create(
-                        MyInvocation.MyCommand,
-                        new ScriptExtent(start, end));
-                    rec.GetType().GetField(
-                        "_invocationInfo",
-                        BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(rec, info);
-                }
+                    ErrorDetails = new($"Failed to parse LDAP Filter: {e.Message}")
+                };
 
                 ThrowTerminatingError(rec);
                 return; // Satisfies nullability checks
