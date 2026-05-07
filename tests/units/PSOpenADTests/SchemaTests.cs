@@ -1,81 +1,82 @@
 using PSOpenAD;
 using PSOpenAD.Security;
 using System;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using Xunit;
+using TUnit.Core;
 
 namespace PSOpenADTests;
 
 public class SchemaMetadataTests
 {
-    private enum ByteEnum : byte
+    public enum ByteEnum : byte
     {
         Value1 = 1,
     }
 
-    private enum SByteEnum : sbyte
+    public enum SByteEnum : sbyte
     {
         Value1 = 1,
     }
 
-    private enum ShortEnum : short
+    public enum ShortEnum : short
     {
         Value1 = 1,
     }
 
-    private enum UShortEnum : ushort
+    public enum UShortEnum : ushort
     {
         Value1 = 1,
     }
 
-    private enum IntEnum : int
+    public enum IntEnum : int
     {
         Value1 = 1,
     }
 
-    private enum UIntEnum : uint
+    public enum UIntEnum : uint
     {
         Value1 = 1,
     }
 
-    private enum LongEnum : long
+    public enum LongEnum : long
     {
         Value1 = 1,
     }
 
-    private enum ULongEnum : ulong
+    public enum ULongEnum : ulong
     {
         Value1 = 1,
     }
 
-    [Fact]
-    public void ConvertNullToRawAttributeCollection()
+    [Test]
+    public async Task ConvertNullToRawAttributeCollection()
     {
         string[] expected = Array.Empty<string>();
 
         byte[][] result = SchemaMetadata.ConvertToRawAttributeCollection(null);
         string[] actual = result.Select(b => Convert.ToBase64String(b)).ToArray();
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertSingleByteArrayToRawAttributeCollection()
+    [Test]
+    public async Task ConvertSingleByteArrayToRawAttributeCollection()
     {
         string[] expected = new [] { "AAECAw==" };
 
         byte[][] result = SchemaMetadata.ConvertToRawAttributeCollection(new byte[] { 0, 1, 2, 3});
         string[] actual = result.Select(b => Convert.ToBase64String(b)).ToArray();
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertMultipleByteArrayToRawAttributeCollection()
+    [Test]
+    public async Task ConvertMultipleByteArrayToRawAttributeCollection()
     {
         string[] expected = new [] { "AAECAw==", "BAUGBw==" };
 
@@ -87,22 +88,22 @@ public class SchemaMetadataTests
             });
         string[] actual = result.Select(b => Convert.ToBase64String(b)).ToArray();
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertStringToRawAttributeCollection()
+    [Test]
+    public async Task ConvertStringToRawAttributeCollection()
     {
         string[] expected = new[] { "Café 1" };
 
         byte[][] result = SchemaMetadata.ConvertToRawAttributeCollection("Café 1");
         string[] actual = result.Select(b => Encoding.UTF8.GetString(b)).ToArray();
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertMultipleStringsToRawAttributeCollection()
+    [Test]
+    public async Task ConvertMultipleStringsToRawAttributeCollection()
     {
         string[] expected = new[] { "Café 1", "Café 2" };
 
@@ -114,33 +115,33 @@ public class SchemaMetadataTests
         byte[][] result = SchemaMetadata.ConvertToRawAttributeCollection(values);
         string[] actual = result.Select(b => Encoding.UTF8.GetString(b)).ToArray();
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertNullToRawAttributeValue()
+    [Test]
+    public async Task ConvertNullToRawAttributeValue()
     {
         const string expected = "";
 
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(null);
         string actual = Encoding.UTF8.GetString(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Theory]
-    [InlineData(true, "TRUE")]
-    [InlineData(false, "FALSE")]
-    public void ConvertBoolToRawAttributeValue(bool value, string expected)
+    [Test]
+    [Arguments(true, "TRUE")]
+    [Arguments(false, "FALSE")]
+    public async Task ConvertBoolToRawAttributeValue(bool value, string expected)
     {
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Encoding.UTF8.GetString(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertCommonSecurityDescriptorToRawAttributeValue()
+    [Test]
+    public async Task ConvertCommonSecurityDescriptorToRawAttributeValue()
     {
         CommonSecurityDescriptor sd = new()
         {
@@ -159,28 +160,28 @@ public class SchemaMetadataTests
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(sd);
         string actual = Convert.ToBase64String(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Theory]
-    [InlineData(ByteEnum.Value1, "1")]
-    [InlineData(SByteEnum.Value1, "1")]
-    [InlineData(ShortEnum.Value1, "1")]
-    [InlineData(UShortEnum.Value1, "1")]
-    [InlineData(IntEnum.Value1, "1")]
-    [InlineData(UIntEnum.Value1, "1")]
-    [InlineData(LongEnum.Value1, "1")]
-    [InlineData(ULongEnum.Value1, "1")]
-    public void ConvertEnumToRawAttributeValue(Enum value, string expected)
+    [Test]
+    [Arguments(ByteEnum.Value1, "1")]
+    [Arguments(SByteEnum.Value1, "1")]
+    [Arguments(ShortEnum.Value1, "1")]
+    [Arguments(UShortEnum.Value1, "1")]
+    [Arguments(IntEnum.Value1, "1")]
+    [Arguments(UIntEnum.Value1, "1")]
+    [Arguments(LongEnum.Value1, "1")]
+    [Arguments(ULongEnum.Value1, "1")]
+    public async Task ConvertEnumToRawAttributeValue(Enum value, string expected)
     {
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Encoding.UTF8.GetString(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertDateTimeToRawAttributeValue()
+    [Test]
+    public async Task ConvertDateTimeToRawAttributeValue()
     {
         const string expected = "116444736000000000";
 
@@ -188,11 +189,11 @@ public class SchemaMetadataTests
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Encoding.UTF8.GetString(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertDateTimeOffsetToRawAttributeValue()
+    [Test]
+    public async Task ConvertDateTimeOffsetToRawAttributeValue()
     {
         const string expected = "116444736000000000";
 
@@ -200,11 +201,11 @@ public class SchemaMetadataTests
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Encoding.UTF8.GetString(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertGuidToRawAttributeValue()
+    [Test]
+    public async Task ConvertGuidToRawAttributeValue()
     {
         Guid value = Guid.NewGuid();
         string expected = Convert.ToBase64String(value.ToByteArray());
@@ -212,11 +213,11 @@ public class SchemaMetadataTests
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Convert.ToBase64String(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertSecurityIdentifierToRawAttributeValue()
+    [Test]
+    public async Task ConvertSecurityIdentifierToRawAttributeValue()
     {
         SecurityIdentifier sid = new("S-1-5-18");
 
@@ -225,11 +226,11 @@ public class SchemaMetadataTests
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(sid);
         string actual = Convert.ToBase64String(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertTimeSpanToRawAttributeValue()
+    [Test]
+    public async Task ConvertTimeSpanToRawAttributeValue()
     {
         const string expected = "1024";
 
@@ -237,11 +238,11 @@ public class SchemaMetadataTests
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Encoding.UTF8.GetString(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Fact]
-    public void ConvertCertificateToAttributeValue()
+    [Test]
+    public async Task ConvertCertificateToAttributeValue()
     {
         CertificateRequest certReq = new(
             "CN=Subject",
@@ -256,19 +257,19 @@ public class SchemaMetadataTests
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Convert.ToBase64String(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 
-    [Theory]
-    [InlineData("Café", "Café")]
-    [InlineData(0, "0")]
-    [InlineData(1, "1")]
-    [InlineData(-1, "-1")]
-    public void ConvertOtherToRawAttributeValue(object value, string expected)
+    [Test]
+    [Arguments("Café", "Café")]
+    [Arguments(0, "0")]
+    [Arguments(1, "1")]
+    [Arguments(-1, "-1")]
+    public async Task ConvertOtherToRawAttributeValue(object value, string expected)
     {
         byte[] result = SchemaMetadata.ConvertToRawAttributeValue(value);
         string actual = Encoding.UTF8.GetString(result);
 
-        Assert.Equal(expected, actual);
+        await Assert.That(actual).IsEquivalentTo(expected);
     }
 }

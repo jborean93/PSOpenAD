@@ -8,12 +8,16 @@ on:
     branches:
     - main
 
+  release:
+    types:
+    - published
+
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   POWERSHELL_TELEMETRY_OPTOUT: 1
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_NOLOGO: true
-  BUILD_CONFIGURATION: ${{ fromJSON('["Debug", "Release"]')[github.ref == 'refs/heads/main'] }}
+  BUILD_CONFIGURATION: ${{ fromJSON('["Debug", "Release"]')[github.ref == 'refs/heads/main' || startsWith(github.event.release.tag_name, 'v')] }}
 
 jobs:
   build:
@@ -27,24 +31,26 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v6
 
-    - name: OIDC Login to Azure
-      if: ${{ env.BUILD_CONFIGURATION == 'Release' }}
-      uses: azure/login@v2
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    - name: OIDC Login to Azure - Release only
+      if: startsWith(github.event.release.tag_name, 'v')
+      shell: pwsh
+      run: |
+        $loginParams = @{
+            ClientId = '${{ secrets.AZURE_CLIENT_ID }}'
+            TenantId = '${{ secrets.AZURE_TENANT_ID }}'
+        }
+        ./tools/AzLoginOIDC.ps1 @loginParams
 
     - name: Build module
       shell: pwsh
       run: ./build.ps1 -Configuration $env:BUILD_CONFIGURATION -Task Build
       env:
-        AZURE_TS_NAME: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_TS_NAME || '' }}
-        AZURE_TS_PROFILE: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_TS_PROFILE || '' }}
-        AZURE_TS_ENDPOINT: ${{ env.BUILD_CONFIGURATION == 'Release' && secrets.AZURE_TS_ENDPOINT || '' }}
+        AZURE_TS_NAME: ${{ startsWith(github.event.release.tag_name, 'v') && secrets.AZURE_TS_NAME || '' }}
+        AZURE_TS_PROFILE: ${{ startsWith(github.event.release.tag_name, 'v') && secrets.AZURE_TS_PROFILE || '' }}
+        AZURE_TS_ENDPOINT: ${{ startsWith(github.event.release.tag_name, 'v') && secrets.AZURE_TS_ENDPOINT || '' }}
 
     - name: Capture PowerShell Module
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: PSModule
         path: output/*.nupkg
@@ -59,31 +65,31 @@ jobs:
       matrix:
         info:
         - name: Linux_74_MIT
-          container: almalinux:9
+          container: almalinux:10
           os: ubuntu-latest
           gssapi_provider: mit
-          version: '7.4.0'
-        - name: Linux_74_Heimdal
-          container: almalinux:9
-          os: ubuntu-latest
-          gssapi_provider: heimdal
-          version: '7.4.0'
+          psversion: '7.4.0'
         - name: Linux_75_MIT
-          container: almalinux:9
+          container: almalinux:10
           os: ubuntu-latest
           gssapi_provider: mit
-          version: '7.5.0'
-        - name: Linux_75_Heimdal
-          container: almalinux:9
+          psversion: '7.5.0'
+        - name: Linux_76_MIT
+          container: almalinux:10
+          os: ubuntu-latest
+          gssapi_provider: mit
+          psversion: '7.6.0'
+        - name: Linux_76_Heimdal
+          container: almalinux:10
           os: ubuntu-latest
           gssapi_provider: heimdal
-          version: '7.5.0'
+          psversion: '7.6.0'
 
     steps:
     - uses: actions/checkout@v6
 
     - name: Restore Built PowerShell Module
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         name: PSModule
         path: output
@@ -95,26 +101,60 @@ jobs:
         '${{ matrix.info.container }}'
         '${{ matrix.info.gssapi_provider }}'
         "${BUILD_CONFIGURATION}"
-        '${{ matrix.info.version }}'
+        '${{ matrix.info.psversion }}'
 
     - name: Upload Test Results
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: Unit Test Results (${{ matrix.info.name }})
         path: ./output/TestResults/Pester.xml
 
     - name: Upload Coverage Results
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: Coverage Results (${{ matrix.info.name }})
-        path: ./output/TestResults/Coverage.xml
+        path: ./output/TestResults/Coverage.cobertura.xml
 
     - name: Upload Coverage to codecov
       if: always()
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        files: ./output/TestResults/Coverage.xml
+        files: ./output/TestResults/Coverage.cobertura.xml
         flags: ${{ matrix.info.name }}
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+  publish:
+    name: publish
+    needs:
+    - test
+    if: startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed for GitHub release asset task
+
+    steps:
+    - name: Restore Built PowerShell Module
+      uses: actions/download-artifact@v8
+      with:
+        name: PSModule
+        path: ./
+
+    - name: Upload to release asset
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release upload \
+          "${{ github.event.release.tag_name }}" \
+          *.nupkg \
+          --repo "${{ github.repository }}"
+
+    - name: Publish to the PowerShell Gallery
+      run: >-
+        dotnet nuget push *.nupkg
+        --api-key "${PSGALLERY_TOKEN}"
+        --source "https://www.powershellgallery.com/api/v2/package"
+        --no-symbols
+      env:
+        PSGALLERY_TOKEN: ${{ secrets.PSGALLERY_TOKEN }}

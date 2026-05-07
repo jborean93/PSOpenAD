@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <PackageReference Include="System.Management.Automation" />
+    <ProjectReference Include="../../../src/PSOpenAD/PSOpenAD.csproj" />
+  </ItemGroup>
+
+</Project>

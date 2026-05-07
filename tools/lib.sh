@@ -34,7 +34,7 @@ lib::setup::system_requirements::el() {
             heimdal-libs \
             heimdal-path \
             heimdal-workstation \
-            dotnet-sdk-9.0
+            dotnet-sdk-10.0
 
         source /etc/profile.d/heimdal.sh
 
@@ -52,7 +52,7 @@ lib::setup::system_requirements::el() {
             --nogpgcheck \
             krb5-libs \
             krb5-workstation \
-            dotnet-sdk-9.0
+            dotnet-sdk-10.0
     fi
 
     # We don't care about the version for the initial bootstrap script, it'll handle
@@ -61,7 +61,7 @@ lib::setup::system_requirements::el() {
     export PATH="$PATH:~/.dotnet/tools"
 
     # Unit tests might run on a different version than the SDK that is installed
-    # this allows it to rull forward to the earliest major version available.
+    # this allows it to roll forward to the earliest major version available.
     export DOTNET_ROLL_FORWARD=Major
 
     # A test relies on being able to control the hostname returned by gethostname.
@@ -156,6 +156,8 @@ lib::tests::run() {
   }
 }
 EOF
+
+    trap 'rm ./test.settings.json' EXIT
 
     pwsh -File ./build.ps1 \
         -Configuration "${BUILD_CONFIGURATION:-Debug}" \

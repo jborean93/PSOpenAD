@@ -8,6 +8,10 @@ using namespace System.Runtime.InteropServices
 
 #Requires -Version 7.2
 
+# Progress records are just a menace, especially in newer PowerShell versions
+# so we just disable it.
+$ProgressPreference = 'Ignore'
+
 class Manifest {
     [PSModuleInfo]$Module
 
@@ -22,6 +26,7 @@ class Manifest {
     [string]$ReleasePath
     [string]$TestPath
     [string]$TestResultsPath
+    [string]$TestSettingsPath
 
     [string]$DotnetProject
     [Hashtable[]]$BuildRequirements
@@ -58,6 +63,7 @@ class Manifest {
         $this.ReleasePath = [Path]::Combine($this.OutputPath, $this.Module.Name, $this.Module.Version)
         $this.TestPath = [Path]::Combine($this.RepositoryPath, "tests")
         $this.TestResultsPath = [Path]::Combine($this.OutputPath, "TestResults")
+        $this.TestSettingsPath = [Path]::Combine($this.TestResultsPath, "settings.json")
 
         if (-not (Test-Path -LiteralPath $this.ReleasePath)) {
             New-Item -Path $this.ReleasePath -ItemType Directory -Force | Out-Null
@@ -148,7 +154,7 @@ class Manifest {
     }
 }
 
-Function Assert-ModuleFast {
+function Assert-ModuleFast {
     [CmdletBinding()]
     param(
         [Parameter()]
@@ -161,10 +167,28 @@ Function Assert-ModuleFast {
         return
     }
 
-    & ([scriptblock]::Create((Invoke-WebRequest -Uri 'bit.ly/modulefast'))) -Release $Version
+    $ProgressPreference = 'Ignore'
+
+    $attempt = 0
+    while ($true) {
+        try {
+            $code = Invoke-WebRequest -Uri 'bit.ly/modulefast'
+            break
+        }
+        catch {
+            if ($attempt -ge 2) {
+                throw "Failed to download bootstrap code for $moduleName after 3 attempts. Error: $_"
+            }
+
+            Write-Warning "Failed to download bootstrap code for $moduleName, attempt $($attempt + 1) of 3. Error: $_"
+            $attempt++
+        }
+    }
+
+    & ([scriptblock]::Create($code)) -Release $Version
 }
 
-Function Assert-PowerShell {
+function Assert-PowerShell {
     [OutputType([string])]
     [CmdletBinding()]
     param(
@@ -183,7 +207,7 @@ Function Assert-PowerShell {
         ARM64 { 'arm64' }
         default {
             $err = [ErrorRecord]::new(
-                [Exception]::new("Unsupported archecture requests '$_'"),
+                [Exception]::new("Unsupported architecture requests '$_'"),
                 "UnknownArch",
                 [ErrorCategory]::InvalidArgument,
                 $_
@@ -349,7 +373,7 @@ function Expand-Nupkg {
     }
 }
 
-Function Install-BuildDependencies {
+function Install-BuildDependencies {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, ValueFromPipeline)]
@@ -376,7 +400,7 @@ Function Install-BuildDependencies {
             return
         }
 
-        Assert-ModuleFast -Version v0.2.0
+        Assert-ModuleFast -Version v0.6.0
 
         $installParams = @{
             ModulesToInstall = $modules
@@ -394,67 +418,4 @@ Function Install-BuildDependencies {
         Get-ChildItem -LiteralPath $modulePath -Directory |
             ForEach-Object { Import-Module -Name $_.FullName }
     }
-}
-
-Function Format-CoverageInfo {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [string]
-        $Path
-    )
-
-    $coverageInfo = Get-Content -LiteralPath $Path | ConvertFrom-Json
-
-    $s = $coverageInfo.summary
-    [PSCustomObject]@{
-        GeneratedOn = $s.generatedon
-        Parser = $s.parser
-        Assemblies = $s.assemblies
-        Classes = $s.classes
-        Files = $s.files
-        LineCoverage = "$($s.linecoverage)% ($($s.coveredlines) of $($s.coverablelines))"
-        CoveredLines = $s.coveredlines
-        UncoveredLines = $s.uncoveredlines
-        CoverableLines = $s.coverablelines
-        TotalLines = $s.totallines
-        BranchCoverage = "$($s.branchcoverage)% ($($s.coveredbranches) of $($s.totalbranches))"
-        CoveredBranches = $s.coveredbranches
-        TotalsBranches = $s.totalbranches
-        MethodCoverage = "$($s.methodcoverage)% ($($s.coveredmethods) of $($s.totalmethods))"
-        CoveredMethods = $s.coveredmethods
-        TotalMethods = $s.totalmethods
-    } | Format-List
-
-    $coverageInfo.coverage.assemblies |
-        ForEach-Object {
-            @{ Bold = $true; Value = $_ }
-            $_.classesinassembly | ForEach-Object { @{ Bold = $false; Value = $_ } }
-        } |
-        ForEach-Object {
-            $bold = $_.Bold
-            $v = $_.Value
-
-            $table = [PSCustomObject]@{
-                Name = $v.name
-                Line = "$($v.coveredlines) / $($v.coverablelines)"
-                LPercent = "$($v.coverage)%"
-                Branch = "$($v.coveredbranches) / $($v.totalbranches)"
-                BPercent = "$($v.branchcoverage)%"
-                Method = "$($v.coveredmethods) / $($v.totalmethods)"
-                MPercent = "$($v.methodcoverage)%"
-            }
-            $table.PSObject.Properties | ForEach-Object {
-                # Fixes up entries there there was no value set
-                if ($_.Name.EndsWith('Percent') -and $_.Value -eq '%') {
-                    $_.Value = "0%"
-                }
-
-                if ($bold) {
-                    $_.Value = "$([char]27)[93;1m$($_.Value)$([char]27)[0m"
-                }
-            }
-
-            $table
-        } | Format-Table
 }

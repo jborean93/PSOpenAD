@@ -30,7 +30,8 @@ NETWORK_NAME=psopenad-net-$( openssl rand -hex 5 )
 DC_CONTAINER_ID=""
 
 if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
-    DOCKER_BIN=docker
+    # DOCKER_BIN=docker
+    DOCKER_BIN=podman
 elif [ -x "$( command -v podman )" ]; then
     DOCKER_BIN=podman
 else
