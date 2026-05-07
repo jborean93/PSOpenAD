@@ -36,7 +36,13 @@ Describe "Add-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
         It "Fails with non-existing objectGuid -Identity" {
             Add-OpenADGroupMember -Session $session -Identity ([Guid]::Empty) -Members $contact -ErrorAction SilentlyContinue -ErrorVariable err
             $err.Count | Should -Be 1
-            [string]$err[0] | Should -Be "Failed to find group to set using the filter '(objectGUID=\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00)'"
+            [string]$err[0] | Should -Be "Failed to find object to set using the filter '(objectGUID=\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00)'"
+        }
+
+        It "Fails with invalid dn -Identity" {
+            Add-OpenADGroupMember -Session $session -Identity "CN=Fake" -Members $contact -ErrorAction SilentlyContinue -ErrorVariable err
+            $err.Count | Should -Be 1
+            [string]$err[0] | Should -BeLike "Failed to modify 'CN=Fake': No such object *"
         }
 
         It "Runs with -PassThru" {
