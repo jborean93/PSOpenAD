@@ -273,6 +273,9 @@ samba-tool group add \
 samba-tool group add \
     TestGroupSub
 
+samba-tool group add \
+    TestGroupEmpty
+
 samba-tool user create \
     TestGroupMember Password01!
 

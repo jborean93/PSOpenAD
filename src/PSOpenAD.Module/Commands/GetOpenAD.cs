@@ -21,6 +21,8 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
 
     internal abstract LDAPFilter FilteredClass { get; }
 
+    internal virtual bool CheckNoSuchObject => true;
+
     internal abstract OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes);
 
     #region Connection Parameters
@@ -250,7 +252,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
             WriteObject(adObj);
         }
 
-        if (noSuchObject && ParameterSetName.EndsWith("Identity"))
+        if (CheckNoSuchObject && noSuchObject && ParameterSetName.EndsWith("Identity"))
         {
             string msg = $"Cannot find an object with identity filter '{finalFilter}' under search base '{searchBase}' with scope {searchScope}";
             ErrorRecord rec = new(new ItemNotFoundException(msg), "IdentityNotFound",

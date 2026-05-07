@@ -23,6 +23,8 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
     internal override LDAPFilter FilteredClass
         => new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("group"));
 
+    internal override bool CheckNoSuchObject => false;
+
     internal override OpenADObject CreateADObject(Dictionary<string, (PSObject[], bool)> attributes)
         => new OpenADPrincipal(attributes);
 
@@ -35,10 +37,14 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
         IList<LDAPControl>? serverControls,
         Func<LDAPResult, bool> errorHandler)
     {
+        bool noSuchObject = true;
+
         foreach (SearchResultEntry group in Operations.LdapSearchRequest(session.Connection, searchBase,
             searchScope, 1, session.OperationTimeout, filter, new[] { "primaryGroupToken" }, serverControls,
             CancelToken, this, false, errorHandler))
         {
+            noSuchObject = false;
+
             // use memberOf rather than member to make recursive search easier & avoid paging
             LDAPFilter memberOfFilter;
             if (Recursive)
@@ -90,6 +96,14 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
             {
                 _currentGroupDN = "";
             }
+        }
+
+        if (noSuchObject && ParameterSetName.EndsWith("Identity"))
+        {
+            string msg = $"Cannot find an object with identity filter '{filter}' under search base '{searchBase}' with scope {searchScope}";
+            ErrorRecord rec = new(new ItemNotFoundException(msg), "IdentityNotFound",
+                ErrorCategory.ObjectNotFound, searchBase);
+            WriteError(rec);
         }
     }
 

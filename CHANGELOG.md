@@ -1,7 +1,9 @@
 # Changelog for PSOpenAD
 
-## v0.6.1 - TBD
+## v0.7.0 - TBD
 
++ Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
++ Fixed `Get-OpenADGroupMember` raising an error when the group exists but contains no members, instead it just outputs nothing
 + Remove length check for `sAMAccountName` when used in the `-Identity` parameter
 + Fix the search base and scope when using `Get-OpenAD*` with the `-Identity` parameter, it should now be possible to find objects not in the `defaultNamingContext`
 

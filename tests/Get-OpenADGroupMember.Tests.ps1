@@ -133,6 +133,17 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             } | Should -Throw -ExpectedMessage "One or more properties for person are not valid: 'invalid1', 'invalid2'"
         }
 
+        It "Does not error on empty group" {
+            $actual = Get-OpenADGroupMember -Identity 'TestGroupEmpty' -Session $session
+            $actual | Should -BeNullOrEmpty
+        }
+
+        It "Errors when group is not found" {
+            {
+                Get-OpenADGroupMember -Identity 'ThisGroupDoesNotExist' -Session $session -ErrorAction Stop
+            } | Should -Throw -ExpectedMessage "Cannot find an object with identity filter '(&(objectCategory=group)(sAMAccountName=ThisGroupDoesNotExist))' under search base '*' with scope Subtree"
+        }
+
         It "Completes the properties selected" {
             $actual = Complete 'Get-OpenADGroupMember -Identity "Administrators" -Session $session -Property '
             $actual.Count | Should -BeGreaterThan 0
