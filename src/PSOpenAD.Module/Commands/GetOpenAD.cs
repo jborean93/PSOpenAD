@@ -138,9 +138,9 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                         // error message with the position of the error in the
                         // message.
                         { "Line", 1 },
-                        { "LineText", LDAPFilter.ToString() },
-                        // // Support for columns were added in PS 7.7, it is
-                        // // ignored on older versions.
+                        { "LineText", e.Filter },
+                        // Support for columns were added in PS 7.7, it is
+                        // ignored on older versions.
                         { "StartColumn", e.StartPosition + 1 },
                         { "EndColumn", e.EndPosition + 1 }
                     })

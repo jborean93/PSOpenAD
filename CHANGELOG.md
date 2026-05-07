@@ -4,8 +4,8 @@
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
 + Fixed `Get-OpenADGroupMember` raising an error when the group exists but contains no members, instead it just outputs nothing
-+ Fix parsing errors for `-LDAPFilter` to properly include the parsing error location due to changes in the PowerShell error formatter
-  + PowerShell 7.7+ is required to see the offsets in the line but previous versions will still see slightly less verbose error message
++ Fixed parsing errors for `-LDAPFilter` to properly include the parsing error location due to changes in the PowerShell error formatter
+  + PowerShell 7.7+ is required to see the column offsets in the line, but previous versions will still see a slightly less verbose error message
 + Remove length check for `sAMAccountName` when used in the `-Identity` parameter
 + Fix the search base and scope when using `Get-OpenAD*` with the `-Identity` parameter, it should now be possible to find objects not in the `defaultNamingContext`
 
