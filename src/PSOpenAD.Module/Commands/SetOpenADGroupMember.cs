@@ -10,8 +10,6 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
 {
     internal static StringComparer _caseInsensitiveComparer = StringComparer.OrdinalIgnoreCase;
 
-    internal static LDAPFilter _filteredClass = new FilterEquality("objectCategory", LDAPFilter.EncodeSimpleFilterValue("group"));
-
     [Parameter(
         Mandatory = true,
         Position = 0,
@@ -39,36 +37,10 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
         ArgumentNullException.ThrowIfNull(Identity);
         ArgumentNullException.ThrowIfNull(Members);
 
-        WriteVerbose($"Attempting to get distinguishedName for group with filter '{Identity.LDAPFilter}'");
-
-        SearchResultEntry? entryResult = Operations.LdapSearchRequest(
-            session.Connection,
-            Identity.DistinguishedName ?? session.DefaultNamingContext,
-            SearchScope.Subtree,
-            1,
-            session.OperationTimeout,
-            new FilterAnd(new[] { _filteredClass, Identity.LDAPFilter }),
-            new[] { "distinguishedName" },
-            null,
-            CancelToken,
-            this,
-            false
-        ).FirstOrDefault();
-
-        string? entry = entryResult?.Attributes
-            .Where(a => a.Name == "distinguishedName")
-            .Select(dn => SyntaxDefinition.ReadDN(dn.Values[0]))
-            .FirstOrDefault();
-
-        if (entryResult == null || string.IsNullOrEmpty(entry))
+        string? entry = Identity.DistinguishedName ?? GetIdentityDistinguishedName(Identity, session, "Set");
+        if (string.IsNullOrEmpty(entry))
         {
-            ErrorRecord error = new(
-                new ArgumentException($"Failed to find group to set using the filter '{Identity.LDAPFilter}'"),
-                "CannotFindSetGroupWithFilter",
-                ErrorCategory.InvalidArgument,
-                Identity
-            );
-            WriteError(error);
+            // Errors already written.
             return;
         }
 
@@ -84,9 +56,7 @@ public abstract class SetOpenADGroupMember : OpenADSessionCmdletBase
             )
         );
 
-        List<LDAPControl>? serverControls = DisablePermissiveModify
-            ? null
-            : new() { new PermissiveModify(false) };
+        List<LDAPControl>? serverControls = !DisablePermissiveModify ? new() { new PermissiveModify(false) } : null;
 
         HashSet<string> searchProperties = OpenADObject.DEFAULT_PROPERTIES
             .Select(p => p.Item1)
