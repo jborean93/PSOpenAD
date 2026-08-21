@@ -91,6 +91,7 @@
         'Remove-OpenADObject'
         'Remove-OpenADSession'
         'Rename-OpenADObject'
+        'Restore-OpenADObject'
         'Set-OpenADObject'
     )
 

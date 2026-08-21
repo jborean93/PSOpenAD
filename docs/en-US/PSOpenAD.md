@@ -65,6 +65,9 @@ Disconnects an LDAP/AD session.
 ### [Rename-OpenADObject](Rename-OpenADObject.md)
 Changes the name of an Active Directory object.
 
+### [Restore-OpenADObject](Restore-OpenADObject.md)
+Restores a deleted Active Directory object.
+
 ### [Set-OpenADObject](Set-OpenADObject.md)
 Modifies an Active Directory object.
 
