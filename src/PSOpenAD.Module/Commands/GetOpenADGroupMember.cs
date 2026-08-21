@@ -56,13 +56,13 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
                             new FilterEquality("objectCategory", LDAP.LDAPFilter.EncodeSimpleFilterValue("group"))
                         ),
                         new FilterExtensibleMatch("1.2.840.113556.1.4.1941", "memberOf",
-                            LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName), false)
+                            LDAP.LDAPFilter.EncodeRawFilterValue(group.ObjectName), false)
                     });
             }
             else
             {
                 memberOfFilter = new FilterEquality("memberOf",
-                    LDAP.LDAPFilter.EncodeSimpleFilterValue(group.ObjectName));
+                    LDAP.LDAPFilter.EncodeRawFilterValue(group.ObjectName));
             }
 
             // Objects don't include their primary group in their memberOf attribute,
@@ -78,7 +78,7 @@ public class GetOpenADGroupMember : GetOpenADOperation<ADPrincipalIdentity>
             {
                 memberOfFilter = new FilterOr(new[] {
                     memberOfFilter,
-                    new FilterEquality("primaryGroupID", LDAP.LDAPFilter.EncodeSimpleFilterValue(primaryGroupToken))
+                    new FilterEquality("primaryGroupID", LDAP.LDAPFilter.EncodeRawFilterValue(primaryGroupToken))
                 });
             }
 

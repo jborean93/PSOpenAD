@@ -2,6 +2,8 @@
 
 ## v0.8.0 - TBD
 
++ Fixed `Get-OpenADPrincipalGroupMembership` and `Get-OpenADGroupMember` failing with `LDAP filter value contained unescaped char` when the object's distinguished name contains `(`, `)`, `*` or `\`
+
 ## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members

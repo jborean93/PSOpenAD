@@ -44,10 +44,10 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
 
             if (Recursive) {
                 groupMembershipFilter = new FilterExtensibleMatch("1.2.840.113556.1.4.1941", "member",
-                    LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName), false);
+                    LDAP.LDAPFilter.EncodeRawFilterValue(principal.ObjectName), false);
             } else {
                 groupMembershipFilter = new FilterEquality("member",
-                    LDAP.LDAPFilter.EncodeSimpleFilterValue(principal.ObjectName));
+                    LDAP.LDAPFilter.EncodeRawFilterValue(principal.ObjectName));
             }
 
             SecurityIdentifier objectSid = new SecurityIdentifier(principal.Attributes
@@ -71,7 +71,7 @@ public class GetOpenADPrincipalGroupMembership : GetOpenADOperation<ADPrincipalI
                 splitSid[splitSid.Length-1] = primaryGroupId;
                 string primaryGroupSid = string.Join('-', splitSid);
                 primaryGroupFilter =
-                    new FilterEquality("objectSid", LDAP.LDAPFilter.EncodeSimpleFilterValue(primaryGroupSid));
+                    new FilterEquality("objectSid", LDAP.LDAPFilter.EncodeRawFilterValue(primaryGroupSid));
             }
 
             if (primaryGroupFilter != null) {
