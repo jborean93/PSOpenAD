@@ -1,6 +1,6 @@
 # Changelog for PSOpenAD
 
-## v0.7.0 - TBD
+## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
 + Fixed `Get-OpenADGroupMember` raising an error when the group exists but contains no members, instead it just outputs nothing
