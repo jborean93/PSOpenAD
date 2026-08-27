@@ -1,5 +1,7 @@
 # Changelog for PSOpenAD
 
+## v0.8.0 - TBD
+
 ## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
