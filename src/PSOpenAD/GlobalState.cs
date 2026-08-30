@@ -52,10 +52,10 @@ internal class GlobalState
     /// <summary>The GSSAPI/SSPI provider that is used.</summary>
     public GssapiProvider GssapiProvider;
 
-    /// <summary>The default domain controller hostname to use when none was provided.</summary>
+    /// <summary>The default domain controller to use when none was provided, set once it has been found.</summary>
     public Uri? DefaultDC;
 
-    /// <summary>If the default DC couldn't be detected this stores the details.</summary>
+    /// <summary>Set on import when the default DC cannot be looked up at all, like a missing Kerberos library.</summary>
     public string? DefaultDCError;
 
     public static GlobalState GetFromTLS() => _state.GetFromTLS();
