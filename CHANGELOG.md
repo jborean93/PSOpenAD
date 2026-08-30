@@ -2,6 +2,8 @@
 
 ## v0.8.0 - TBD
 
++ Added `-TargetSpnHost` to `New-OpenADSessionOption` to set the host used in the Kerberos/Negotiate SPN (`ldap/<host>`) independently of the host being connected to, for example when connecting by IP address or through an alias that has no SPN registered for it
+
 ## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
