@@ -206,7 +206,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                 continue;
             }
 
-            if (validProperties.Contains(RangedAttribute.PlainName(prop)))
+            if (validProperties.Contains(prop))
             {
                 requestedProperties.Add(prop);
             }
@@ -229,18 +229,10 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
             return;
         }
 
-        // The name sent to the server keeps its range option (e.g. "member;range=0-1"),
-        // but CompleteRangedAttributes() renames the returned attribute to the plain base
-        // name before CreateOutputObject() runs. Project under that same plain name here,
-        // otherwise the raw ranged string and the plain name are unioned as two distinct
-        // properties, and a spurious "Member;range=0-1" note property (always null) leaks
-        // out alongside the correct "Member" - advertising that ranging happened, which is
-        // exactly what callers downstream must never learn.
         HashSet<string> finalObjectProperties = requestedProperties
             .Where(v =>
                 v != "*" &&
                 (showAll || explicitProperties.Contains(v, _caseInsensitiveComparer)))
-            .Select(RangedAttribute.PlainName)
             .ToHashSet();
 
         bool noSuchObject = true;
@@ -323,6 +315,12 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                 }
 
                 accumulator.AddPage(page?.Name, page?.Values);
+            }
+
+            if (!accumulator.IsComplete)
+            {
+                WriteWarning($"Stopped ranged retrieval of '{baseName}' on '{entry.ObjectName}' after " +
+                             $"{RangedAttributeAccumulator.MaxPages} pages - values may be incomplete.");
             }
 
             entry.Attributes[i] = new PartialAttribute(baseName, accumulator.Values);

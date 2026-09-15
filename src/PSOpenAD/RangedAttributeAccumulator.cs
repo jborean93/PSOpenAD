@@ -3,14 +3,9 @@ using System.Collections.Generic;
 namespace PSOpenAD;
 
 /// <summary>
-/// Drives the page-by-page decision logic used to complete a range-limited multivalued
-/// attribute, without performing any of the searching itself. AD truncates a multivalued
-/// attribute at MaxValRange and renames it in the response (member becomes
-/// "member;range=0-1499"); this accumulator decides what to request next and when to stop
-/// - recognizing the final page, stopping on a missing or empty page, and the runaway-
-/// server guard - so those decisions are unit-testable without a live directory. The
-/// caller performs each follow-up search itself and feeds the result back through
-/// AddPage.
+/// Drives the page-by-page decisions for completing a range-limited multivalued attribute
+/// (AD renames member to "member;range=0-1499" once it truncates at MaxValRange). The
+/// caller performs each follow-up search and feeds the result back through AddPage.
 /// </summary>
 internal sealed class RangedAttributeAccumulator
 {
@@ -24,7 +19,7 @@ internal sealed class RangedAttributeAccumulator
     /// <summary>The plain attribute name, with any range option stripped.</summary>
     public string BaseName { get; }
 
-    /// <summary>True once the final page has been seen, or paging has stopped for any other reason.</summary>
+    /// <summary>True once the final page has been seen. False if paging stopped for any other reason, including MaxPages.</summary>
     public bool IsComplete { get; private set; }
 
     /// <summary>True while another follow-up request should be issued.</summary>

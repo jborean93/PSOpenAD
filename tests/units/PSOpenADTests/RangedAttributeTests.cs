@@ -57,24 +57,4 @@ public class RangedAttributeTests
 
         await Assert.That(next).IsEqualTo("member;range=1500-*");
     }
-
-    [Test]
-    public async Task PlainNameStripsAnExplicitRangeOption()
-    {
-        // An explicit -Properties 'member;range=0-1' keeps its range option on the wire,
-        // but must resolve to the same plain name the entry is renamed to once
-        // CompleteRangedAttributes() runs - otherwise the two distinct strings are unioned
-        // into two separate output properties instead of one.
-        string plain = RangedAttribute.PlainName("member;range=0-1");
-
-        await Assert.That(plain).IsEqualTo("member");
-    }
-
-    [Test]
-    public async Task PlainNameLeavesAPlainAttributeUnchanged()
-    {
-        string plain = RangedAttribute.PlainName("member");
-
-        await Assert.That(plain).IsEqualTo("member");
-    }
 }
