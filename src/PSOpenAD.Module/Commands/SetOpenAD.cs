@@ -48,6 +48,9 @@ public class SetOpenADObject : OpenADSessionCmdletBase
     [Parameter]
     public SwitchParameter PassThru { get; set; }
 
+    [Parameter()]
+    public SecurityDescriptorFlags SecurityMask { get; set; } = SecurityDescriptorFlags.None;
+
     #endregion
 
     protected override void ProcessRecordWithSession(OpenADSession session)
@@ -107,11 +110,17 @@ public class SetOpenADObject : OpenADSessionCmdletBase
         if (ShouldProcess(entry, "Set"))
         {
             WriteVerbose($"Setting LDAP object '{entry}'");
+            List<LDAPControl>? modifyControls = null;
+            if (SecurityMask != SecurityDescriptorFlags.None)
+            {
+                modifyControls = new() { new SecurityDescriptorFlagsControl(true, SecurityMask) };
+            }
+
             ModifyResponse resp = Operations.LdapModifyRequest(
                 session.Connection,
                 entry,
                 changes.ToArray(),
-                null,
+                modifyControls,
                 CancelToken,
                 this
             );
