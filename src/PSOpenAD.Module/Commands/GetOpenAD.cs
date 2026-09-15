@@ -206,7 +206,11 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                 continue;
             }
 
-            if (validProperties.Contains(prop))
+            string schemaName = RangedAttribute.TryParse(prop, out string baseName, out _, out _, out _)
+                ? baseName
+                : prop;
+
+            if (validProperties.Contains(schemaName))
             {
                 requestedProperties.Add(prop);
             }
@@ -240,6 +244,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
             requestedProperties.ToArray(), serverControls, (r) => r.ResultCode == LDAPResultCode.NoSuchObject))
         {
             noSuchObject = false;
+            CompleteRangedAttributes(session, result, serverControls);
             OpenADEntity adObj = CreateOutputObject(
                 session,
                 result,
@@ -274,6 +279,57 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
     }
 
     internal virtual void ProcessOutputObject(PSObject obj) { }
+
+    /// <summary>
+    /// Replaces any range-limited attribute on the entry with its complete value set.
+    /// AD truncates a multivalued attribute at MaxValRange and renames it in the response
+    /// (member becomes "member;range=0-1499"), so without this the values are dropped.
+    /// </summary>
+    private void CompleteRangedAttributes(
+        OpenADSession session,
+        SearchResultEntry entry,
+        IList<LDAPControl>? serverControls)
+    {
+        const int maxPages = 1000;
+
+        for (int i = 0; i < entry.Attributes.Length; i++)
+        {
+            PartialAttribute attr = entry.Attributes[i];
+            if (!RangedAttribute.TryParse(attr.Name, out string baseName, out _, out int high, out bool isFinal))
+            {
+                continue;
+            }
+
+            List<byte[]> values = new(attr.Values);
+            int pages = 0;
+
+            while (!isFinal && pages++ < maxPages)
+            {
+                string next = RangedAttribute.NextRequest(baseName, high);
+                PartialAttribute? page = null;
+
+                foreach (SearchResultEntry pageEntry in Operations.LdapSearchRequest(
+                    session.Connection, entry.ObjectName, SearchScope.Base, 0, session.OperationTimeout,
+                    new FilterPresent("objectClass"), new[] { next }, serverControls,
+                    CancelToken, this, false, (r) => r.ResultCode == LDAPResultCode.NoSuchObject))
+                {
+                    page = pageEntry.Attributes.FirstOrDefault(
+                        a => RangedAttribute.TryParse(a.Name, out string b, out _, out _, out _) &&
+                             string.Equals(b, baseName, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (page is null || page.Values.Length == 0)
+                {
+                    break;
+                }
+
+                values.AddRange(page.Values);
+                RangedAttribute.TryParse(page.Name, out _, out _, out high, out isFinal);
+            }
+
+            entry.Attributes[i] = new PartialAttribute(baseName, values.ToArray());
+        }
+    }
 
     /// <summary>
     /// Common code to create the ADObject output object.
