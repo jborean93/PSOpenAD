@@ -106,15 +106,16 @@ public class SetOpenADObject : OpenADSessionCmdletBase
             .Union(requestedAttributes)
             .ToHashSet(_caseInsensitiveComparer);
 
+        List<LDAPControl>? modifyControls = null;
+        if (SecurityMask != SecurityDescriptorFlags.None)
+        {
+            modifyControls = new() { new SecurityDescriptorFlagsControl(true, SecurityMask) };
+        }
+
         SearchResultEntry? searchResult = null;
         if (ShouldProcess(entry, "Set"))
         {
             WriteVerbose($"Setting LDAP object '{entry}'");
-            List<LDAPControl>? modifyControls = null;
-            if (SecurityMask != SecurityDescriptorFlags.None)
-            {
-                modifyControls = new() { new SecurityDescriptorFlagsControl(true, SecurityMask) };
-            }
 
             ModifyResponse resp = Operations.LdapModifyRequest(
                 session.Connection,
@@ -140,7 +141,7 @@ public class SetOpenADObject : OpenADSessionCmdletBase
                     session.OperationTimeout,
                     new FilterPresent("objectClass"),
                     searchProperties.ToArray(),
-                    null,
+                    modifyControls,
                     CancelToken,
                     this,
                     false

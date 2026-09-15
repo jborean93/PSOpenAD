@@ -20,22 +20,26 @@ public class SecurityDescriptorFlagsControlTests
     [Test]
     public async Task DaclOnlyEncodesAsSequenceWithInteger4()
     {
-        // SEQUENCE { INTEGER 4 } wrapped in the control's OCTET STRING value.
+        // SEQUENCE { OCTET STRING "1.2.840.113556.1.4.801", BOOLEAN true,
+        //            OCTET STRING { SEQUENCE { INTEGER 4 } } }
+        const string EXPECTED =
+            "30220416312E322E3834302E3131333535362E312E342E3830310101FF04053003020104";
         SecurityDescriptorFlagsControl control = new(true, SecurityDescriptorFlags.Dacl);
 
         AsnWriter writer = new(AsnEncodingRules.BER);
         control.ToBytes(writer);
         byte[] encoded = writer.Encode();
 
-        // The encoded control must contain the value SEQUENCE { INTEGER 4 } = 30 03 02 01 04
         string hex = Convert.ToHexString(encoded);
-        await Assert.That(hex).Contains("30030201" + "04");
+        await Assert.That(hex).IsEqualTo(EXPECTED);
     }
 
     [Test]
     public async Task CombinedFlagsEncodeAsTheirSum()
     {
         // Owner (1) | Group (2) | Dacl (4) = 7
+        const string EXPECTED =
+            "30220416312E322E3834302E3131333535362E312E342E3830310101FF04053003020107";
         SecurityDescriptorFlagsControl control = new(
             true, SecurityDescriptorFlags.Owner | SecurityDescriptorFlags.Group | SecurityDescriptorFlags.Dacl);
 
@@ -43,6 +47,6 @@ public class SecurityDescriptorFlagsControlTests
         control.ToBytes(writer);
 
         string hex = Convert.ToHexString(writer.Encode());
-        await Assert.That(hex).Contains("30030201" + "07");
+        await Assert.That(hex).IsEqualTo(EXPECTED);
     }
 }

@@ -2,6 +2,8 @@
 
 ## v0.8.0 - TBD
 
++ Added the `LDAP_SERVER_SD_FLAGS` control and a `-SecurityMask` parameter on `Set-OpenADObject` and `Get-OpenAD*` to select which `nTSecurityDescriptor` components (`Owner`, `Group`, `Dacl`, `Sacl`) a request reads or writes
+
 ## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members

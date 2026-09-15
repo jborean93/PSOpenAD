@@ -15,16 +15,18 @@ Modifies an Active Directory object.
 ### Server (Default)
 ```
 Set-OpenADObject [-Add <IDictionary>] [-Clear <String[]>] [-Description <String>] [-DisplayName <String>]
- [-Identity] <ADObjectIdentity> [-Remove <IDictionary>] [-Replace <IDictionary>] [-PassThru] [-Server <String>]
- [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>] [-StartTLS]
- [-Credential <PSCredential>] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
+ [-Identity] <ADObjectIdentity> [-Remove <IDictionary>] [-Replace <IDictionary>] [-PassThru]
+ [-SecurityMask <SecurityDescriptorFlags>] [-Server <String>] [-AuthType <AuthenticationMethod>]
+ [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
+ [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Session
 ```
 Set-OpenADObject [-Add <IDictionary>] [-Clear <String[]>] [-Description <String>] [-DisplayName <String>]
  [-Identity] <ADObjectIdentity> [-Remove <IDictionary>] [-Replace <IDictionary>] [-PassThru]
- -Session <OpenADSession> [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
+ [-SecurityMask <SecurityDescriptorFlags>] -Session <OpenADSession> [-ProgressAction <ActionPreference>]
+ [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -322,6 +324,23 @@ When you use the `-Add`, `-Replace`, `-Clear`, and `-Remove` parameters together
 
 ```yaml
 Type: IDictionary
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SecurityMask
+Requests specific components of the `nTSecurityDescriptor` value be written, and read back if `-PassThru` is used, by sending the `LDAP_SERVER_SD_FLAGS` control with the request.
+Combine one or more of `Owner`, `Group`, `Dacl`, and `Sacl`.
+The default `None` does not send the control.
+
+```yaml
+Type: SecurityDescriptorFlags
 Parameter Sets: (All)
 Aliases:
 

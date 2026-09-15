@@ -17,27 +17,29 @@ Gets one or more Active Directory managed service accounts or group managed serv
 Get-OpenADServiceAccount [-Server <String>] [-AuthType <AuthenticationMethod>]
  [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>] [-LDAPFilter <String>]
  [-SearchBase <String>] [-SearchScope <SearchScope>] [-Property <String[]>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-SecurityMask <SecurityDescriptorFlags>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
 Get-OpenADServiceAccount -Session <OpenADSession> [-Identity] <ADPrincipalIdentityWithDollar>
- [-Property <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-Property <String[]>] [-SecurityMask <SecurityDescriptorFlags>] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
 ```
 Get-OpenADServiceAccount -Session <OpenADSession> [-LDAPFilter <String>] [-SearchBase <String>]
- [-SearchScope <SearchScope>] [-Property <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-SearchScope <SearchScope>] [-Property <String[]>] [-SecurityMask <SecurityDescriptorFlags>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ServerIdentity
 ```
 Get-OpenADServiceAccount [-Server <String>] [-AuthType <AuthenticationMethod>]
  [-SessionOption <OpenADSessionOptions>] [-StartTLS] [-Credential <PSCredential>]
- [-Identity] <ADPrincipalIdentityWithDollar> [-Property <String[]>] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+ [-Identity] <ADPrincipalIdentityWithDollar> [-Property <String[]>] [-SecurityMask <SecurityDescriptorFlags>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -275,6 +277,23 @@ Accepted values: Base, OneLevel, Subtree
 Required: False
 Position: Named
 Default value: Subtree
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SecurityMask
+Requests specific components of the `nTSecurityDescriptor` value be returned by sending the `LDAP_SERVER_SD_FLAGS` control with the search.
+Combine one or more of `Owner`, `Group`, `Dacl`, and `Sacl`.
+The default `None` does not send the control and the server returns whichever components it would by default.
+
+```yaml
+Type: SecurityDescriptorFlags
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
