@@ -73,6 +73,8 @@ internal class LDAPControl
             ShowDeleted.LDAP_SERVER_SHOW_DELETED_OID => new ShowDeleted(criticality),
             ShowDeactivatedLink.LDAP_SERVER_SHOW_DEACTIVATED_LINK_OID => new ShowDeactivatedLink(criticality),
             PagedResultControl.LDAP_PAGED_RESULT_OID_STRING => new PagedResultControl(criticality, value, ruleSet),
+            SecurityDescriptorFlagsControl.LDAP_SERVER_SD_FLAGS_OID
+                => new SecurityDescriptorFlagsControl(criticality, value, ruleSet),
             PermissiveModify.LDAP_SERVER_PERMISSIVE_MODIFY_OID => new PermissiveModify(criticality),
             _ => new LDAPControl(controlType, criticality),
         };
@@ -184,4 +186,58 @@ internal class PermissiveModify : LDAPControl
     public const string LDAP_SERVER_PERMISSIVE_MODIFY_OID = "1.2.840.113556.1.4.1413";
 
     public PermissiveModify(bool criticality) : base(LDAP_SERVER_PERMISSIVE_MODIFY_OID, criticality) { }
+}
+
+/// <summary>The security descriptor components an operation applies to.</summary>
+/// <see href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/3c5e87db-4728-4f29-b164-01dd7d7391ea">LDAP_SERVER_SD_FLAGS_OID</see>
+[Flags]
+public enum SecurityDescriptorFlags
+{
+    None = 0,
+    Owner = 1,
+    Group = 2,
+    Dacl = 4,
+    Sacl = 8,
+}
+
+/// <summary>
+/// Declares which components of nTSecurityDescriptor a search returns or a modify writes.
+/// Without it, writing a descriptor that carries owner, group or SACL components the
+/// caller cannot write is refused with a constraint violation.
+/// </summary>
+/// <remarks>
+/// <para>
+///     controlValue ::= SEQUENCE {
+///             Flags   INTEGER
+///     }
+/// </para>
+/// </remarks>
+internal class SecurityDescriptorFlagsControl : LDAPControl
+{
+    public const string LDAP_SERVER_SD_FLAGS_OID = "1.2.840.113556.1.4.801";
+
+    public SecurityDescriptorFlags Flags { get; set; }
+
+    public SecurityDescriptorFlagsControl(bool criticality, SecurityDescriptorFlags flags)
+        : base(LDAP_SERVER_SD_FLAGS_OID, criticality)
+    {
+        Flags = flags;
+    }
+
+    internal SecurityDescriptorFlagsControl(bool criticality, ReadOnlySpan<byte> value,
+        AsnEncodingRules ruleSet = AsnEncodingRules.BER)
+        : base(LDAP_SERVER_SD_FLAGS_OID, criticality)
+    {
+        AsnDecoder.ReadSequence(value, ruleSet, out var offset, out var _1, out var _2);
+        value = value[offset..];
+        Flags = (SecurityDescriptorFlags)(int)AsnDecoder.ReadInteger(value, ruleSet, out var _3);
+    }
+
+    protected override void ValueToBytes(AsnWriter writer)
+    {
+        using AsnWriter.Scope _1 = writer.PushOctetString();
+        using AsnWriter.Scope _2 = writer.PushSequence();
+
+        writer.WriteInteger((int)Flags);
+    }
 }
