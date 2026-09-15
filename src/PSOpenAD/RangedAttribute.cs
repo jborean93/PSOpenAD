@@ -65,4 +65,15 @@ internal static class RangedAttribute
     /// <summary>Builds the attribute name requesting everything after the page ending at high.</summary>
     public static string NextRequest(string baseName, int high)
         => $"{baseName}{RangeOption}{high + 1}-*";
+
+    /// <summary>
+    /// Returns the plain attribute name backing a possibly-ranged one: TryParse's baseName
+    /// when name carries a range option, otherwise name unchanged. A ranged wire name (e.g.
+    /// "member;range=0-1") must be treated as identical to its plain counterpart wherever
+    /// the attribute is being reasoned about rather than requested on the wire - schema
+    /// validation, and projecting the name an output property is surfaced under - since the
+    /// entry itself is always renamed back to the plain name before the object is built.
+    /// </summary>
+    public static string PlainName(string name)
+        => TryParse(name, out string baseName, out _, out _, out _) ? baseName : name;
 }

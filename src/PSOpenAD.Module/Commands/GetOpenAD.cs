@@ -206,11 +206,7 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                 continue;
             }
 
-            string schemaName = RangedAttribute.TryParse(prop, out string baseName, out _, out _, out _)
-                ? baseName
-                : prop;
-
-            if (validProperties.Contains(schemaName))
+            if (validProperties.Contains(RangedAttribute.PlainName(prop)))
             {
                 requestedProperties.Add(prop);
             }
@@ -233,10 +229,18 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
             return;
         }
 
+        // The name sent to the server keeps its range option (e.g. "member;range=0-1"),
+        // but CompleteRangedAttributes() renames the returned attribute to the plain base
+        // name before CreateOutputObject() runs. Project under that same plain name here,
+        // otherwise the raw ranged string and the plain name are unioned as two distinct
+        // properties, and a spurious "Member;range=0-1" note property (always null) leaks
+        // out alongside the correct "Member" - advertising that ranging happened, which is
+        // exactly what callers downstream must never learn.
         HashSet<string> finalObjectProperties = requestedProperties
             .Where(v =>
                 v != "*" &&
                 (showAll || explicitProperties.Contains(v, _caseInsensitiveComparer)))
+            .Select(RangedAttribute.PlainName)
             .ToHashSet();
 
         bool noSuchObject = true;
@@ -290,8 +294,6 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
         SearchResultEntry entry,
         IList<LDAPControl>? serverControls)
     {
-        const int maxPages = 1000;
-
         for (int i = 0; i < entry.Attributes.Length; i++)
         {
             PartialAttribute attr = entry.Attributes[i];
@@ -300,12 +302,14 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                 continue;
             }
 
-            List<byte[]> values = new(attr.Values);
-            int pages = 0;
+            // RangedAttributeAccumulator owns the paging/termination decisions (what to
+            // request next, recognizing the final page, the maxPages guard); this method
+            // just performs the searches it asks for and feeds each result back.
+            RangedAttributeAccumulator accumulator = new(baseName, attr.Values, high, isFinal);
 
-            while (!isFinal && pages++ < maxPages)
+            while (accumulator.NeedsNextPage)
             {
-                string next = RangedAttribute.NextRequest(baseName, high);
+                string next = accumulator.NextRequest();
                 PartialAttribute? page = null;
 
                 foreach (SearchResultEntry pageEntry in Operations.LdapSearchRequest(
@@ -318,16 +322,10 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                              string.Equals(b, baseName, StringComparison.OrdinalIgnoreCase));
                 }
 
-                if (page is null || page.Values.Length == 0)
-                {
-                    break;
-                }
-
-                values.AddRange(page.Values);
-                RangedAttribute.TryParse(page.Name, out _, out _, out high, out isFinal);
+                accumulator.AddPage(page?.Name, page?.Values);
             }
 
-            entry.Attributes[i] = new PartialAttribute(baseName, values.ToArray());
+            entry.Attributes[i] = new PartialAttribute(baseName, accumulator.Values);
         }
     }
 
