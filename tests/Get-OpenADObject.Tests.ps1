@@ -320,4 +320,57 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'LastLogoff'
         }
     }
+
+    Context "-SecurityMask" {
+        BeforeAll {
+            $maskParams = @{
+                Session = $session
+                Name = 'MaskContact'
+                Type = 'contact'
+                Path = $container
+                PassThru = $true
+            }
+            $maskDN = (New-OpenADObject @maskParams).DistinguishedName
+        }
+
+        It "Returns every component when no mask is requested" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+        }
+
+        It "Returns only the DACL with -SecurityMask Dacl" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Dacl
+
+            $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+        }
+
+        It "Returns only the owner with -SecurityMask Owner" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Owner
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl | Should -BeNullOrEmpty
+        }
+
+        It "Combines the flags of a multi valued mask" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Owner, Group
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl | Should -BeNullOrEmpty
+        }
+
+        It "Applies the mask on a typed cmdlet" {
+            $user = Get-OpenADUser -Session $session | Select-Object -First 1
+            $actual = Get-OpenADUser -Session $session -Identity $user.DistinguishedName -Property nTSecurityDescriptor -SecurityMask Dacl
+
+            $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+        }
+    }
 }

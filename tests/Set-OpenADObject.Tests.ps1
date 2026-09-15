@@ -399,4 +399,53 @@ Describe "Set-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
         $actual1.ObjectGuid | Should -Be ([Guid]::Empty)
         $actual2.DisplayName | Should -BeNullOrEmpty
     }
+
+    It "Limits a write to the components in -SecurityMask" {
+        # The descriptor is read back as a PSObject-wrapped value, so it is typed
+        # explicitly here to write the descriptor itself rather than its string form.
+        [PSOpenAD.Security.CommonSecurityDescriptor]$sd = (
+            $contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
+        $aceCount = $sd.DiscretionaryAcl.Count
+        $sd.DiscretionaryAcl.Add([PSOpenAD.Security.Ace]::new(
+            [PSOpenAD.Security.AceType]::AccessAllowed,
+            [PSOpenAD.Security.AceFlags]::None,
+            [PSOpenAD.Security.ActiveDirectoryRights]::CreateChild,
+            [PSOpenAD.Security.SecurityIdentifier]::new('S-1-1-0'),
+            $null))
+
+        # The mask covers the owner, so the added ACE must not be written.
+        $contact | Set-OpenADObject -Session $session -Replace @{ nTSecurityDescriptor = $sd } -SecurityMask Owner
+        $masked = ($contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
+        $masked.DiscretionaryAcl.Count | Should -Be $aceCount
+
+        # The same descriptor without a mask does write it, so the assertion
+        # above is about the mask rather than about the payload.
+        $contact | Set-OpenADObject -Session $session -Replace @{ nTSecurityDescriptor = $sd }
+        $unmasked = ($contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
+        $unmasked.DiscretionaryAcl.Count | Should -Be ($aceCount + 1)
+    }
+
+    It "Applies -SecurityMask to the -PassThru read back" {
+        [PSOpenAD.Security.CommonSecurityDescriptor]$sd = (
+            $contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
+        $actual = $contact | Set-OpenADObject -Session $session -Replace @{
+            nTSecurityDescriptor = $sd
+        } -SecurityMask Dacl -PassThru
+
+        $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
+        $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
+        $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+    }
+
+    It "Reads back every component with -PassThru and no mask" {
+        [PSOpenAD.Security.CommonSecurityDescriptor]$sd = (
+            $contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
+        $actual = $contact | Set-OpenADObject -Session $session -Replace @{
+            nTSecurityDescriptor = $sd
+        } -PassThru
+
+        $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+        $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
+        $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+    }
 }
