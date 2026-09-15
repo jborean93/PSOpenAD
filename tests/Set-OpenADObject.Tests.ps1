@@ -108,6 +108,23 @@ Describe "Set-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
         [Convert]::ToHexString($actual.PsopenadBytesMulti[1]) | Should -Be 01020304
     }
 
+    It "Round-trips a value read back through -Replace" {
+        $raw = [byte[]]@(1, 2, 3, 4)
+        $contact | Set-OpenADObject -Session $session -Replace @{
+            psopenadBytesSingle = $raw
+        }
+        $actual = $contact | Get-OpenADObject -Session $session -Property psopenadBytesSingle
+
+        # $actual.PsopenadBytesSingle is a PSObject-wrapped byte[], the same as any value
+        # this module's own output hands back to a caller. Feeding it straight into
+        # -Replace must not stringify it on the wire.
+        $contact | Set-OpenADObject -Session $session -Replace @{
+            psopenadBytesSingle = $actual.PsopenadBytesSingle
+        }
+        $roundTripped = $contact | Get-OpenADObject -Session $session -Property psopenadBytesSingle
+        [Convert]::ToHexString($roundTripped.PsopenadBytesSingle) | Should -Be 01020304
+    }
+
     It "Sets DateTime values" {
         # While it should accept TZ offsets and fractions I cannot get it to work with Samba
         $dt1 = [DateTimeOffset]::new([DateTime]::new(1970, 1, 1), 0)
