@@ -2,6 +2,8 @@
 
 ## v0.8.0 - TBD
 
++ **Breaking change**: `OpenADPrincipal.SID` (and its subclasses, including the objects `Get-OpenADGroupMember` returns) is now `SecurityIdentifier?` and is `$null` for a principal with no `objectSid`, such as a contact, instead of the module throwing when constructing an empty `SecurityIdentifier`
+
 ## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
