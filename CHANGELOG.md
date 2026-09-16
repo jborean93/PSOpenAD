@@ -2,6 +2,8 @@
 
 ## v0.8.0 - TBD
 
++ Fixed `Get-OpenAD*` truncating multivalued attributes like `member` at the server's `MaxValRange` limit (e.g. 1500 entries) instead of paging through `attr;range=X-Y` responses to retrieve the full value set
+
 ## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
