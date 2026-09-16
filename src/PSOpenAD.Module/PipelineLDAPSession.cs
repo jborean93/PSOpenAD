@@ -25,8 +25,11 @@ internal class PipelineLDAPSession : LDAPSession
     public override void WriteData(AsnWriter writer)
     {
         Memory<byte> buffer = _outgoing.Writer.GetMemory(writer.GetEncodedLength());
-        TraceMsg("SEND", buffer.Span);
+
+        // The buffer is rented and only holds the request once Encode has run, so
+        // it is traced afterwards, and only as far as what was written.
         int written = writer.Encode(buffer.Span);
+        TraceMsg("SEND", buffer.Span[..written]);
         _outgoing.Writer.Advance(written);
         Flush();
     }

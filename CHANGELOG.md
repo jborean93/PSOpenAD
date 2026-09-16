@@ -2,6 +2,7 @@
 
 ## v0.8.0 - TBD
 
++ Fixed the `-TracePath` log recording the outgoing buffer before the request was written into it, so every sent message was logged as unrelated recycled memory
 + Fixed a request larger than the outgoing pipe's pause threshold (e.g. creating or modifying a group with a few thousand members) failing with `Can't GetResult unless awaiter is completed` while the server still applied it
 
 ## v0.7.0 - 2026-08-27

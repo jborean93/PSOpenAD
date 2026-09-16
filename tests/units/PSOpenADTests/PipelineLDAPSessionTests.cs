@@ -1,5 +1,8 @@
 using PSOpenAD.Module;
 using System;
+using System.IO;
+using System.Linq;
+using System.Text;
 using System.Formats.Asn1;
 using System.IO.Pipelines;
 using System.Threading.Tasks;
@@ -39,5 +42,28 @@ public class PipelineLDAPSessionTests
 
         await write.WaitAsync(TimeSpan.FromSeconds(10));
         await Assert.That(drained).IsEqualTo((long)encodedLength);
+    }
+
+    [Test]
+    public async Task TracesTheEncodedRequestRatherThanTheBuffer()
+    {
+        using MemoryStream log = new();
+        using StreamWriter logWriter = new(log);
+        PipelineLDAPSession session = new(writer: logWriter);
+
+        AsnWriter writer = new(AsnEncodingRules.BER);
+        writer.WriteOctetString(new byte[] { 1, 2, 3, 4 });
+        byte[] expected = writer.Encode();
+
+        session.WriteData(writer);
+        logWriter.Flush();
+
+        string[] lines = Encoding.UTF8.GetString(log.ToArray())
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        string? sent = lines.FirstOrDefault(l => l.StartsWith("SEND: "));
+
+        await Assert.That(sent).IsNotNull();
+        await Assert.That(Convert.FromBase64String(sent!["SEND: ".Length..].Trim()))
+            .IsEquivalentTo(expected);
     }
 }
