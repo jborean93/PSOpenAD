@@ -399,4 +399,14 @@ Describe "Set-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
         $actual1.ObjectGuid | Should -Be ([Guid]::Empty)
         $actual2.DisplayName | Should -BeNullOrEmpty
     }
+
+    # The outgoing pipe pauses the writer once the unsent bytes pass its
+    # threshold, which a request this size does.
+    It "Sets a value larger than the outgoing pipe threshold" {
+        $raw = [byte[]]::new(128 * 1024)
+        $contact | Set-OpenADObject -Session $session -Replace @{ psopenadBytesSingle = $raw }
+
+        $actual = $contact | Get-OpenADObject -Session $session -Property psopenadBytesSingle
+        @($actual.PsopenadBytesSingle).Count | Should -Be $raw.Count
+    }
 }
