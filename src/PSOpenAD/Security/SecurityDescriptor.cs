@@ -144,14 +144,30 @@ public sealed class CommonSecurityDescriptor
         SystemAcl = (flags & SecurityDescriptorFlags.Sacl) != 0 ? other.SystemAcl : null;
         DiscretionaryAcl = (flags & SecurityDescriptorFlags.Dacl) != 0 ? other.DiscretionaryAcl : null;
 
-        // A dropped ACL writes an offset of 0, so its presence bit has to go too.
+        // A dropped component writes an offset of 0, so the flags describing it go
+        // too: nothing should claim a component the descriptor no longer carries.
+        // Servers are looser than this - a DACL only read returns 0x8C04 from AD and
+        // 0x8404 from Samba, so AD keeps SystemAclAutoInherited with no SACL present
+        // - and both accept either form.
+        if (Owner is null)
+        {
+            Flags &= ~ControlFlags.OwnerDefaulted;
+        }
+        if (Group is null)
+        {
+            Flags &= ~ControlFlags.GroupDefaulted;
+        }
         if (SystemAcl is null)
         {
-            Flags &= ~ControlFlags.SystemAclPresent;
+            Flags &= ~(ControlFlags.SystemAclPresent | ControlFlags.SystemAclDefaulted |
+                ControlFlags.SystemAclAutoInheritRequired | ControlFlags.SystemAclAutoInherited |
+                ControlFlags.SystemAclProtected);
         }
         if (DiscretionaryAcl is null)
         {
-            Flags &= ~ControlFlags.DiscretionaryAclPresent;
+            Flags &= ~(ControlFlags.DiscretionaryAclPresent | ControlFlags.DiscretionaryAclDefaulted |
+                ControlFlags.DiscretionaryAclAutoInheritRequired | ControlFlags.DiscretionaryAclAutoInherited |
+                ControlFlags.DiscretionaryAclProtected | ControlFlags.DiscretionaryAclTrusted);
         }
     }
 

@@ -95,4 +95,47 @@ public class SecurityDescriptorTrimTests
         await Assert.That(BitConverter.ToUInt32(data, 16)).IsNotEqualTo(0u);
         await Assert.That(control & (ushort)ControlFlags.SystemAclPresent).IsEqualTo(0);
     }
+
+    // A component that is gone should leave no trace in the control word: a server
+    // asked for the DACL alone returns 0x8404, not the SACL and owner bits of the
+    // descriptor it was trimmed from.
+    [Test]
+    public async Task DroppedComponentsAlsoLoseTheirAuxiliaryFlags()
+    {
+        CommonSecurityDescriptor full = FullDescriptor();
+        full.Flags |= ControlFlags.OwnerDefaulted | ControlFlags.GroupDefaulted |
+            ControlFlags.SystemAclDefaulted | ControlFlags.SystemAclAutoInherited |
+            ControlFlags.SystemAclAutoInheritRequired | ControlFlags.SystemAclProtected |
+            ControlFlags.DiscretionaryAclAutoInherited;
+
+        CommonSecurityDescriptor trimmed = new(full, SecurityDescriptorFlags.Dacl);
+
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.OwnerDefaulted)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.GroupDefaulted)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.SystemAclDefaulted)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.SystemAclAutoInherited)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.SystemAclAutoInheritRequired)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.SystemAclProtected)).IsFalse();
+
+        // What the mask kept keeps its own flags.
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.DiscretionaryAclPresent)).IsTrue();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.DiscretionaryAclAutoInherited)).IsTrue();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.SelfRelative)).IsTrue();
+    }
+
+    [Test]
+    public async Task DroppingTheDaclClearsItsFlagsToo()
+    {
+        CommonSecurityDescriptor full = FullDescriptor();
+        full.Flags |= ControlFlags.DiscretionaryAclDefaulted | ControlFlags.DiscretionaryAclAutoInherited |
+            ControlFlags.DiscretionaryAclProtected;
+
+        CommonSecurityDescriptor trimmed = new(full, SecurityDescriptorFlags.Sacl);
+
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.DiscretionaryAclPresent)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.DiscretionaryAclDefaulted)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.DiscretionaryAclAutoInherited)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.DiscretionaryAclProtected)).IsFalse();
+        await Assert.That(trimmed.Flags.HasFlag(ControlFlags.SystemAclPresent)).IsTrue();
+    }
 }
