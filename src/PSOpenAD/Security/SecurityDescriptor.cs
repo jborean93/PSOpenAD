@@ -1,3 +1,4 @@
+using PSOpenAD.LDAP;
 using System;
 
 namespace PSOpenAD.Security;
@@ -124,6 +125,34 @@ public sealed class CommonSecurityDescriptor
         Revision = 1;
         ResourceManagerFlags = 0;
         Flags = ControlFlags.None;
+    }
+
+    /// <summary>
+    /// Copies <paramref name="other"/> keeping only the components in
+    /// <paramref name="flags"/>. LDAP_SERVER_SD_FLAGS tells the server the request
+    /// covers those components alone, so anything else - typically the owner, group
+    /// and SACL an unmasked read hands back - must not be sent with it.
+    /// </summary>
+    internal CommonSecurityDescriptor(CommonSecurityDescriptor other, SecurityDescriptorFlags flags)
+    {
+        Revision = other.Revision;
+        ResourceManagerFlags = other.ResourceManagerFlags;
+        Flags = other.Flags;
+
+        Owner = (flags & SecurityDescriptorFlags.Owner) != 0 ? other.Owner : null;
+        Group = (flags & SecurityDescriptorFlags.Group) != 0 ? other.Group : null;
+        SystemAcl = (flags & SecurityDescriptorFlags.Sacl) != 0 ? other.SystemAcl : null;
+        DiscretionaryAcl = (flags & SecurityDescriptorFlags.Dacl) != 0 ? other.DiscretionaryAcl : null;
+
+        // A dropped ACL writes an offset of 0, so its presence bit has to go too.
+        if (SystemAcl is null)
+        {
+            Flags &= ~ControlFlags.SystemAclPresent;
+        }
+        if (DiscretionaryAcl is null)
+        {
+            Flags &= ~ControlFlags.DiscretionaryAclPresent;
+        }
     }
 
     public CommonSecurityDescriptor(ReadOnlySpan<byte> data)
