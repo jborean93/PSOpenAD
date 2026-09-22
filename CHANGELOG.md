@@ -2,6 +2,7 @@
 
 ## v0.8.0 - TBD
 
++ Added `-TargetSpnHost` to `New-OpenADSessionOption` to set the host used in the Kerberos/Negotiate SPN (`ldap/<host>`) independently of the host being connected to, for example when connecting by IP address or through an alias that has no SPN registered for it
 + The `SID` property on `OpenADPrincipal` is marked as nullable to handle principals without `objectSid`
   + An example would be `Get-OpenADGroupMember` outputting a contact
 + Fixed the `-TracePath` log recording the outgoing buffer before the request was written into it, so every sent message was logged as unrelated recycled memory
