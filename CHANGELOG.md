@@ -2,6 +2,7 @@
 
 ## v0.8.0 - TBD
 
++ Fixed a `PSObject`-wrapped byte array (e.g. a value read back from `Get-OpenAD*` and fed straight into `-Add`/`-Replace`) being stringified instead of written as binary, causing the server to reject it
 + Fixed `GroupScope` being reported as `Universal` for every security group (e.g. `Domain Admins` is `Global`, `Administrators` is `DomainLocal`) - the whole `groupType` value was compared instead of just its scope bits
 
 ## v0.7.0 - 2026-08-27
