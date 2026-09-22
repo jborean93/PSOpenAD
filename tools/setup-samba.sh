@@ -290,4 +290,15 @@ samba-tool group addmembers \
     TestGroupSub \
     TestGroupSubMember
 
+# Objects with '(' and ')' in their name to test filter escaping.
+samba-tool group add \
+    'TestGroupParen (G1)'
+
+samba-tool user create \
+    'TestParenMember (E1234)' Password01!
+
+samba-tool group addmembers \
+    'TestGroupParen (G1)' \
+    'TestParenMember (E1234)'
+
 samba --debug-stdout --foreground --no-process-group

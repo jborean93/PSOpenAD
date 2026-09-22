@@ -1135,7 +1135,7 @@ public class LDAPFilterValueTests
     public async Task EncodeRawFilterValueRoundTripsThroughFilterString()
     {
         const string dn = "CN=Ada Lovelace (E1234),DC=domain,DC=test";
-        LDAPFilter filter = new FilterEquality("member", LDAPFilter.EncodeRawFilterValue(dn));
+        FilterEquality filter = new("member", LDAPFilter.EncodeRawFilterValue(dn));
 
         // Serialising back to filter text is where the escaping belongs, and it must round-trip.
         string asText = filter.ToString();
