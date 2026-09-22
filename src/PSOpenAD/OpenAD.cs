@@ -65,7 +65,7 @@ public class OpenADPrincipal : OpenADObject
         });
 
     public string SamAccountName { get; }
-    public SecurityIdentifier SID { get; }
+    public SecurityIdentifier? SID { get; }
 
     public OpenADPrincipal(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
@@ -75,7 +75,7 @@ public class OpenADPrincipal : OpenADObject
 
         SID = attributes.ContainsKey("objectSid")
             ? (SecurityIdentifier)attributes["objectSid"].Item1[0].BaseObject
-            : new SecurityIdentifier("");
+            : null;
     }
 }
 
@@ -181,7 +181,11 @@ public class OpenADGroup : OpenADPrincipal
         GroupCategory = (groupType & GroupType.IsSecurity) != 0
             ? ADGroupCategory.Security : ADGroupCategory.Distribution;
 
-        GroupScope = groupType switch
+        // Only the scope bits describe the scope; a real directory also sets
+        // IsSecurity (and System on the builtin groups), so comparing the whole
+        // value made every security group fall through to Universal.
+        GroupType scope = groupType & (GroupType.Global | GroupType.DomainLocal | GroupType.Universal);
+        GroupScope = scope switch
         {
             GroupType.DomainLocal => ADGroupScope.DomainLocal,
             GroupType.Global => ADGroupScope.Global,
