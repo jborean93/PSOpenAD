@@ -367,6 +367,11 @@ internal sealed class SchemaMetadata
 
     internal static byte[][] ConvertToRawAttributeCollection(object? value)
     {
+        if (value is PSObject psValue)
+        {
+            value = psValue.BaseObject;
+        }
+
         if (value is null)
         {
             return Array.Empty<byte[]>();
@@ -391,21 +396,29 @@ internal sealed class SchemaMetadata
         }
     }
 
-    internal static byte[] ConvertToRawAttributeValue(object? value) => value switch
+    internal static byte[] ConvertToRawAttributeValue(object? value)
     {
-        null => Array.Empty<byte>(),
-        bool b => UTF8Bytes(b == true ? "TRUE" : "FALSE"),
-        IEnumerable<byte> bytes => bytes.ToArray(),
-        CommonSecurityDescriptor sd => sd.ToByteArray(),
-        Enum e => UTF8Bytes(Convert.ChangeType(e, e.GetTypeCode()).ToString() ?? ""),
-        DateTime dt => UTF8Bytes(dt.ToFileTimeUtc().ToString()),
-        DateTimeOffset dto => UTF8Bytes(dto.UtcDateTime.ToFileTimeUtc().ToString()),
-        Guid g => g.ToByteArray(),
-        SecurityIdentifier sid => sid.ToByteArray(),
-        TimeSpan ts => UTF8Bytes(ts.Ticks.ToString()),
-        X509Certificate cert => cert.Export(X509ContentType.Cert),
-        _ => UTF8Bytes(LanguagePrimitives.ConvertTo<string>(value)),
-    };
+        if (value is PSObject psValue)
+        {
+            value = psValue.BaseObject;
+        }
+
+        return value switch
+        {
+            null => Array.Empty<byte>(),
+            bool b => UTF8Bytes(b == true ? "TRUE" : "FALSE"),
+            IEnumerable<byte> bytes => bytes.ToArray(),
+            CommonSecurityDescriptor sd => sd.ToByteArray(),
+            Enum e => UTF8Bytes(Convert.ChangeType(e, e.GetTypeCode()).ToString() ?? ""),
+            DateTime dt => UTF8Bytes(dt.ToFileTimeUtc().ToString()),
+            DateTimeOffset dto => UTF8Bytes(dto.UtcDateTime.ToFileTimeUtc().ToString()),
+            Guid g => g.ToByteArray(),
+            SecurityIdentifier sid => sid.ToByteArray(),
+            TimeSpan ts => UTF8Bytes(ts.Ticks.ToString()),
+            X509Certificate cert => cert.Export(X509ContentType.Cert),
+            _ => UTF8Bytes(LanguagePrimitives.ConvertTo<string>(value)),
+        };
+    }
 
     private void RegisterClassInformation(IEnumerable<ObjectClassDescription> classes)
     {

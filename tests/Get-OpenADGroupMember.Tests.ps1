@@ -156,5 +156,27 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.CompletionText -like 'msDS*'
             }
         }
+
+        # A contact is a valid group member and has no objectSid, so the member
+        # has to come back with a null SID rather than failing the whole command.
+        It "Returns a member that has no objectSid" {
+            $contact = New-OpenADObject -Session $session -Name MemberNoSid -Type contact -PassThru
+            $group = New-OpenADObject -Session $session -Name GroupWithContact -Type group -PassThru -OtherAttributes @{
+                sAMAccountName = 'GroupWithContact'
+                member = @($contact.DistinguishedName)
+            }
+            try {
+                $actual = @(Get-OpenADGroupMember -Session $session -Identity GroupWithContact)
+
+                $actual.Count | Should -Be 1
+                $actual[0].Name | Should -Be MemberNoSid
+                $actual[0].ObjectClass | Should -Be contact
+                $actual[0].SID | Should -BeNullOrEmpty
+            }
+            finally {
+                $group | Remove-OpenADObject -Session $session
+                $contact | Remove-OpenADObject -Session $session
+            }
+        }
     }
 }
