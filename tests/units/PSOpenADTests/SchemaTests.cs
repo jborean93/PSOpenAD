@@ -1,6 +1,7 @@
 using PSOpenAD;
 using PSOpenAD.Security;
 using System;
+using System.Management.Automation;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
@@ -92,6 +93,19 @@ public class SchemaMetadataTests
     }
 
     [Test]
+    public async Task ConvertPSObjectWrappedByteArrayToRawAttributeCollection()
+    {
+        byte[] input = new byte[] { 1, 0, 4, 128 };
+        object wrapped = PSObject.AsPSObject(input);
+
+        byte[][] actual = SchemaMetadata.ConvertToRawAttributeCollection(wrapped);
+
+        await Assert.That(actual.Length).IsEqualTo(1);
+        await Assert.That(Convert.ToBase64String(actual[0]))
+            .IsEqualTo(Convert.ToBase64String(input));
+    }
+
+    [Test]
     public async Task ConvertStringToRawAttributeCollection()
     {
         string[] expected = new[] { "Café 1" };
@@ -138,6 +152,39 @@ public class SchemaMetadataTests
         string actual = Encoding.UTF8.GetString(result);
 
         await Assert.That(actual).IsEquivalentTo(expected);
+    }
+
+    [Test]
+    public async Task ConvertByteArrayToRawAttributeValue()
+    {
+        byte[] input = new byte[] { 1, 0, 4, 128, 20, 0, 0, 0 };
+
+        byte[] actual = SchemaMetadata.ConvertToRawAttributeValue(input);
+
+        await Assert.That(Convert.ToBase64String(actual))
+            .IsEqualTo(Convert.ToBase64String(input));
+    }
+
+    [Test]
+    public async Task ConvertPSObjectWrappedByteArrayToRawAttributeValue()
+    {
+        byte[] input = new byte[] { 1, 0, 4, 128, 20, 0, 0, 0 };
+        object wrapped = PSObject.AsPSObject(input);
+
+        byte[] actual = SchemaMetadata.ConvertToRawAttributeValue(wrapped);
+
+        await Assert.That(Convert.ToBase64String(actual))
+            .IsEqualTo(Convert.ToBase64String(input));
+    }
+
+    [Test]
+    public async Task ConvertPSObjectWrappedStringToRawAttributeValue()
+    {
+        object wrapped = PSObject.AsPSObject("hello");
+
+        byte[] actual = SchemaMetadata.ConvertToRawAttributeValue(wrapped);
+
+        await Assert.That(Encoding.UTF8.GetString(actual)).IsEqualTo("hello");
     }
 
     [Test]

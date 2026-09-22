@@ -31,6 +31,12 @@ public sealed class OpenADSessionOptions
 
     /// <summary>Used for TLS client certificate authentication.</summary>
     public X509Certificate? ClientCertificate { get; set; }
+
+    /// <summary>
+    /// The host used to build the Kerberos/Negotiate SPN (ldap/host). Defaults to the host that was connected to,
+    /// set this when connecting by IP address or through an alias that has no SPN registered for it.
+    /// </summary>
+    public string? TargetSpnHost { get; set; }
 }
 
 /// <summary>The OpenADSession class used to encapsulate a session with the caller.</summary>

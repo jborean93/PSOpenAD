@@ -260,6 +260,50 @@ public static class Libc
         }
     }
 
+    It "Connects by IP address with TargetSpnHost - <AuthType>" -Skip:(-not $PSOpenADSettings.SupportsNegotiateAuth) -TestCases @(
+        @{ AuthType = 'Negotiate' }
+        @{ AuthType = 'Kerberos' }
+    ) {
+        param ([string]$AuthType)
+
+        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
+        $address = [System.Net.Dns]::GetHostAddresses($PSOpenADSettings.Server) |
+            Where-Object AddressFamily -EQ InterNetwork |
+            Select-Object -First 1
+
+        $sessionParams = @{
+            ComputerName = $address.IPAddressToString
+            AuthType = $AuthType
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+            SessionOption = (New-OpenADSessionOption -TargetSpnHost $PSOpenADSettings.Server)
+        }
+        $s = New-OpenADSession @sessionParams
+        try {
+            $s.IsClosed | Should -BeFalse
+            $s.IsEncrypted | Should -BeTrue
+            $s.IsSigned | Should -BeTrue
+        }
+        finally {
+            $s | Remove-OpenADSession
+        }
+    }
+
+    It "Fails to connect by IP address with Kerberos without TargetSpnHost" -Skip:(-not $PSOpenADSettings.SupportsNegotiateAuth) {
+        $selectedCred = $PSOpenADSettings.Credentials | Select-Object -First 1
+        $address = [System.Net.Dns]::GetHostAddresses($PSOpenADSettings.Server) |
+            Where-Object AddressFamily -EQ InterNetwork |
+            Select-Object -First 1
+
+        $sessionParams = @{
+            ComputerName = $address.IPAddressToString
+            AuthType = 'Kerberos'
+            Credential = [pscredential]::new($selectedCred.Username, $selectedCred.Password)
+        }
+
+        # The SPN is built from the IP address, which no DC has registered.
+        { New-OpenADSession @sessionParams } | Should -Throw -ExpectedMessage '*gss_init_sec_context*'
+    }
+
     It "Creates session with trace logging" {
         $logPath = "temp:/PSOpenAD-$([Guid]::NewGuid())"
         $s = New-TestOpenADSession -SessionOption @{ TracePath = $logPath }
@@ -273,6 +317,34 @@ public static class Libc
         }
         finally {
             $s | Remove-OpenADSession
+            if (Test-Path -LiteralPath $logPath) {
+                Remove-Item -LiteralPath $logPath -Force
+            }
+        }
+    }
+
+    It "Logs the request that was sent" {
+        $logPath = "temp:/PSOpenAD-$([Guid]::NewGuid())"
+        $s = New-TestOpenADSession -SessionOption @{ TracePath = $logPath }
+        try {
+            $null = Get-OpenADUser -Session $s
+        }
+        finally {
+            $s | Remove-OpenADSession
+        }
+
+        try {
+            $sends = @(Get-Content -LiteralPath $logPath | Where-Object { $_ -like 'SEND: *' })
+            $sends.Count | Should -BeGreaterThan 0
+
+            # An LDAPMessage is a BER SEQUENCE, so each logged request starts
+            # with 0x30. A buffer logged before the request was encoded does not.
+            foreach ($line in $sends) {
+                $bytes = [Convert]::FromBase64String($line.Substring(6))
+                $bytes[0] | Should -Be 0x30
+            }
+        }
+        finally {
             if (Test-Path -LiteralPath $logPath) {
                 Remove-Item -LiteralPath $logPath -Force
             }
@@ -473,5 +545,18 @@ Describe "PSSession management" -Skip:(-not $PSOpenADSettings.Server) {
         {
             Get-OpenADUser -Session $s -ErrorAction Stop
         } | Should -Throw -ExpectedMessage "Cannot perform a SearchRequest until the connection is opened"
+    }
+}
+
+Describe "New-OpenADSessionOption" {
+    It "Sets TargetSpnHost" {
+        $actual = New-OpenADSessionOption -TargetSpnHost dc01.example.com
+        $actual -is ([PSOpenAD.OpenADSessionOptions]) | Should -BeTrue
+        $actual.TargetSpnHost | Should -Be 'dc01.example.com'
+    }
+
+    It "Leaves TargetSpnHost unset by default" {
+        $actual = New-OpenADSessionOption
+        $actual.TargetSpnHost | Should -BeNullOrEmpty
     }
 }

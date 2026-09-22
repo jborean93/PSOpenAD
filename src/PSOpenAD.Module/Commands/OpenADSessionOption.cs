@@ -34,6 +34,9 @@ public class NewOpenADSessionOption : PSCmdlet
     [Parameter()]
     public X509Certificate? ClientCertificate { get; set; }
 
+    [Parameter()]
+    public string? TargetSpnHost { get; set; }
+
     protected override void EndProcessing()
     {
         string? tracePath = null;
@@ -52,6 +55,7 @@ public class NewOpenADSessionOption : PSCmdlet
             OperationTimeout = OperationTimeout,
             TracePath = tracePath,
             ClientCertificate = ClientCertificate,
+            TargetSpnHost = TargetSpnHost,
         });
     }
 }
