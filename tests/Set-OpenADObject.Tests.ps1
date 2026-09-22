@@ -464,6 +464,8 @@ Describe "Set-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
         $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
         $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
         $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+    }
+
     # The outgoing pipe pauses the writer once the unsent bytes pass its
     # threshold, which a request this size does.
     It "Sets a value larger than the outgoing pipe threshold" {
