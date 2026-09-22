@@ -181,7 +181,11 @@ public class OpenADGroup : OpenADPrincipal
         GroupCategory = (groupType & GroupType.IsSecurity) != 0
             ? ADGroupCategory.Security : ADGroupCategory.Distribution;
 
-        GroupScope = groupType switch
+        // Only the scope bits describe the scope; a real directory also sets
+        // IsSecurity (and System on the builtin groups), so comparing the whole
+        // value made every security group fall through to Universal.
+        GroupType scope = groupType & (GroupType.Global | GroupType.DomainLocal | GroupType.Universal);
+        GroupScope = scope switch
         {
             GroupType.DomainLocal => ADGroupScope.DomainLocal,
             GroupType.Global => ADGroupScope.Global,

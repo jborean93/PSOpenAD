@@ -2,7 +2,12 @@
 
 ## v0.8.0 - TBD
 
-+ **Breaking change**: `OpenADPrincipal.SID` (and its subclasses, including the objects `Get-OpenADGroupMember` returns) is now `SecurityIdentifier?` and is `$null` for a principal with no `objectSid`, such as a contact, instead of the module throwing when constructing an empty `SecurityIdentifier`
++ The `SID` property on `OpenADPrincipal` is marked as nullable to handle principals without `objectSid`
+  + An example would be `Get-OpenADGroupMember` outputting a contact
++ Fixed the `-TracePath` log recording the outgoing buffer before the request was written into it, so every sent message was logged as unrelated recycled memory
++ Fixed a request larger than the outgoing pipe's pause threshold (e.g. creating or modifying a group with a few thousand members) failing with `Can't GetResult unless awaiter is completed` while the server still applied it
++ Fixed a `PSObject`-wrapped byte array (e.g. a value read back from `Get-OpenAD*` and fed straight into `-Add`/`-Replace`) being stringified instead of written as binary, causing the server to reject it
++ Fixed `GroupScope` being reported as `Universal` for every security group (e.g. `Domain Admins` is `Global`, `Administrators` is `DomainLocal`) - the whole `groupType` value was compared instead of just its scope bits
 
 ## v0.7.0 - 2026-08-27
 

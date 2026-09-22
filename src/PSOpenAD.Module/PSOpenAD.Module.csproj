@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="PSOpenADTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="DnsClient" />
     <PackageReference Include="System.IO.Pipelines" />
     <PackageReference Include="System.Management.Automation" PrivateAssets="all" />

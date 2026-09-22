@@ -8,6 +8,7 @@
     <PackageReference Include="TUnit" />
     <PackageReference Include="System.Management.Automation" />
     <ProjectReference Include="../../../src/PSOpenAD/PSOpenAD.csproj" />
+    <ProjectReference Include="../../../src/PSOpenAD.Module/PSOpenAD.Module.csproj" />
   </ItemGroup>
 
 </Project>
