@@ -29,7 +29,7 @@ PASSWORD=${AD_PASSWORD:-Password01}
 NETWORK_NAME=psopenad-net-$( openssl rand -hex 5 )
 DC_CONTAINER_ID=""
 DC_LOGS_PID=""
-DC_STARTUP_TIMEOUT=${DC_STARTUP_TIMEOUT:-120}
+DC_STARTUP_TIMEOUT=${DC_STARTUP_TIMEOUT:-300}
 
 if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
     # DOCKER_BIN=docker
@@ -49,6 +49,22 @@ DC_LOG_FLAGS=()
 if [ "${DOCKER_BIN}" == "podman" ]; then
     DC_LOG_FLAGS=(--log-driver k8s-file)
 fi
+
+# Emits GitHub Actions workflow commands to collapse a section of the log when
+# running under Actions. They are no-ops elsewhere.
+function gha_group_start()
+{
+    if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
+        echo "::group::${1}"
+    fi
+}
+
+function gha_group_end()
+{
+    if [ x"${GITHUB_ACTIONS}" = "xtrue" ]; then
+        echo "::endgroup::"
+    fi
+}
 
 function dc_diagnostics()
 {
@@ -91,6 +107,7 @@ trap cleanup EXIT
 $DOCKER_BIN network inspect "${NETWORK_NAME}" >/dev/null 2>&1 || \
     $DOCKER_BIN network create --driver bridge "${NETWORK_NAME}"
 
+gha_group_start "Samba DC container startup"
 echo "Starting Samba DC container"
 DC_CONTAINER_ID=$( $DOCKER_BIN run \
     --detach \
@@ -125,6 +142,7 @@ while true; do
         # reporting the failure. It exits on its own once the container has.
         wait "${DC_LOGS_PID}" >/dev/null 2>&1 || true
         DC_LOGS_PID=""
+        gha_group_end
 
         DC_EXIT_CODE=$( $DOCKER_BIN inspect -f '{{.State.ExitCode}}' "${DC_CONTAINER_ID}" 2>/dev/null || echo "unknown" )
         echo "Samba DC container is no longer running (state: ${DC_STATE}, exit code: ${DC_EXIT_CODE})" 1>&2
@@ -141,6 +159,7 @@ while true; do
         kill "${DC_LOGS_PID}" >/dev/null 2>&1 || true
         wait "${DC_LOGS_PID}" >/dev/null 2>&1 || true
         DC_LOGS_PID=""
+        gha_group_end
 
         echo "Timed out after ${DC_STARTUP_TIMEOUT}s waiting for Samba to come online" 1>&2
         dc_diagnostics 1>&2
@@ -154,6 +173,7 @@ done
 kill "${DC_LOGS_PID}" >/dev/null 2>&1 || true
 wait "${DC_LOGS_PID}" >/dev/null 2>&1 || true
 DC_LOGS_PID=""
+gha_group_end
 echo "Samba is online"
 
 echo "Starting test container"
