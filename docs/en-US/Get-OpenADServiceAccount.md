@@ -373,7 +373,7 @@ The `OpenADServiceAccount` representing the object(s) found. This object will al
 
 + `SamAccountName`
 
-+ `SID`: This is `$null` if the object has no `objectSid` attribute set, such as a contact
++ `SID`
 
 + `Enabled`
 
