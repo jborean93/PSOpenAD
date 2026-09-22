@@ -236,6 +236,20 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
                 $_.CompletionText -like 'msDS*'
             }
         }
+
+        # These carry the IsSecurity bit, and the builtin ones the System bit as
+        # well, so their scope can only be read from the scope bits.
+        It "Reports the scope of a security group" {
+            $global = Get-OpenADGroup -Session $session -Identity 'Domain Admins'
+            $global.GroupScope | Should -Be ([PSOpenAD.ADGroupScope]::Global)
+            $global.GroupCategory | Should -Be ([PSOpenAD.ADGroupCategory]::Security)
+
+            $domainLocal = Get-OpenADGroup -Session $session -Identity 'Administrators'
+            $domainLocal.GroupScope | Should -Be ([PSOpenAD.ADGroupScope]::DomainLocal)
+
+            $universal = Get-OpenADGroup -Session $session -Identity 'Schema Admins'
+            $universal.GroupScope | Should -Be ([PSOpenAD.ADGroupScope]::Universal)
+        }
     }
 
     Context "Get-OpenADUser" {

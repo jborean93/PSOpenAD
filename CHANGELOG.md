@@ -4,6 +4,8 @@
 
 + Fixed the `-TracePath` log recording the outgoing buffer before the request was written into it, so every sent message was logged as unrelated recycled memory
 + Fixed a request larger than the outgoing pipe's pause threshold (e.g. creating or modifying a group with a few thousand members) failing with `Can't GetResult unless awaiter is completed` while the server still applied it
++ Fixed a `PSObject`-wrapped byte array (e.g. a value read back from `Get-OpenAD*` and fed straight into `-Add`/`-Replace`) being stringified instead of written as binary, causing the server to reject it
++ Fixed `GroupScope` being reported as `Universal` for every security group (e.g. `Domain Admins` is `Global`, `Administrators` is `DomainLocal`) - the whole `groupType` value was compared instead of just its scope bits
 
 ## v0.7.0 - 2026-08-27
 
