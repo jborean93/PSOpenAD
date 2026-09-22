@@ -1,7 +1,10 @@
 #!/bin/bash -e
 
 apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -q -o Dpkg::Use-Pty=0 \
+DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+    -o Dpkg::Progress-Fancy="0" \
+    -o Dpkg::Use-Pty=0 \
+    -o APT::Color="0" \
     acl \
     attr \
     dnsutils \
