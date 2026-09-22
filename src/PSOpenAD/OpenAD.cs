@@ -65,7 +65,7 @@ public class OpenADPrincipal : OpenADObject
         });
 
     public string SamAccountName { get; }
-    public SecurityIdentifier SID { get; }
+    public SecurityIdentifier? SID { get; }
 
     public OpenADPrincipal(IDictionary<string, (PSObject[], bool)> attributes) : base(attributes)
     {
@@ -75,7 +75,7 @@ public class OpenADPrincipal : OpenADObject
 
         SID = attributes.ContainsKey("objectSid")
             ? (SecurityIdentifier)attributes["objectSid"].Item1[0].BaseObject
-            : new SecurityIdentifier("");
+            : null;
     }
 }
 

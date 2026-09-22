@@ -374,7 +374,7 @@ The `OpenADPrincipal` representing the member objects. This object will always h
 
 + `SamAccountName`
 
-+ `SID`
++ `SID`: This is `$null` if the object has no `objectSid` attribute set, such as a contact
 
 + `DomainController`: This is set to the domain controller that processed the request
 
