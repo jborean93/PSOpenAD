@@ -2,17 +2,28 @@
 
 set -e
 
-# Fail fast if the mirror cannot be reached rather than sitting in apt's
-# default connect/retry logic for many minutes. A failure here exits the
-# script and shows up as a container exit rather than a silent hang.
+# We set various options to try and handle CI flakiness when accesing the Debian
+# package mirrors.
 APT_OPTS=(
     -o Acquire::Retries=3
+    -o Acquire::ForceIPv4=true         # Force IPv4 as IPv6 may not be reliable in CI
     -o Acquire::http::Timeout=30
     -o Acquire::https::Timeout=30
+    -o Acquire::http::Pipeline-Depth=0  # Disable HTTP pipelining as it can cause stalled or ignored index fetches
 )
 
 echo "Updating apt package lists"
-apt-get update "${APT_OPTS[@]}"
+for attempt in 1 2 3; do
+    if timeout 30 apt-get update "${APT_OPTS[@]}" -o APT::Update::Error-Mode=any; then
+        break
+    elif [ "${attempt}" -eq 3 ]; then
+        echo "apt-get update failed after ${attempt} attempts" 1>&2
+        exit 1
+    fi
+
+    echo "apt-get update attempt ${attempt} failed, retrying" 1>&2
+    sleep 5
+done
 
 echo "Installing Samba packages"
 DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
