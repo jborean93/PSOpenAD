@@ -58,5 +58,8 @@ internal class GlobalState
     /// <summary>If the default DC couldn't be detected this stores the details.</summary>
     public string? DefaultDCError;
 
+    /// <summary>Set once the default DC lookup has been done for this runspace, whether it succeeded or not.</summary>
+    public bool DefaultDCLookupDone;
+
     public static GlobalState GetFromTLS() => _state.GetFromTLS();
 }

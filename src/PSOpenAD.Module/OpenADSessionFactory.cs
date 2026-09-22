@@ -27,6 +27,8 @@ internal sealed class OpenADSessionFactory
 
         if (string.IsNullOrEmpty(server))
         {
+            DefaultDcDiscovery.Ensure(state, cmdlet);
+
             if (state.DefaultDC == null)
             {
                 string msg = "Cannot determine default realm for implicit domain controller.";
