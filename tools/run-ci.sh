@@ -119,7 +119,7 @@ DC_CONTAINER_ID=$( $DOCKER_BIN run \
     --network "${NETWORK_NAME}" \
     --network-alias dc \
     --network-alias "dc.${REALM,,}" \
-    debian:12 /bin/bash /tmp/PSOpenAD/tools/setup-samba.sh )
+    debian:13 /bin/bash /tmp/PSOpenAD/tools/setup-samba.sh )
 
 echo "Getting Samba DC container IP"
 DC_IP=$( $DOCKER_BIN inspect -f \
