@@ -104,6 +104,20 @@ $";
         return ParseFilterValue(value.AsSpan(), 0, value.Length, out var _);
     }
 
+    /// <summary>Encodes a raw, unescaped value for use in a filter assertion.</summary>
+    /// <remarks>
+    /// Use this for a value that is data rather than filter syntax - a distinguished name read back from the
+    /// directory, or a name supplied by the caller. <see cref="EncodeSimpleFilterValue"/> parses its input as
+    /// filter text, so it rejects an unescaped '(' and would decode a literal '\28' the value happens to
+    /// contain. A filter assertion is sent as an ASN.1 OCTET STRING, so a raw value needs no escaping at all.
+    /// </remarks>
+    /// <param name="value">The raw, unescaped value.</param>
+    /// <returns>The raw bytes of the value.</returns>
+    public static Memory<byte> EncodeRawFilterValue(string value)
+    {
+        return Encoding.UTF8.GetBytes(value);
+    }
+
     /// <summary>Serializes the LDAP filter value to a string usable in an LDAP filter.</summary>
     /// <remarks>
     /// This is a very naive method of serializing the value, only pure ASCII chars will be preserved, everything

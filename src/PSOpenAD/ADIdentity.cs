@@ -88,7 +88,7 @@ public class ADPrincipalIdentity : ADObjectIdentity
 
         if (Regex.Match(value, @"^.*\@.*\..*$").Success)
         {
-            filter = new FilterEquality("userPrincipalName", LDAPFilter.EncodeSimpleFilterValue(value));
+            filter = new FilterEquality("userPrincipalName", LDAPFilter.EncodeRawFilterValue(value));
             return true;
         }
         else
@@ -109,7 +109,7 @@ public class ADPrincipalIdentity : ADObjectIdentity
             {
                 username += "$";
             }
-            filter = new FilterEquality("sAMAccountName", LDAPFilter.EncodeSimpleFilterValue(username));
+            filter = new FilterEquality("sAMAccountName", LDAPFilter.EncodeRawFilterValue(username));
             return true;
         }
         else

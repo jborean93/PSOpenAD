@@ -1103,4 +1103,45 @@ public class LDAPFilterValueTests
         await Assert.That(ex.StartPosition).IsEqualTo(expectedStart);
         await Assert.That(ex.EndPosition).IsEqualTo(expectedEnd);
     }
+
+    [Test]
+    [Arguments("CN=Ada Lovelace (E1234),OU=Staff,DC=domain,DC=test")]
+    [Arguments("CN=a*b,DC=domain,DC=test")]
+    [Arguments("CN=back\\slash,DC=domain,DC=test")]
+    public async Task EncodeRawFilterValueAcceptsFilterMetacharacters(string value)
+    {
+        // A distinguished name read back from the directory is data, not filter syntax. Parentheses are
+        // legal in a DN, so encoding one must not be rejected the way parsing filter text would be.
+        Memory<byte> actual = LDAPFilter.EncodeRawFilterValue(value);
+
+        await Assert.That(actual.ToArray()).IsEquivalentTo(Encoding.UTF8.GetBytes(value));
+    }
+
+    [Test]
+    public async Task EncodeRawFilterValueDoesNotDecodeEscapes()
+    {
+        // EncodeSimpleFilterValue parses its input, so it reads "\\28" as an escaped '('. A raw value that
+        // genuinely contains those three characters must survive intact.
+        const string value = "CN=literal\\28,DC=domain,DC=test";
+
+        Memory<byte> raw = LDAPFilter.EncodeRawFilterValue(value);
+        Memory<byte> parsed = LDAPFilter.EncodeSimpleFilterValue(value);
+
+        await Assert.That(Encoding.UTF8.GetString(raw.Span)).IsEqualTo(value);
+        await Assert.That(Encoding.UTF8.GetString(parsed.Span)).IsEqualTo("CN=literal(,DC=domain,DC=test");
+    }
+
+    [Test]
+    public async Task EncodeRawFilterValueRoundTripsThroughFilterString()
+    {
+        const string dn = "CN=Ada Lovelace (E1234),DC=domain,DC=test";
+        LDAPFilter filter = new FilterEquality("member", LDAPFilter.EncodeRawFilterValue(dn));
+
+        // Serialising back to filter text is where the escaping belongs, and it must round-trip.
+        string asText = filter.ToString();
+        await Assert.That(asText).IsEqualTo("(member=CN=Ada Lovelace \\28E1234\\29,DC=domain,DC=test)");
+
+        LDAPFilter reparsed = LDAPFilter.ParseFilter(asText);
+        await Assert.That(((FilterEquality)reparsed).Value.ToArray()).IsEquivalentTo(Encoding.UTF8.GetBytes(dn));
+    }
 }
