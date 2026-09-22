@@ -42,4 +42,4 @@ $DOCKER_BIN run \
     --hostname "dc.${REALM,,}" \
     --publish 8389:389 \
     --publish 8636:636 \
-    debian:12 /bin/bash /tmp/PSOpenAD/tools/setup-samba.sh
+    debian:13 /bin/bash /tmp/PSOpenAD/tools/setup-samba.sh

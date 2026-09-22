@@ -37,7 +37,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
     krb5-config \
     krb5-user \
     ldb-tools \
-    ntp \
     samba \
     samba-dsdb-modules \
     samba-vfs-modules \
