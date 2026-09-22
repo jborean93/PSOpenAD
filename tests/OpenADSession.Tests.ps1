@@ -323,6 +323,34 @@ public static class Libc
         }
     }
 
+    It "Logs the request that was sent" {
+        $logPath = "temp:/PSOpenAD-$([Guid]::NewGuid())"
+        $s = New-TestOpenADSession -SessionOption @{ TracePath = $logPath }
+        try {
+            $null = Get-OpenADUser -Session $s
+        }
+        finally {
+            $s | Remove-OpenADSession
+        }
+
+        try {
+            $sends = @(Get-Content -LiteralPath $logPath | Where-Object { $_ -like 'SEND: *' })
+            $sends.Count | Should -BeGreaterThan 0
+
+            # An LDAPMessage is a BER SEQUENCE, so each logged request starts
+            # with 0x30. A buffer logged before the request was encoded does not.
+            foreach ($line in $sends) {
+                $bytes = [Convert]::FromBase64String($line.Substring(6))
+                $bytes[0] | Should -Be 0x30
+            }
+        }
+        finally {
+            if (Test-Path -LiteralPath $logPath) {
+                Remove-Item -LiteralPath $logPath -Force
+            }
+        }
+    }
+
     It "Fails to create cert auth session without certificate set" {
         $sessionParams = @{
             ComputerName = $PSOpenADSettings.Server

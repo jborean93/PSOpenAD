@@ -3,6 +3,7 @@ using System;
 using System.Formats.Asn1;
 using System.IO;
 using System.IO.Pipelines;
+using System.Threading.Tasks;
 
 namespace PSOpenAD.Module;
 
@@ -18,15 +19,37 @@ internal class PipelineLDAPSession : LDAPSession
     public override void CloseConnection()
     {
         _outgoing.Writer.Complete();
-        _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
+        Flush();
     }
 
     public override void WriteData(AsnWriter writer)
     {
         Memory<byte> buffer = _outgoing.Writer.GetMemory(writer.GetEncodedLength());
-        TraceMsg("SEND", buffer.Span);
+
+        // The buffer is rented and only holds the request once Encode has run, so
+        // it is traced afterwards, and only as far as what was written.
         int written = writer.Encode(buffer.Span);
+        TraceMsg("SEND", buffer.Span[..written]);
         _outgoing.Writer.Advance(written);
-        _outgoing.Writer.FlushAsync().GetAwaiter().GetResult();
+        Flush();
+    }
+
+    /// <summary>
+    /// Waits for the flush to finish. A request past the pipe's pause threshold
+    /// leaves the flush pending until the sender drains it, and calling
+    /// GetResult() on a ValueTask that has not completed throws rather than
+    /// waiting, so the pending case is handed to a Task first.
+    /// </summary>
+    private void Flush()
+    {
+        ValueTask<FlushResult> flush = _outgoing.Writer.FlushAsync();
+        if (flush.IsCompleted)
+        {
+            flush.GetAwaiter().GetResult();
+        }
+        else
+        {
+            flush.AsTask().GetAwaiter().GetResult();
+        }
     }
 }
