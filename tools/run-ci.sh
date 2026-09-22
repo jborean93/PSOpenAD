@@ -45,6 +45,33 @@ if [ -x "$( command -v getenforce )" ] && [ "$( getenforce | xargs )" == "Enforc
     VOLUME_FLAGS=":z"
 fi
 
+DC_LOG_FLAGS=()
+if [ "${DOCKER_BIN}" == "podman" ]; then
+    DC_LOG_FLAGS=(--log-driver k8s-file)
+fi
+
+function dc_diagnostics()
+{
+    echo "===== Samba DC container diagnostics ====="
+    echo "--- State"
+    $DOCKER_BIN inspect -f 'Status={{.State.Status}} ExitCode={{.State.ExitCode}} StartedAt={{.State.StartedAt}}' \
+        "${DC_CONTAINER_ID}" 2>&1 || true
+
+    echo "--- Processes"
+    $DOCKER_BIN exec "${DC_CONTAINER_ID}" /bin/bash -c '
+        if command -v ps >/dev/null 2>&1; then
+            ps -eo pid,etime,stat,args
+        else
+            for d in /proc/[0-9]*; do
+                echo "$( basename "${d}" ) $( tr "\0" " " < "${d}/cmdline" 2>/dev/null )"
+            done
+        fi' 2>&1 || true
+
+    echo "--- Last 100 log lines"
+    $DOCKER_BIN logs --tail 100 "${DC_CONTAINER_ID}" 2>&1 || true
+    echo "=========================================="
+}
+
 function cleanup()
 {
     if [ -n "${DC_LOGS_PID}" ] && kill -0 "${DC_LOGS_PID}" >/dev/null 2>&1; then
@@ -67,6 +94,7 @@ $DOCKER_BIN network inspect "${NETWORK_NAME}" >/dev/null 2>&1 || \
 echo "Starting Samba DC container"
 DC_CONTAINER_ID=$( $DOCKER_BIN run \
     --detach \
+    "${DC_LOG_FLAGS[@]}" \
     --volume "$( pwd ):/tmp/PSOpenAD${VOLUME_FLAGS}" \
     --env AD_REALM="${REALM^^}" \
     --env AD_PASSWORD="${PASSWORD}" \
@@ -108,7 +136,14 @@ while true; do
     fi
 
     if (( SECONDS - DC_WAIT_START >= DC_STARTUP_TIMEOUT )); then
+        # Stop the follower first so the diagnostics do not interleave with
+        # any output it is still streaming.
+        kill "${DC_LOGS_PID}" >/dev/null 2>&1 || true
+        wait "${DC_LOGS_PID}" >/dev/null 2>&1 || true
+        DC_LOGS_PID=""
+
         echo "Timed out after ${DC_STARTUP_TIMEOUT}s waiting for Samba to come online" 1>&2
+        dc_diagnostics 1>&2
         exit 1
     fi
 

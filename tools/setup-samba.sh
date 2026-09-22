@@ -1,7 +1,22 @@
 #!/bin/bash -e
 
-apt-get update -qq
+set -e
+
+# Fail fast if the mirror cannot be reached rather than sitting in apt's
+# default connect/retry logic for many minutes. A failure here exits the
+# script and shows up as a container exit rather than a silent hang.
+APT_OPTS=(
+    -o Acquire::Retries=3
+    -o Acquire::http::Timeout=30
+    -o Acquire::https::Timeout=30
+)
+
+echo "Updating apt package lists"
+apt-get update "${APT_OPTS[@]}"
+
+echo "Installing Samba packages"
 DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+    "${APT_OPTS[@]}" \
     -o Dpkg::Progress-Fancy="0" \
     -o Dpkg::Use-Pty=0 \
     -o APT::Color="0" \
