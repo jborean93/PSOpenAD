@@ -2,6 +2,8 @@
 
 ## v0.8.0 - TBD
 
++ Fixed `GroupScope` being reported as `Universal` for every security group (e.g. `Domain Admins` is `Global`, `Administrators` is `DomainLocal`) - the whole `groupType` value was compared instead of just its scope bits
+
 ## v0.7.0 - 2026-08-27
 
 + Added `Add-OpenADGroupMember` and `Remove-OpenADGroupMember` to manage AD group members
