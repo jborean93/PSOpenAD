@@ -103,6 +103,33 @@ Describe "Get-OpenADPrincipalGroupMembership cmdlet" -Skip:(-not $PSOpenADSettin
             $actual[2].ObjectClass | Should -Be 'group'
         }
 
+        It "Finds groups of a principal with parentheses in its name by <Type>" -TestCases @(
+            @{ Type = 'sAMAccountName' }
+            @{ Type = 'DistinguishedName' }
+        ) {
+            param ($Type)
+
+            $identity = 'TestParenMember (E1234)'
+            if ($Type -eq 'DistinguishedName') {
+                $identity = (Get-OpenADUser -Identity $identity -Session $session).DistinguishedName
+                $identity | Should -BeLike 'CN=TestParenMember (E1234),*'
+            }
+
+            $actual = Get-OpenADPrincipalGroupMembership -Identity $identity -Session $session |
+                Sort-Object -Property SamAccountName
+            $actual.Count | Should -Be 2
+            $actual[0].SamAccountName | Should -Be 'Domain Users'
+            $actual[1].SamAccountName | Should -Be 'TestGroupParen (G1)'
+            $actual[1].DistinguishedName | Should -BeLike 'CN=TestGroupParen (G1),*'
+        }
+
+        It "Finds groups of a principal with parentheses in its name recursively" {
+            $actual = Get-OpenADPrincipalGroupMembership -Identity 'TestParenMember (E1234)' -Recursive -Session $session |
+                Sort-Object -Property SamAccountName
+            $actual.Count | Should -BeGreaterOrEqual 2
+            $actual.SamAccountName | Should -Contain 'TestGroupParen (G1)'
+        }
+
         It "Find multiple principals' groups" {
             $groups = Get-OpenADPrincipalGroupMembership -Session $session -LDAPFilter "(|(name=TestGroupMember)(name=$dcName))"
             ($groups | Select-Object -ExpandProperty QueriedPrincipal | Sort-Object -Unique).Count | Should -Be 2

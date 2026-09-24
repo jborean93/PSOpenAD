@@ -414,15 +414,23 @@ internal sealed class OpenADSessionFactory
             }
 
             SecurityContext context;
+            // The SPN is built from the host that was connected to unless the caller has asked for a different
+            // one, e.g. when connecting by IP address or through an alias that has no SPN registered for it.
+            string spnHost = uri.DnsSafeHost;
+            if (!string.IsNullOrWhiteSpace(sessionOptions.TargetSpnHost))
+            {
+                spnHost = sessionOptions.TargetSpnHost;
+            }
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                string targetSpn = $"ldap/{uri.DnsSafeHost}";
+                string targetSpn = $"ldap/{spnHost}";
                 context = new SspiContext(username, password, auth, targetSpn, channelBindings, signed,
                     encrypted);
             }
             else
             {
-                string targetSpn = $"ldap@{uri.DnsSafeHost}";
+                string targetSpn = $"ldap@{spnHost}";
                 context = new GssapiContext(username, password, auth, targetSpn, channelBindings, signed,
                     encrypted);
             }

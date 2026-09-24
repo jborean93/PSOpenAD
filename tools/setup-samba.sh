@@ -1,13 +1,42 @@
 #!/bin/bash -e
 
-apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+set -e
+
+# We set various options to try and handle CI flakiness when accesing the Debian
+# package mirrors.
+APT_OPTS=(
+    -o Acquire::Retries=3
+    -o Acquire::ForceIPv4=true         # Force IPv4 as IPv6 may not be reliable in CI
+    -o Acquire::http::Timeout=30
+    -o Acquire::https::Timeout=30
+    -o Acquire::http::Pipeline-Depth=0  # Disable HTTP pipelining as it can cause stalled or ignored index fetches
+)
+
+echo "Updating apt package lists"
+for attempt in 1 2 3; do
+    if timeout 30 apt-get update "${APT_OPTS[@]}" -o APT::Update::Error-Mode=any; then
+        break
+    elif [ "${attempt}" -eq 3 ]; then
+        echo "apt-get update failed after ${attempt} attempts" 1>&2
+        exit 1
+    fi
+
+    echo "apt-get update attempt ${attempt} failed, retrying" 1>&2
+    sleep 5
+done
+
+echo "Installing Samba packages"
+DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+    "${APT_OPTS[@]}" \
+    -o Dpkg::Progress-Fancy="0" \
+    -o Dpkg::Use-Pty=0 \
+    -o APT::Color="0" \
     acl \
     attr \
     dnsutils \
     krb5-config \
     krb5-user \
     ldb-tools \
-    ntp \
     samba \
     samba-dsdb-modules \
     samba-vfs-modules \
@@ -289,5 +318,16 @@ samba-tool group addmembers \
 samba-tool group addmembers \
     TestGroupSub \
     TestGroupSubMember
+
+# Objects with '(' and ')' in their name to test filter escaping.
+samba-tool group add \
+    'TestGroupParen (G1)'
+
+samba-tool user create \
+    'TestParenMember (E1234)' Password01!
+
+samba-tool group addmembers \
+    'TestGroupParen (G1)' \
+    'TestParenMember (E1234)'
 
 samba --debug-stdout --foreground --no-process-group

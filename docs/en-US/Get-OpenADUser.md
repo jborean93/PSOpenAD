@@ -392,7 +392,7 @@ The `OpenADUser` representing the object(s) found. This object will always have 
 
 + `SamAccountName`
 
-+ `SID`: This is `$null` if the object has no `objectSid` attribute set, such as a contact
++ `SID`
 
 + `Enabled`
 

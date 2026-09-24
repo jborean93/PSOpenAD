@@ -15,7 +15,8 @@ Creates an object that contains advanced options for an `OpenAD` session.
 ```
 New-OpenADSessionOption [-NoEncryption] [-NoSigning] [-NoChannelBinding] [-SkipCertificateCheck]
  [-ConnectTimeout <Int32>] [-OperationTimeout <Int32>] [-TracePath <String>]
- [-ClientCertificate <X509Certificate>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-ClientCertificate <X509Certificate>] [-TargetSpnHost <String>] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -72,6 +73,15 @@ PS C:\> $s = New-OpenADSession -ComputerName dc -SessionOption $so -UseTLS
 
 Creates an OpenAD session to an `LDAPS` endpoint and authenticates using the client certificate provided.
 This certificate needs to be mapped to a user on the server for the authentication to occur.
+
+### Example 6: Connect by IP address with Kerberos authentication
+```powershell
+PS C:\> $so = New-OpenADSessionOption -TargetSpnHost dc01.example.com
+PS C:\> $s = New-OpenADSession -ComputerName 192.0.2.10 -AuthType Kerberos -SessionOption $so
+```
+
+Connects to the domain controller by its IP address while requesting a Kerberos ticket for `ldap/dc01.example.com`, the SPN the domain controller is registered under.
+Without `-TargetSpnHost` the SPN would be `ldap/192.0.2.10`, which no domain controller holds a key for, and Kerberos authentication would fail.
 
 ## PARAMETERS
 
@@ -206,6 +216,26 @@ This is useful when the server is using a self signed certificate for it's TLS c
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -TargetSpnHost
+The host to use when building the Kerberos/Negotiate service principal name (SPN) of the target, `ldap/<host>`.
+By default the SPN is built from the `-Server`/`-ComputerName` value or the connection URI.
+Set this when that value is not a name the domain controller has an SPN registered for, for example when connecting by IP address, or through a DNS alias, and the client cannot resolve the domain controller's real name.
+The value should be the fully qualified name of the domain controller being connected to.
+A ticket issued for one domain controller is not accepted by another, so this cannot be used to authenticate through a round robin alias that resolves to several domain controllers.
+This option has no effect on `Simple`, `Anonymous`, or `Certificate` authentication.
+
+```yaml
+Type: String
 Parameter Sets: (All)
 Aliases:
 

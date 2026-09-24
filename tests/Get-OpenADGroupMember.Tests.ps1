@@ -97,6 +97,22 @@ Describe "Get-OpenADGroupMember cmdlet" -Skip:(-not $PSOpenADSettings.Server) {
             $actual[1].ObjectClass | Should -Be 'group'
         }
 
+        It "Finds members of a group with parentheses in its name" {
+            $group = Get-OpenADGroup -Identity 'TestGroupParen (G1)' -Session $session
+            $group.DistinguishedName | Should -BeLike 'CN=TestGroupParen (G1),*'
+
+            $actual = $group | Get-OpenADGroupMember -Session $session
+            $actual.Count | Should -Be 1
+            $actual[0] | Should -BeOfType ([PSOpenAD.OpenADPrincipal])
+            $actual[0].QueriedGroup | Should -Be $group.DistinguishedName
+            $actual[0].SamAccountName | Should -Be 'TestParenMember (E1234)'
+            $actual[0].DistinguishedName | Should -BeLike 'CN=TestParenMember (E1234),*'
+
+            $recursive = $group | Get-OpenADGroupMember -Recursive -Session $session
+            $recursive.Count | Should -Be 1
+            $recursive[0].SamAccountName | Should -Be 'TestParenMember (E1234)'
+        }
+
         It "Finds test group recursively" {
             $group = Get-OpenADGroup -Identity 'TestGroup' -Session $session
             $actual = $group | Get-OpenADGroupMember -Recursive -Session $session |

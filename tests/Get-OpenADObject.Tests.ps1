@@ -277,6 +277,19 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $allObjects.Count | Should -Be $searchObjects.Count
         }
 
+        It "Finds ADUser by -Identity sAMAccountName with parentheses" {
+            $actual = Get-OpenADUser -Session $session -Identity 'TestParenMember (E1234)'
+            $actual | Should -Not -BeNullOrEmpty
+            $actual.SamAccountName | Should -Be 'TestParenMember (E1234)'
+            $actual.DistinguishedName | Should -BeLike 'CN=TestParenMember (E1234),*'
+        }
+
+        It "Finds ADGroup by -Identity sAMAccountName with parentheses" {
+            $actual = Get-OpenADGroup -Session $session -Identity 'TestGroupParen (G1)'
+            $actual | Should -Not -BeNullOrEmpty
+            $actual.SamAccountName | Should -Be 'TestGroupParen (G1)'
+        }
+
         It "Requests a property that is not set" {
             $user = Get-OpenADUser -Session $session | Select-Object -ExpandProperty DistinguishedName -First 1
             $actual = Get-OpenADUser -Session $session -Identity $user -Property title
