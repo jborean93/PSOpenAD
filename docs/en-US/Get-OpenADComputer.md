@@ -282,8 +282,10 @@ Accept wildcard characters: False
 
 ### -SecurityMask
 Requests specific components of the `nTSecurityDescriptor` value be returned by sending the `LDAP_SERVER_SD_FLAGS` control with the search.
-Combine one or more of `Owner`, `Group`, `Dacl`, and `Sacl`.
-The default `None` does not send the control and the server returns whichever components it would by default.
+Combine one or more of `Owner`, `Group`, `Dacl`, and `Sacl`, or use `All` for every component.
+The default `None` does not send the control.
+Active Directory treats a search without the control as a request for every component, including the SACL.
+Reading the SACL requires `SeSecurityPrivilege`, so a caller without it gets no `nTSecurityDescriptor` value at all unless the mask leaves out `Sacl`, for example `-SecurityMask Owner, Group, Dacl`.
 
 ```yaml
 Type: SecurityDescriptorFlags

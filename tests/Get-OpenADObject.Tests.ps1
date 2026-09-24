@@ -360,12 +360,25 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $maskDN = (New-OpenADObject @maskParams).DistinguishedName
         }
 
+        # The SACL is compared against $null rather than by count: a SACL that was
+        # returned but holds no entries is an empty ACL, one that was not returned is
+        # $null.
         It "Returns every component when no mask is requested" {
             $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor
 
             $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
             $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
             $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+            $null -ne $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
+        }
+
+        It "Returns every component with -SecurityMask All" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask All
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+            $null -ne $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
         }
 
         It "Returns only the DACL with -SecurityMask Dacl" {
@@ -374,6 +387,16 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
             $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
             $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+            $null -eq $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
+        }
+
+        It "Returns only the SACL with -SecurityMask Sacl" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Sacl
+
+            $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
+            $null -eq $actual.NTSecurityDescriptor.DiscretionaryAcl | Should -BeTrue
+            $null -ne $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
         }
 
         It "Returns only the owner with -SecurityMask Owner" {
@@ -382,6 +405,7 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
             $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
             $actual.NTSecurityDescriptor.DiscretionaryAcl | Should -BeNullOrEmpty
+            $null -eq $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
         }
 
         It "Combines the flags of a multi valued mask" {

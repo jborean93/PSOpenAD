@@ -1,5 +1,4 @@
 using PSOpenAD.LDAP;
-using PSOpenAD.Security;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -117,7 +116,6 @@ public class SetOpenADObject : OpenADSessionCmdletBase
         if (ShouldProcess(entry, "Set"))
         {
             WriteVerbose($"Setting LDAP object '{entry}'");
-
             ModifyResponse resp = Operations.LdapModifyRequest(
                 session.Connection,
                 entry,
@@ -142,7 +140,7 @@ public class SetOpenADObject : OpenADSessionCmdletBase
                     session.OperationTimeout,
                     new FilterPresent("objectClass"),
                     searchProperties.ToArray(),
-                    modifyControls,
+                    modifyControls,  // Contains SecurityDescriptorFlagsControl if requested
                     CancelToken,
                     this,
                     false
@@ -204,31 +202,10 @@ public class SetOpenADObject : OpenADSessionCmdletBase
             }
 
             WriteVerbose($"Using attribute for Set operation {operation} '{attrName}'");
-            PartialAttribute attr = new(
-                attrName,
-                SchemaMetadata.ConvertToRawAttributeCollection(TrimToSecurityMask(kvp.Value)));
+            PartialAttribute attr = new(attrName, SchemaMetadata.ConvertToRawAttributeCollection(kvp.Value));
             attributes.Add(new(operation, attr));
         }
 
         return attributes.ToArray();
-    }
-
-    /// <summary>
-    /// Limits a security descriptor value to the components in -SecurityMask. The
-    /// control states that the request covers those components only, so sending the
-    /// rest - as a descriptor taken from an unmasked read does - has the server
-    /// apply components the caller never asked to write, which it refuses unless the
-    /// caller holds the privileges for them.
-    /// </summary>
-    private object? TrimToSecurityMask(object? value)
-    {
-        if (SecurityMask == SecurityDescriptorFlags.None)
-        {
-            return value;
-        }
-
-        object? baseValue = value is PSObject psValue ? psValue.BaseObject : value;
-
-        return baseValue is CommonSecurityDescriptor sd ? new CommonSecurityDescriptor(sd, SecurityMask) : value;
     }
 }

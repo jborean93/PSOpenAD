@@ -418,9 +418,8 @@ Describe "Set-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     It "Limits a write to the components in -SecurityMask" {
-        # The descriptor is read back as a PSObject-wrapped value, so it is typed
-        # explicitly here to write the descriptor itself rather than its string form.
-        [PSOpenAD.Security.CommonSecurityDescriptor]$sd = (
+        # The whole descriptor is written back, so the mask alone decides what lands.
+        $sd = (
             $contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
         $aceCount = $sd.DiscretionaryAcl.Count
         $sd.DiscretionaryAcl.Add([PSOpenAD.Security.Ace]::new(
@@ -443,7 +442,7 @@ Describe "Set-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     It "Applies -SecurityMask to the -PassThru read back" {
-        [PSOpenAD.Security.CommonSecurityDescriptor]$sd = (
+        $sd = (
             $contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
         $actual = $contact | Set-OpenADObject -Session $session -Replace @{
             nTSecurityDescriptor = $sd
@@ -455,7 +454,7 @@ Describe "Set-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
     }
 
     It "Reads back every component with -PassThru and no mask" {
-        [PSOpenAD.Security.CommonSecurityDescriptor]$sd = (
+        $sd = (
             $contact | Get-OpenADObject -Session $session -Property nTSecurityDescriptor).NTSecurityDescriptor
         $actual = $contact | Set-OpenADObject -Session $session -Replace @{
             nTSecurityDescriptor = $sd

@@ -1,4 +1,3 @@
-using PSOpenAD.LDAP;
 using System;
 
 namespace PSOpenAD.Security;
@@ -125,50 +124,6 @@ public sealed class CommonSecurityDescriptor
         Revision = 1;
         ResourceManagerFlags = 0;
         Flags = ControlFlags.None;
-    }
-
-    /// <summary>
-    /// Copies <paramref name="other"/> keeping only the components in
-    /// <paramref name="flags"/>. LDAP_SERVER_SD_FLAGS tells the server the request
-    /// covers those components alone, so anything else - typically the owner, group
-    /// and SACL an unmasked read hands back - must not be sent with it.
-    /// </summary>
-    internal CommonSecurityDescriptor(CommonSecurityDescriptor other, SecurityDescriptorFlags flags)
-    {
-        Revision = other.Revision;
-        ResourceManagerFlags = other.ResourceManagerFlags;
-        Flags = other.Flags;
-
-        Owner = (flags & SecurityDescriptorFlags.Owner) != 0 ? other.Owner : null;
-        Group = (flags & SecurityDescriptorFlags.Group) != 0 ? other.Group : null;
-        SystemAcl = (flags & SecurityDescriptorFlags.Sacl) != 0 ? other.SystemAcl : null;
-        DiscretionaryAcl = (flags & SecurityDescriptorFlags.Dacl) != 0 ? other.DiscretionaryAcl : null;
-
-        // A dropped component writes an offset of 0, so the flags describing it go
-        // too: nothing should claim a component the descriptor no longer carries.
-        // Servers are looser than this - a DACL only read returns 0x8C04 from AD and
-        // 0x8404 from Samba, so AD keeps SystemAclAutoInherited with no SACL present
-        // - and both accept either form.
-        if (Owner is null)
-        {
-            Flags &= ~ControlFlags.OwnerDefaulted;
-        }
-        if (Group is null)
-        {
-            Flags &= ~ControlFlags.GroupDefaulted;
-        }
-        if (SystemAcl is null)
-        {
-            Flags &= ~(ControlFlags.SystemAclPresent | ControlFlags.SystemAclDefaulted |
-                ControlFlags.SystemAclAutoInheritRequired | ControlFlags.SystemAclAutoInherited |
-                ControlFlags.SystemAclProtected);
-        }
-        if (DiscretionaryAcl is null)
-        {
-            Flags &= ~(ControlFlags.DiscretionaryAclPresent | ControlFlags.DiscretionaryAclDefaulted |
-                ControlFlags.DiscretionaryAclAutoInheritRequired | ControlFlags.DiscretionaryAclAutoInherited |
-                ControlFlags.DiscretionaryAclProtected | ControlFlags.DiscretionaryAclTrusted);
-        }
     }
 
     public CommonSecurityDescriptor(ReadOnlySpan<byte> data)

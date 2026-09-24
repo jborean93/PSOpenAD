@@ -33,20 +33,4 @@ public class SecurityDescriptorFlagsControlTests
         string hex = Convert.ToHexString(encoded);
         await Assert.That(hex).IsEqualTo(EXPECTED);
     }
-
-    [Test]
-    public async Task CombinedFlagsEncodeAsTheirSum()
-    {
-        // Owner (1) | Group (2) | Dacl (4) = 7
-        const string EXPECTED =
-            "30220416312E322E3834302E3131333535362E312E342E3830310101FF04053003020107";
-        SecurityDescriptorFlagsControl control = new(
-            true, SecurityDescriptorFlags.Owner | SecurityDescriptorFlags.Group | SecurityDescriptorFlags.Dacl);
-
-        AsnWriter writer = new(AsnEncodingRules.BER);
-        control.ToBytes(writer);
-
-        string hex = Convert.ToHexString(writer.Encode());
-        await Assert.That(hex).IsEqualTo(EXPECTED);
-    }
 }

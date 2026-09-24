@@ -336,8 +336,11 @@ Accept wildcard characters: False
 
 ### -SecurityMask
 Requests specific components of the `nTSecurityDescriptor` value be written, and read back if `-PassThru` is used, by sending the `LDAP_SERVER_SD_FLAGS` control with the request.
-Combine one or more of `Owner`, `Group`, `Dacl`, and `Sacl`.
+Combine one or more of `Owner`, `Group`, `Dacl`, and `Sacl`, or use `All` for every component.
 The default `None` does not send the control.
+The server replaces only the components in the mask; any other component in the value is ignored and kept as it is on the object, so a descriptor read without a mask can be written back with `-SecurityMask Dacl` to change just the DACL.
+Active Directory treats a modify without the control as replacing every component, which needs the right to write the owner, group, and SACL (the SACL also needs `SeSecurityPrivilege`).
+A caller without those rights is refused even if only the DACL changed, so set this to the components being changed, typically `Dacl`.
 
 ```yaml
 Type: SecurityDescriptorFlags

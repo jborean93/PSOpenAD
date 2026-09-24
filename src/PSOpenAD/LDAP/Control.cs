@@ -198,12 +198,15 @@ public enum SecurityDescriptorFlags
     Group = 2,
     Dacl = 4,
     Sacl = 8,
+    All = Owner | Group | Dacl | Sacl,
 }
 
 /// <summary>
 /// Declares which components of nTSecurityDescriptor a search returns or a modify writes.
-/// Without it, writing a descriptor that carries owner, group or SACL components the
-/// caller cannot write is refused with a constraint violation.
+/// On a modify the server replaces only those components; any other component in the
+/// value is ignored and kept as it is on the object. Without it, AD treats the request
+/// as covering every component, so a caller who cannot write the owner, group or SACL
+/// is refused even when only the DACL changed.
 /// </summary>
 /// <remarks>
 /// <para>
