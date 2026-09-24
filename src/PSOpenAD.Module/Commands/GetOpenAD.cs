@@ -112,6 +112,9 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
     [ArgumentCompleter(typeof(PropertyCompleter))]
     public string[]? Property { get; set; }
 
+    [Parameter()]
+    public SecurityDescriptorFlags SecurityMask { get; set; } = SecurityDescriptorFlags.None;
+
     #endregion
 
     protected override void ProcessRecordWithSession(OpenADSession session)
@@ -181,6 +184,12 @@ public abstract class GetOpenADOperation<T> : OpenADSessionCmdletBase
                 new ShowDeleted(false),
                 new ShowDeactivatedLink(false),
             };
+        }
+
+        if (SecurityMask != SecurityDescriptorFlags.None)
+        {
+            serverControls ??= new();
+            serverControls.Add(new SecurityDescriptorFlagsControl(true, SecurityMask));
         }
 
         string className = PropertyCompleter.GetClassNameForCommand(MyInvocation.MyCommand.Name);
