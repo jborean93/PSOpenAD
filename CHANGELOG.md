@@ -5,6 +5,7 @@
 + Fixed `Get-OpenADPrincipalGroupMembership` and `Get-OpenADGroupMember` failing with `LDAP filter value contained unescaped char` when the object's distinguished name contains `(`, `)`, `*` or `\`
 + Fixed `-Identity` failing to match a `sAMAccountName` that contains `(` or `)`, for example `-Identity 'Some User (12345)'`, it was previously treated as a distinguished name and failed with a `BAD_NAME` error
 + Added `-TargetSpnHost` to `New-OpenADSessionOption` to set the host used in the Kerberos/Negotiate SPN (`ldap/<host>`) independently of the host being connected to, for example when connecting by IP address or through an alias that has no SPN registered for it
++ Added the `LDAP_SERVER_SD_FLAGS` control and a `-SecurityMask` parameter on `Set-OpenADObject` and `Get-OpenAD*` to select which `nTSecurityDescriptor` components (`Owner`, `Group`, `Dacl`, `Sacl`, or `All`) a request reads or writes
 + The `SID` property on `OpenADPrincipal` is marked as nullable to handle principals without `objectSid`
   + An example would be `Get-OpenADGroupMember` outputting a contact
 + Fixed the `-TracePath` log recording the outgoing buffer before the request was written into it, so every sent message was logged as unrelated recycled memory

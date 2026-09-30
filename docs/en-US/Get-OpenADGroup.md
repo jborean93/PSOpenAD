@@ -16,26 +16,28 @@ Gets one or more Active Directory groups.
 ```
 Get-OpenADGroup [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>]
  [-StartTLS] [-Credential <PSCredential>] [-LDAPFilter <String>] [-SearchBase <String>]
- [-SearchScope <SearchScope>] [-Property <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-SearchScope <SearchScope>] [-Property <String[]>] [-SecurityMask <SecurityDescriptorFlags>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### SessionIdentity
 ```
 Get-OpenADGroup -Session <OpenADSession> [-Identity] <ADPrincipalIdentity> [-Property <String[]>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-SecurityMask <SecurityDescriptorFlags>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### SessionLDAPFilter
 ```
 Get-OpenADGroup -Session <OpenADSession> [-LDAPFilter <String>] [-SearchBase <String>]
- [-SearchScope <SearchScope>] [-Property <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-SearchScope <SearchScope>] [-Property <String[]>] [-SecurityMask <SecurityDescriptorFlags>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ServerIdentity
 ```
 Get-OpenADGroup [-Server <String>] [-AuthType <AuthenticationMethod>] [-SessionOption <OpenADSessionOptions>]
  [-StartTLS] [-Credential <PSCredential>] [-Identity] <ADPrincipalIdentity> [-Property <String[]>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-SecurityMask <SecurityDescriptorFlags>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -271,6 +273,25 @@ Accepted values: Base, OneLevel, Subtree
 Required: False
 Position: Named
 Default value: Subtree
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SecurityMask
+Requests specific components of the `nTSecurityDescriptor` value be returned by sending the `LDAP_SERVER_SD_FLAGS` control with the search.
+Combine one or more of `Owner`, `Group`, `Dacl`, and `Sacl`, or use `All` for every component.
+The default `None` does not send the control.
+Active Directory treats a search without the control as a request for every component, including the SACL.
+Reading the SACL requires `SeSecurityPrivilege`, so a caller without it gets no `nTSecurityDescriptor` value at all unless the mask leaves out `Sacl`, for example `-SecurityMask Owner, Group, Dacl`.
+
+```yaml
+Type: SecurityDescriptorFlags
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

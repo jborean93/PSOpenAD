@@ -347,4 +347,81 @@ Describe "Get-OpenADObject cmdlets" -Skip:(-not $PSOpenADSettings.Server) {
             $actual.PSObject.Properties.Name | Should -Contain 'LastLogoff'
         }
     }
+
+    Context "-SecurityMask" {
+        BeforeAll {
+            $maskParams = @{
+                Session = $session
+                Name = 'MaskContact'
+                Type = 'contact'
+                Path = $container
+                PassThru = $true
+            }
+            $maskDN = (New-OpenADObject @maskParams).DistinguishedName
+        }
+
+        # The SACL is compared against $null rather than by count: a SACL that was
+        # returned but holds no entries is an empty ACL, one that was not returned is
+        # $null.
+        It "Returns every component when no mask is requested" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+            $null -ne $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
+        }
+
+        It "Returns every component with -SecurityMask All" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask All
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+            $null -ne $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
+        }
+
+        It "Returns only the DACL with -SecurityMask Dacl" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Dacl
+
+            $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+            $null -eq $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
+        }
+
+        It "Returns only the SACL with -SecurityMask Sacl" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Sacl
+
+            $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
+            $null -eq $actual.NTSecurityDescriptor.DiscretionaryAcl | Should -BeTrue
+            $null -ne $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
+        }
+
+        It "Returns only the owner with -SecurityMask Owner" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Owner
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl | Should -BeNullOrEmpty
+            $null -eq $actual.NTSecurityDescriptor.SystemAcl | Should -BeTrue
+        }
+
+        It "Combines the flags of a multi valued mask" {
+            $actual = Get-OpenADObject -Session $session -Identity $maskDN -Property nTSecurityDescriptor -SecurityMask Owner, Group
+
+            $actual.NTSecurityDescriptor.Owner | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.Group | Should -Not -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl | Should -BeNullOrEmpty
+        }
+
+        It "Applies the mask on a typed cmdlet" {
+            $user = Get-OpenADUser -Session $session | Select-Object -First 1
+            $actual = Get-OpenADUser -Session $session -Identity $user.DistinguishedName -Property nTSecurityDescriptor -SecurityMask Dacl
+
+            $actual.NTSecurityDescriptor.Owner | Should -BeNullOrEmpty
+            $actual.NTSecurityDescriptor.DiscretionaryAcl.Count | Should -BeGreaterThan 0
+        }
+    }
 }
