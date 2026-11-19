@@ -56,8 +56,10 @@ lib::setup::system_requirements::el() {
     fi
 
     # We don't care about the version for the initial bootstrap script, it'll handle
-    # the installation of the correct version when testing.
-    dotnet tool install --global PowerShell
+    # the installation of the correct version when testing. It is still pinned to
+    # 7.6 as the PowerShell 7.7.0 tool package uses a layout the .NET 10 SDK can't
+    # install, failing with "Settings file 'DotnetToolSettings.xml' was not found".
+    dotnet tool install --global PowerShell --version '7.6.*'
     export PATH="$PATH:~/.dotnet/tools"
 
     # Unit tests might run on a different version than the SDK that is installed
