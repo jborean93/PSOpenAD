@@ -27,22 +27,12 @@ internal sealed class OpenADSessionFactory
 
         if (string.IsNullOrEmpty(server))
         {
-            if (state.DefaultDC == null)
+            if (!DefaultDcDiscovery.TryGetDefaultDC(state, cmdlet, out var defaultDC))
             {
-                string msg = "Cannot determine default realm for implicit domain controller.";
-                if (!string.IsNullOrEmpty(state.DefaultDCError))
-                {
-                    msg += $" {state.DefaultDCError}";
-                }
-                cmdlet.WriteError(new ErrorRecord(
-                    new ArgumentException(msg),
-                    "NoImplicitDomainController",
-                    ErrorCategory.InvalidArgument,
-                    null));
                 return null;
             }
 
-            ldapUri = state.DefaultDC;
+            ldapUri = defaultDC;
         }
         else if (server.StartsWith("ldap://", true, CultureInfo.InvariantCulture) ||
             server.StartsWith("ldaps://", true, CultureInfo.InvariantCulture))

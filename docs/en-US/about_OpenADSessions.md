@@ -60,6 +60,10 @@ If any records are returned the default DC is set to the record with the preferr
 
 If any of these steps fail then no default DC is available and PSOpenAD is only able to create a connection when an explicit server or connection uri was provided.
 
+The lookup is done the first time a cmdlet needs the default DC in a PowerShell session, not when the module is imported, so importing PSOpenAD does not wait on DNS.
+A DC that is found is kept for the rest of the session.
+A failed lookup is written as an error and tried again the next time the default DC is needed, so it starts working once the records are reachable, for example after connecting to a VPN.
+
 # TRACE LOGGING
 It is possible to do trace logging for the raw LDAP messages that are exchanged for debugging purposes.
 To enable trace logging use the `-TracePath` parameter with `New-OpenADSessionOption` when creating a new session.

@@ -12,6 +12,7 @@
 + Fixed a request larger than the outgoing pipe's pause threshold (e.g. creating or modifying a group with a few thousand members) failing with `Can't GetResult unless awaiter is completed` while the server still applied it
 + Fixed a `PSObject`-wrapped byte array (e.g. a value read back from `Get-OpenAD*` and fed straight into `-Add`/`-Replace`) being stringified instead of written as binary, causing the server to reject it
 + Fixed `GroupScope` being reported as `Universal` for every security group (e.g. `Domain Admins` is `Global`, `Administrators` is `DomainLocal`) - the whole `groupType` value was compared instead of just its scope bits
++ The default domain controller lookup (`DsGetDcName` on Windows, the krb5 default realm and its `_ldap._tcp.dc._msdcs` SRV records elsewhere) is now done the first time a cmdlet is run without `-Server` or `-Session` rather than when the module is imported, so `Import-Module` no longer waits on DNS when those records are unreachable
 
 ## v0.7.0 - 2026-08-27
 
